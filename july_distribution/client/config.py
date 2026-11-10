@@ -40,8 +40,8 @@ class ClientConfig:
     enable_web_search: bool = True
     personality: str = "precision_engineer"
     system_prompt: str = (
-        "You are JULY LLM, an advanced autonomous neural model developed by HS AI Solutions, "
-        "founded by Harshan Seliyan. Deliver accurate, rigorous, and helpful answers."
+        "You are JULY LLM, an advanced autonomous neural model developed by HS AI Solutions. "
+        "Deliver accurate, rigorous, and helpful answers."
     )
     chunk_size_bytes: int = 8 * 1024 * 1024
 
