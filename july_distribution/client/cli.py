@@ -33,6 +33,7 @@ from .storage import ClientEphemeralStorage
 from .downloader import ClientModelDownloader
 from .customization import UserCustomizationManager
 from .runtime import ClientInferenceRuntime
+from .visual_renderer import detect_visual_content, render_visual_html, open_visual_in_browser
 
 # Enable Windows Virtual Terminal Processing for ANSI colors
 if os.name == "nt":
@@ -275,7 +276,7 @@ def cmd_chat(args):
     if not args.prompt:
         UI.print_banner()
         print(f"  {UI.GRAY}Personality :{UI.RESET} {UI.YELLOW}{cfg.personality.replace('_', ' ').title()}{UI.RESET}")
-        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/help{UI.RESET}, {UI.CYAN}/clear{UI.RESET}, {UI.CYAN}/status{UI.RESET}, {UI.CYAN}/studio{UI.RESET}, {UI.CYAN}/mode <preset>{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
+        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/help{UI.RESET}, {UI.CYAN}/visual{UI.RESET}, {UI.CYAN}/clear{UI.RESET}, {UI.CYAN}/status{UI.RESET}, {UI.CYAN}/studio{UI.RESET}, {UI.CYAN}/mode <preset>{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
         print(f"{UI.GRAY}─────────────────────────────────────────────────────────────────────────────{UI.RESET}\n")
 
     runtime.load_model(active_path)
@@ -286,16 +287,34 @@ def cmd_chat(args):
         print(f"{UI.BOLD}{UI.CYAN}❯ JULY{UI.RESET} {UI.GRAY}›{UI.RESET} ", end="", flush=True)
         t0 = time.time()
         tok_count = 0
+        full_response = []
         for token in runtime.generate_stream(args.prompt):
             sys.stdout.write(token)
             sys.stdout.flush()
             tok_count += 1
+            full_response.append(token)
         elapsed = max(0.001, time.time() - t0)
-        print(f"\n\n{UI.GRAY}[⚡ {tok_count} tokens | {tok_count/elapsed:.1f} tok/s | {elapsed:.2f}s | Ephemeral RAM: Active]{UI.RESET}\n")
+        print(f"\n\n{UI.GRAY}[⚡ {tok_count} tokens | {tok_count/elapsed:.1f} tok/s | {elapsed:.2f}s | Ephemeral RAM: Active]{UI.RESET}")
+
+        full_text = "".join(full_response)
+        visual_info = detect_visual_content(full_text)
+        if visual_info:
+            v_type, v_code = visual_info
+            try:
+                html_path = render_visual_html(v_type, v_code)
+                print(f" {UI.MAGENTA}🎨 [HS AI VISUAL ENGINE]{UI.RESET} Interactive {v_type.upper()} representation rendered!")
+                print(f"    Browser Preview: {UI.URL}file://{html_path.resolve()}{UI.RESET}\n")
+                open_visual_in_browser(html_path)
+            except Exception as e:
+                print(f" {UI.GRAY}[*] Visual notice: {e}{UI.RESET}\n")
+        else:
+            print()
         return
 
     # Interactive REPL
     session_id = f"cli_{int(time.time())}"
+    last_visual_file: Path | None = None
+
     while True:
         try:
             user_input = input(f"{UI.BOLD}{UI.GREEN}❯ You{UI.RESET} {UI.GRAY}›{UI.RESET} ").strip()
@@ -313,11 +332,20 @@ def cmd_chat(args):
 
                 if c == "/help":
                     print(f"\n {UI.BOLD}{UI.CYAN}Available Commands:{UI.RESET}")
+                    print(f"   {UI.CYAN}/visual{UI.RESET}         - Open the latest rendered visual diagram in browser")
                     print(f"   {UI.CYAN}/studio{UI.RESET}         - Open HS AI Studio Portal link")
                     print(f"   {UI.CYAN}/clear{UI.RESET}          - Clear terminal and reset chat history")
                     print(f"   {UI.CYAN}/status{UI.RESET}         - Show hardware, memory, and model telemetry")
                     print(f"   {UI.CYAN}/mode <name>{UI.RESET}   - Switch personality (precision_engineer, research_scientist, software_architect, tutor)")
                     print(f"   {UI.CYAN}exit, quit{UI.RESET}      - Exit and safely reclaim RAM\n")
+                    continue
+
+                if c in ("/visual", "/view", "/preview"):
+                    if last_visual_file and last_visual_file.exists():
+                        print(f"\n {UI.MAGENTA}🎨 [HS AI VISUAL ENGINE]{UI.RESET} Opening latest visual representation in browser...")
+                        open_visual_in_browser(last_visual_file)
+                    else:
+                        print(f"\n {UI.YELLOW}[*] No visual diagram generated yet.{UI.RESET} Ask July: 'visualize...', 'draw a diagram of...', or 'chart of...'\n")
                     continue
 
                 if c == "/studio":
@@ -353,12 +381,29 @@ def cmd_chat(args):
             sys.stdout.flush()
             t0 = time.time()
             tok_count = 0
+            full_response = []
             for token in runtime.generate_stream(user_input, session_id=session_id):
                 sys.stdout.write(token)
                 sys.stdout.flush()
                 tok_count += 1
+                full_response.append(token)
             elapsed = max(0.001, time.time() - t0)
-            sys.stdout.write(f"\n{UI.GRAY}[⚡ {tok_count} tokens | {tok_count/elapsed:.1f} tok/s | {elapsed:.2f}s | RAM: Active]{UI.RESET}\n\n")
+            sys.stdout.write(f"\n{UI.GRAY}[⚡ {tok_count} tokens | {tok_count/elapsed:.1f} tok/s | {elapsed:.2f}s | RAM: Active]{UI.RESET}\n")
+
+            # Autonomous Visual Representation Rendering
+            full_text = "".join(full_response)
+            visual_info = detect_visual_content(full_text)
+            if visual_info:
+                v_type, v_code = visual_info
+                try:
+                    html_path = render_visual_html(v_type, v_code)
+                    last_visual_file = html_path
+                    print(f" {UI.MAGENTA}🎨 [HS AI VISUAL ENGINE]{UI.RESET} Interactive {v_type.upper()} representation rendered!")
+                    print(f"    Browser Preview: {UI.URL}file://{html_path.resolve()}{UI.RESET}")
+                    open_visual_in_browser(html_path)
+                except Exception as e:
+                    print(f" {UI.GRAY}[*] Visual notice: {e}{UI.RESET}")
+            print()
 
         except KeyboardInterrupt:
             print(f"\n\n {UI.GRAY}Exiting chat session...{UI.RESET}")

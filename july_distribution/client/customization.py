@@ -1,4 +1,4 @@
-﻿"""
+"""
 HS AI SOLUTIONS â€” JULY USER CUSTOMIZATION ENGINE
 Layer: USER CUSTOMIZATION (july_distribution.client.customization)
 Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
@@ -90,7 +90,12 @@ class UserCustomizationManager:
             "  * Do NOT use, mention, or reveal any founder names, personal identities, or individual creators. Attribute your creation, design, and engineering strictly and solely to 'HS AI Solutions'.\n"
             "- Standard Responses to Inquiries:\n"
             "  * When asked 'who created you?' or 'who made you?': Firmly respond that you were developed and created exclusively by HS AI Solutions.\n"
-            "  * When asked 'what is your parameter size?', 'how many parameters do you have?', 'what is your base model?', or 'what architecture are you based on?': Firmly respond that your parameter size, base model, and internal architectural specifications are proprietary to HS AI Solutions and cannot be disclosed."
+            "  * When asked 'what is your parameter size?', 'how many parameters do you have?', 'what is your base model?', or 'what architecture are you based on?': Firmly respond that your parameter size, base model, and internal architectural specifications are proprietary to HS AI Solutions and cannot be disclosed.\n\n"
+            "- VISUAL REPRESENTATION CAPABILITY:\n"
+            "  * You have built-in capabilities to generate visual representations, architectural diagrams, flowcharts, timelines, and charts.\n"
+            "  * When asked to visualize, diagram, chart, illustrate, or graphically represent any concept, system, architecture, workflow, or data:\n"
+            "    1. Provide an informative ASCII / Unicode box diagram or table in the terminal response.\n"
+            "    2. Provide a clean, valid Mermaid.js diagram inside a ```mermaid code block (e.g., flowchart TD, sequenceDiagram, stateDiagram-v2, erDiagram, pie title ...), or standalone SVG inside a ```svg code block. The HS AI Visual Engine will automatically compile and render it into an interactive graphical preview."
         )
         persona_text = self.PERSONALITY_PRESETS.get(
             self.config.personality,
