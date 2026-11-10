@@ -33,7 +33,7 @@ from .storage import ClientEphemeralStorage
 from .downloader import ClientModelDownloader
 from .customization import UserCustomizationManager
 from .runtime import ClientInferenceRuntime
-from .visual_renderer import detect_visual_content, render_visual_html, open_visual_in_browser
+from .visual_renderer import detect_visual_content, render_visual_html, open_visual_in_browser, render_mermaid_to_cli
 
 # Enable Windows Virtual Terminal Processing for ANSI colors
 if os.name == "nt":
@@ -297,18 +297,21 @@ def cmd_chat(args):
         print(f"\n\n{UI.GRAY}[⚡ {tok_count} tokens | {tok_count/elapsed:.1f} tok/s | {elapsed:.2f}s | Ephemeral RAM: Active]{UI.RESET}")
 
         full_text = "".join(full_response)
-        visual_info = detect_visual_content(full_text)
-        if visual_info:
-            v_type, v_code = visual_info
-            try:
-                html_path = render_visual_html(v_type, v_code)
-                print(f" {UI.MAGENTA}🎨 [HS AI VISUAL ENGINE]{UI.RESET} Interactive {v_type.upper()} representation rendered!")
-                print(f"    Browser Preview: {UI.URL}file://{html_path.resolve()}{UI.RESET}\n")
-                open_visual_in_browser(html_path)
-            except Exception as e:
-                print(f" {UI.GRAY}[*] Visual notice: {e}{UI.RESET}\n")
-        else:
-            print()
+        try:
+            from .visual import VisualResponseEngine
+            engine = VisualResponseEngine()
+            rendered = engine.process_and_render(user_prompt=args.prompt, model_response=full_text)
+            if not rendered:
+                visual_info = detect_visual_content(full_text)
+                if visual_info:
+                    v_type, v_code = visual_info
+                    if v_type == "mermaid":
+                        cli_diagram = render_mermaid_to_cli(v_code)
+                        if cli_diagram:
+                            print(f"\n{cli_diagram}\n")
+        except Exception as e:
+            pass
+        print()
         return
 
     # Interactive REPL
@@ -332,7 +335,7 @@ def cmd_chat(args):
 
                 if c == "/help":
                     print(f"\n {UI.BOLD}{UI.CYAN}Available Commands:{UI.RESET}")
-                    print(f"   {UI.CYAN}/visual{UI.RESET}         - Open the latest rendered visual diagram in browser")
+                    print(f"   {UI.CYAN}/visual{UI.RESET}         - Show On-Demand Visual Response Engine status and visual capabilities")
                     print(f"   {UI.CYAN}/studio{UI.RESET}         - Open HS AI Studio Portal link")
                     print(f"   {UI.CYAN}/clear{UI.RESET}          - Clear terminal and reset chat history")
                     print(f"   {UI.CYAN}/status{UI.RESET}         - Show hardware, memory, and model telemetry")
@@ -341,11 +344,12 @@ def cmd_chat(args):
                     continue
 
                 if c in ("/visual", "/view", "/preview"):
-                    if last_visual_file and last_visual_file.exists():
-                        print(f"\n {UI.MAGENTA}🎨 [HS AI VISUAL ENGINE]{UI.RESET} Opening latest visual representation in browser...")
-                        open_visual_in_browser(last_visual_file)
-                    else:
-                        print(f"\n {UI.YELLOW}[*] No visual diagram generated yet.{UI.RESET} Ask July: 'visualize...', 'draw a diagram of...', or 'chart of...'\n")
+                    print(f"\n  {UI.MAGENTA}🎨 [HS AI ON-DEMAND VISUAL RESPONSE ENGINE]{UI.RESET}")
+                    print(f"  All diagrams, graphs, circuits, and architectures render directly inside PowerShell.")
+                    print(f"  Supported: Binary search, Water phase diagram, CPU architecture, Neural networks,")
+                    print(f"             Electrical circuits, OS scheduling, Math functions, UML, Flowcharts.")
+                    print(f"  Examples: 'draw a phase diagram', 'explain binary search visually', 'show cpu architecture'")
+                    print(f"            'draw neural network architecture', 'draw an electrical circuit', 'os scheduling'\n")
                     continue
 
                 if c == "/studio":
@@ -392,17 +396,20 @@ def cmd_chat(args):
 
             # Autonomous Visual Representation Rendering
             full_text = "".join(full_response)
-            visual_info = detect_visual_content(full_text)
-            if visual_info:
-                v_type, v_code = visual_info
-                try:
-                    html_path = render_visual_html(v_type, v_code)
-                    last_visual_file = html_path
-                    print(f" {UI.MAGENTA}🎨 [HS AI VISUAL ENGINE]{UI.RESET} Interactive {v_type.upper()} representation rendered!")
-                    print(f"    Browser Preview: {UI.URL}file://{html_path.resolve()}{UI.RESET}")
-                    open_visual_in_browser(html_path)
-                except Exception as e:
-                    print(f" {UI.GRAY}[*] Visual notice: {e}{UI.RESET}")
+            try:
+                from .visual import VisualResponseEngine
+                engine = VisualResponseEngine()
+                rendered = engine.process_and_render(user_prompt=user_input, model_response=full_text)
+                if not rendered:
+                    visual_info = detect_visual_content(full_text)
+                    if visual_info:
+                        v_type, v_code = visual_info
+                        if v_type == "mermaid":
+                            cli_diagram = render_mermaid_to_cli(v_code)
+                            if cli_diagram:
+                                print(f"\n{cli_diagram}\n")
+            except Exception as e:
+                pass
             print()
 
         except KeyboardInterrupt:
