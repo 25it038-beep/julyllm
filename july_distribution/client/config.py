@@ -28,7 +28,7 @@ def get_default_july_dir() -> Path:
 
 @dataclass
 class ClientConfig:
-    server_url: str = "http://127.0.0.1:8787"
+    server_url: str = "https://julyllm.onrender.com"
     hardware_mode: str = "auto"  # auto, cuda, cpu
     context_length: int = 2048
     n_threads: int = 4

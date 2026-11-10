@@ -95,23 +95,31 @@ if ($UserPath -notlike "*$BinDir*") {
 $JulyConfigDir = Join-Path $env:USERPROFILE ".july"
 New-Item -ItemType Directory -Path $JulyConfigDir -Force | Out-Null
 $ConfigFile = Join-Path $JulyConfigDir "config.json"
-if (-not (Test-Path $ConfigFile)) {
-    @{
-        server_url = "https://julyllm.onrender.com"
-        hardware_mode = "auto"
-        context_length = 2048
-        n_threads = 4
-        n_batch = 64
-        n_gpu_layers = 0
-        temperature = 0.7
-        top_p = 0.9
-        max_tokens = 512
-        personality = "precision_engineer"
-        system_prompt = "You are JULY LLM, an advanced autonomous neural model developed by HS AI Solutions, founded by Harshan Seliyan. Deliver accurate, rigorous, and helpful answers."
-        chunk_size_bytes = 8388608
-    } | ConvertTo-Json -Depth 4 | Set-Content -Path $ConfigFile -Encoding UTF8
-    Write-Host "      Configured default backend: https://julyllm.onrender.com" -ForegroundColor Gray
+$ConfigObj = @{
+    server_url = "https://julyllm.onrender.com"
+    hardware_mode = "auto"
+    context_length = 2048
+    n_threads = 4
+    n_batch = 64
+    n_gpu_layers = 0
+    temperature = 0.7
+    top_p = 0.9
+    max_tokens = 512
+    personality = "precision_engineer"
+    system_prompt = "You are JULY LLM, an advanced autonomous neural model developed by HS AI Solutions, founded by Harshan Seliyan. Deliver accurate, rigorous, and helpful answers."
+    chunk_size_bytes = 8388608
 }
+if (Test-Path $ConfigFile) {
+    try {
+        $Existing = Get-Content $ConfigFile -Raw | ConvertFrom-Json
+        foreach ($prop in $Existing.PSObject.Properties) {
+            $ConfigObj[$prop.Name] = $prop.Value
+        }
+    } catch {}
+}
+$ConfigObj["server_url"] = "https://julyllm.onrender.com"
+$ConfigObj | ConvertTo-Json -Depth 4 | Set-Content -Path $ConfigFile -Encoding UTF8
+Write-Host "      Configured backend server: https://julyllm.onrender.com" -ForegroundColor Gray
 
 # Step 4: Validate local Python & dependencies
 Write-Host "[4/4] Verifying Python and llama.cpp runtime..." -ForegroundColor Green
