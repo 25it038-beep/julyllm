@@ -132,7 +132,17 @@ class UniversalModelManager:
         """Inspects GGUF binary headers directly to retrieve exact architectural specifications."""
         spec = self.MODEL_SPECS.get(model_id.lower(), self.MODEL_SPECS["july"])
         file_path = self.models_dir / spec["file_name"]
-        if not file_path.exists() and "fallback_file" in spec:
+
+        # Prioritize exact verified Gravity-HS-AI-Solutions.gguf
+        if model_id.lower() == "gravity":
+            d_drive = Path(r"D:\gravity\Gravity-HS-AI-Solutions.gguf")
+            if d_drive.exists():
+                file_path = d_drive
+            elif not file_path.exists() and "fallback_file" in spec:
+                fallback = self.models_dir / spec["fallback_file"]
+                if fallback.exists():
+                    file_path = fallback
+        elif not file_path.exists() and "fallback_file" in spec:
             fallback = self.models_dir / spec["fallback_file"]
             if fallback.exists():
                 file_path = fallback

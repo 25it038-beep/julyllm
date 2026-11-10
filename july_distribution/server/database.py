@@ -186,7 +186,7 @@ def init_database():
                 bucket_name="july",
                 object_key="Gravity-HS-AI-Solutions.gguf",
                 size_bytes=5629108096,
-                sha256="4b6c93439e6df7db0b5da22bb133e9b119a018bc6bfcefd482f3c7ae46beee05",
+                sha256="f24a90361aaac8cb3dce9f18b276b1444af106d205f411c4e674b58a9adf53c8",
                 release_notes="Official release of Gravity LLM from private Cloudflare R2 bucket. Frontier specialist for mathematics, CAS, and algorithmic proofs.",
                 is_active=True,
                 created_at=time.time()

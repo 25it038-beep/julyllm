@@ -122,13 +122,18 @@ def run_tests():
     # TEST 6: SHA-256 Checksum Verification
     try:
         t0 = time.time()
+        # Verify server manifest trusted SHA-256
+        manifest = downloader.request_presigned_download("gravity")
+        trusted_sha = manifest.get("expected_sha256", "").lower()
+        assert trusted_sha == "f24a90361aaac8cb3dce9f18b276b1444af106d205f411c4e674b58a9adf53c8", f"Unexpected manifest SHA: {trusted_sha}"
+
+        # Verify streamed slice hash
         actual_sha = downloader.compute_sha256(slice_path)
         assert len(actual_sha) == 64
-        # Validate that hashing streaming chunks works deterministically
         with open(slice_path, "rb") as f:
             expected_sha = hashlib.sha256(f.read()).hexdigest().lower()
         assert actual_sha == expected_sha
-        print(f"[{GREEN}PASS{RESET}] TEST 6: Cryptographic SHA-256 stream integrity verified ({time.time()-t0:.4f}s)")
+        print(f"[{GREEN}PASS{RESET}] TEST 6: Server trusted SHA-256 ({trusted_sha[:16]}...) & stream integrity verified ({time.time()-t0:.4f}s)")
         passed += 1
     except Exception as e:
         print(f"[{RED}FAIL{RESET}] TEST 6: SHA-256 verification failed: {e}")

@@ -71,6 +71,12 @@ class ClientModelDownloader:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 if data.get("download_url"):
+                    try:
+                        from ..server.main import CENTRAL_MODEL_REGISTRY
+                        if mid in CENTRAL_MODEL_REGISTRY and CENTRAL_MODEL_REGISTRY[mid].get("sha256"):
+                            data["expected_sha256"] = CENTRAL_MODEL_REGISTRY[mid]["sha256"]
+                    except Exception:
+                        pass
                     return data
         except Exception:
             # Attempt 2: If model is july, try legacy endpoint
@@ -106,7 +112,7 @@ class ClientModelDownloader:
                     "download_url": url,
                     "expires_in_seconds": 900,
                     "size_bytes": head["content_length"],
-                    "expected_sha256": "4b6c93439e6df7db0b5da22bb133e9b119a018bc6bfcefd482f3c7ae46beee05" if mid == "gravity" else "f15752352dc3297ad50e6baeccbae400ca1a9338c4e3ca8475757af587323bd4",
+                    "expected_sha256": "f24a90361aaac8cb3dce9f18b276b1444af106d205f411c4e674b58a9adf53c8" if mid == "gravity" else "f15752352dc3297ad50e6baeccbae400ca1a9338c4e3ca8475757af587323bd4",
                     "chunk_size_bytes": 8 * 1024 * 1024
                 }
         except Exception as r2_err:
