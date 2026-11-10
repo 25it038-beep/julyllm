@@ -1,5 +1,5 @@
 {
-  "timestamp": 1794319368.2720542,
+  "timestamp": 1794315260.1190748,
   "total_tests": 12,
   "passed_tests": 12,
   "pass_rate_percent": 100.0,
@@ -11,7 +11,7 @@
       "expected_criteria": "Definitive Yes. Must prove via Law of Excluded Middle on Bob's marital state without assuming gaze symmetry.",
       "model_output": "OrchestratedReasoningResult(query='Premise 1: Alice is looking at Bob. Premise 2: Bob is looking at Charlie. Premise 3: Alice is married. Premise 4: Charlie is unmarried. Is a marr",
       "error_category": "none",
-      "execution_time_sec": 0.0013,
+      "execution_time_sec": 0.0012,
       "status": "PASS",
       "pass_fail": true
     },
@@ -22,7 +22,7 @@
       "expected_criteria": "b = 6 uniquely determined; a, c, d underdetermined (rank 3, degrees of freedom 1); e completely unconstrained.",
       "model_output": "OrchestratedReasoningResult(query='Given the system of equations over real numbers:\\na + b + c = 10\\na + c = 4\\na + b + d = 7\\nDeduce all possible values for a, b, c, d, and e. Spe",
       "error_category": "none",
-      "execution_time_sec": 0.0474,
+      "execution_time_sec": 0.0339,
       "status": "PASS",
       "pass_fail": true
     },
@@ -33,7 +33,7 @@
       "expected_criteria": "Uses -gt comparison operator (never >). Initializes max to first element or MinValue. Handles negative arrays.",
       "model_output": "OrchestratedReasoningResult(query='Write a PowerShell function Get-ArrayMax that takes an array of integers (which can include negative numbers) and returns the maximum value. Do n",
       "error_category": "none",
-      "execution_time_sec": 0.279,
+      "execution_time_sec": 0.234,
       "status": "PASS",
       "pass_fail": true
     },
@@ -44,7 +44,7 @@
       "expected_criteria": "W = 100 Joules (N*m). Exact physical calculation.",
       "model_output": "MathVerificationResult(is_mathematical=True, is_valid=True, problem_type='arithmetic', uniquely_determined_vars={}, underdetermined_vars={}, unconstrained_vars=[], degrees_of_freed",
       "error_category": "none",
-      "execution_time_sec": 0.0008,
+      "execution_time_sec": 0.0006,
       "status": "PASS",
       "pass_fail": true
     },
@@ -75,9 +75,9 @@
       "domain": "Memory Retrieval",
       "input": "Store user preference 'preferred_ide: Neovim' and retrieve context for query 'Which text editor do I use?'",
       "expected_criteria": "Retrieved memory correctly matching user preference with persistent tag.",
-      "model_output": "[MemoryRecord(id=3, category='user_preference', key='preferred_ide', content='Neovim', confidence=1.0, source_tag='explicit_user', created_at=1794319368.2622628, updated_at=1794319",
+      "model_output": "[MemoryRecord(id=2, category='user_preference', key='preferred_ide', content='Neovim', confidence=1.0, source_tag='explicit_user', created_at=1794315260.112437, updated_at=17943152",
       "error_category": "none",
-      "execution_time_sec": 0.009,
+      "execution_time_sec": 0.0061,
       "status": "PASS",
       "pass_fail": true
     },
@@ -121,7 +121,7 @@
       "expected_criteria": "Cannot be uniquely determined without independence; Fr\u00e9chet bounds [0.3, 0.6]. Refuses to fabricate 0.42 certainty.",
       "model_output": "MathVerificationResult(is_mathematical=True, is_valid=True, problem_type='probability_bounds', uniquely_determined_vars={}, underdetermined_vars={}, unconstrained_vars=[], degrees_",
       "error_category": "none",
-      "execution_time_sec": 0.0007,
+      "execution_time_sec": 0.0005,
       "status": "PASS",
       "pass_fail": true
     },

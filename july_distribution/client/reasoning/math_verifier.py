@@ -308,6 +308,8 @@ class MathematicalIntelligenceEngine:
         eq_match = re.search(r"([0-9a-zA-Z\s\+\-\*\/\^\(\)]+)\s*=\s*([0-9a-zA-Z\s\+\-\*\/\^\(\)]+)", text)
         if eq_match:
             lhs_s, rhs_s = eq_match.group(1).strip(), eq_match.group(2).strip()
+            # Strip prompt keywords like "solve", "calculate", "find"
+            lhs_s = re.sub(r"^(?:solve|calculate|find|evaluate|compute)\s+", "", lhs_s, flags=re.IGNORECASE).strip()
             # Must contain at least one arithmetic operator
             if any(op in lhs_s + rhs_s for op in ["+", "-", "*", "/", "^"]):
                 try:

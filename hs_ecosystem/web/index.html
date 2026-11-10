@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HS AI SOLUTIONS — UNIVERSAL AI ECOSYSTEM</title>
+<style>
+  :root {
+    --bg-dark: #0a0b0e;
+    --panel-dark: #12141c;
+    --panel-subtle: #191c26;
+    --border: #232735;
+    --border-gold: #d4af37;
+    --gold: #d4af37;
+    --gold-dim: #998026;
+    --titanium: #8a8f98;
+    --cyan: #00f0ff;
+    --green: #00e676;
+    --red: #ff3366;
+    --text: #f0f2f8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { background: var(--bg-dark); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
+
+  /* Sidebar Navigation */
+  .sidebar { width: 260px; background: var(--panel-dark); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .brand { padding: 24px 20px; border-bottom: 1px solid var(--border); }
+  .brand h1 { font-size: 1.05rem; letter-spacing: 1.5px; color: var(--gold); font-weight: 700; }
+  .brand p { font-size: 0.72rem; color: var(--titanium); margin-top: 4px; letter-spacing: 0.5px; }
+
+  .nav-list { list-style: none; padding: 16px 12px; flex: 1; overflow-y: auto; }
+  .nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px; margin-bottom: 4px; cursor: pointer; color: var(--titanium); font-size: 0.88rem; transition: all 0.2s; }
+  .nav-item:hover { background: var(--panel-subtle); color: var(--text); }
+  .nav-item.active { background: rgba(212, 175, 55, 0.12); color: var(--gold); border: 1px solid rgba(212, 175, 55, 0.3); font-weight: 600; }
+
+  .sidebar-footer { padding: 16px; border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--titanium); }
+
+  /* Main Workspace */
+  .main-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-dark); overflow: hidden; }
+
+  /* Top Bar */
+  .top-bar { height: 64px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 28px; background: var(--panel-dark); }
+  .page-title { font-size: 1.1rem; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 12px; }
+
+  /* Model Selector Controls */
+  .model-selector { display: flex; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 8px; padding: 3px; }
+  .model-btn { background: transparent; border: none; padding: 6px 16px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; color: var(--titanium); transition: all 0.2s; }
+  .model-btn.active { background: var(--gold); color: #000; box-shadow: 0 2px 8px rgba(212, 175, 55, 0.4); }
+
+  /* Tab View Container */
+  .view-container { flex: 1; padding: 24px; overflow-y: auto; display: none; }
+  .view-container.active { display: block; }
+
+  /* Chat View */
+  .chat-box { max-width: 960px; margin: 0 auto; height: 100%; display: flex; flex-direction: column; }
+  .messages-area { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; gap: 16px; }
+  .message-card { background: var(--panel-dark); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; font-size: 0.92rem; line-height: 1.6; }
+  .message-card.user { align-self: flex-end; background: var(--panel-subtle); border-color: rgba(212,175,55,0.25); max-width: 75%; }
+  .message-card.assistant { align-self: flex-start; max-width: 85%; }
+  .model-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-bottom: 8px; }
+  .badge-july { background: rgba(0, 240, 255, 0.15); color: var(--cyan); border: 1px solid rgba(0, 240, 255, 0.3); }
+  .badge-gravity { background: rgba(212, 175, 55, 0.15); color: var(--gold); border: 1px solid rgba(212, 175, 55, 0.3); }
+
+  .chat-input-area { margin-top: 12px; background: var(--panel-dark); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; gap: 12px; align-items: flex-end; }
+  .chat-input { flex: 1; background: transparent; border: none; color: var(--text); font-size: 0.95rem; resize: none; outline: none; min-height: 48px; max-height: 140px; }
+  .send-btn { background: var(--gold); border: none; color: #000; font-weight: 700; padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: opacity 0.2s; }
+  .send-btn:hover { opacity: 0.9; }
+
+  /* Model Manager Cards */
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; max-width: 1000px; margin: 0 auto; }
+  .model-card { background: var(--panel-dark); border: 1px solid var(--border); border-radius: 12px; padding: 24px; position: relative; }
+  .model-card.active-border { border-color: var(--gold); box-shadow: 0 0 20px rgba(212,175,55,0.15); }
+  .model-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .model-header h3 { font-size: 1.2rem; color: var(--gold); }
+  .status-tag { padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
+  .tag-active { background: rgba(0, 230, 118, 0.15); color: var(--green); border: 1px solid var(--green); }
+  .tag-unloaded { background: rgba(138, 143, 152, 0.15); color: var(--titanium); border: 1px solid var(--titanium); }
+  .metrics-table { width: 100%; font-size: 0.85rem; margin: 16px 0; border-collapse: collapse; }
+  .metrics-table td { padding: 6px 0; border-bottom: 1px solid #1a1d28; }
+  .metrics-table td:last-child { text-align: right; color: var(--text); font-weight: 600; }
+
+  /* Visual Studio Iframe */
+  .visual-preview-frame { width: 100%; height: 500px; border: 1px solid var(--border); border-radius: 12px; background: #0c0d12; margin-top: 16px; }
+
+  /* Code Block styling */
+  pre { background: #0d0f15; padding: 14px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--border); font-family: monospace; font-size: 0.85rem; margin: 10px 0; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar Navigation -->
+<aside class="sidebar">
+  <div class="brand">
+    <h1>HS AI SOLUTIONS</h1>
+    <p>FOUNDER: HARSHAN SELIYAN</p>
+  </div>
+  <ul class="nav-list">
+    <li class="nav-item active" onclick="switchTab('chat')">💬 Chat & Reasoning</li>
+    <li class="nav-item" onclick="switchTab('agent')">🤖 Autonomous Agent</li>
+    <li class="nav-item" onclick="switchTab('code')">💻 Code Studio</li>
+    <li class="nav-item" onclick="switchTab('visual')">🎨 Visual Studio</li>
+    <li class="nav-item" onclick="switchTab('manager')">🧠 Model Manager</li>
+    <li class="nav-item" onclick="switchTab('performance')">⚡ Hardware & Telemetry</li>
+    <li class="nav-item" onclick="switchTab('settings')">⚙️ System Settings</li>
+  </ul>
+  <div class="sidebar-footer">
+    <div>Platform: Universal v2.0</div>
+    <div style="color: var(--gold); margin-top:4px;">Dual Model Engine Active</div>
+  </div>
+</aside>
+
+<!-- Main Workspace -->
+<main class="main-area">
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <div class="page-title" id="pageTitle">
+      <span>💬 Chat & Reasoning</span>
+    </div>
+    <!-- Model Selector -->
+    <div class="model-selector">
+      <button class="model-btn active" id="btnModeAuto" onclick="selectModelMode('AUTO')">AUTO</button>
+      <button class="model-btn" id="btnModeJuly" onclick="selectModelMode('JULY')">JULY LLM</button>
+      <button class="model-btn" id="btnModeGravity" onclick="selectModelMode('GRAVITY')">GRAVITY LLM</button>
+    </div>
+  </header>
+
+  <!-- View 1: Chat -->
+  <div class="view-container active" id="view-chat">
+    <div class="chat-box">
+      <div class="messages-area" id="chatMessages">
+        <div class="message-card assistant">
+          <div class="model-badge badge-july">JULY LLM • HS AI SOLUTIONS</div>
+          Welcome to the <strong>HS AI Solutions Universal AI Ecosystem</strong>.<br/>
+          Dual-model orchestration is active with <strong>JULY LLM</strong> and <strong>GRAVITY LLM</strong>. 
+          Use <code>AUTO</code> mode for dynamic task routing, or lock execution to your model of choice.
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <textarea class="chat-input" id="chatInput" placeholder="Ask a question, enter mathematical equations, write code, or request visualizations..." onkeydown="handleKey(event)"></textarea>
+        <button class="send-btn" onclick="sendMessage()">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View 2: Agent -->
+  <div class="view-container" id="view-agent">
+    <div style="max-width: 900px; margin: 0 auto;">
+      <h2 style="color: var(--gold); margin-bottom: 8px;">Permission-Controlled Agent Engine</h2>
+      <p style="color: var(--titanium); font-size: 0.9rem; margin-bottom: 20px;">
+        Standardized Interface: <code>Model ➔ Tool Router ➔ Permission Manager ➔ Tool ➔ Result ➔ Model</code>.
+      </p>
+      <div class="model-card">
+        <h4 style="color: var(--cyan); margin-bottom: 12px;">Active Security Policy</h4>
+        <div style="font-size: 0.85rem; line-height: 1.8;">
+          <div>• <strong>READ_ONLY Tools</strong>: File read, Web search, SymPy CAS, Diagnostics (Immediate execution)</div>
+          <div>• <strong>PRIVILEGED Tools</strong>: File write, Sandboxed code test (Token verification)</div>
+          <div>• <strong>DESTRUCTIVE Tools</strong>: File delete, Host shell (Explicit confirmation required)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- View 3: Visual Studio -->
+  <div class="view-container" id="view-visual">
+    <div style="max-width: 960px; margin: 0 auto;">
+      <h2 style="color: var(--gold); margin-bottom: 8px;">Universal Visual Studio</h2>
+      <p style="color: var(--titanium); font-size: 0.9rem; margin-bottom: 16px;">
+        Interactive canvas and SVG rendering supporting Water phase diagrams, Binary search animations, Neural topologies, and Transformers.
+      </p>
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+        <button class="model-btn" onclick="loadVisual('water_phase_diagram', 'Water Phase Diagram')">Water Phase</button>
+        <button class="model-btn" onclick="loadVisual('binary_search', 'Binary Search O(log N)')">Binary Search</button>
+        <button class="model-btn" onclick="loadVisual('neural_network', 'Neural Network Architecture')">Neural Network</button>
+        <button class="model-btn" onclick="loadVisual('transformer_architecture', 'Transformer Block')">Transformer</button>
+        <button class="model-btn" onclick="loadVisual('cpu_architecture', 'CPU Microarchitecture')">CPU Microarch</button>
+      </div>
+      <iframe class="visual-preview-frame" id="visualFrame" src="/api/visual/render" frameborder="0"></iframe>
+    </div>
+  </div>
+
+  <!-- View 4: Model Manager -->
+  <div class="view-container" id="view-manager">
+    <div style="max-width: 1000px; margin: 0 auto;">
+      <h2 style="color: var(--gold); margin-bottom: 8px;">Dual-Model Management Engine</h2>
+      <p style="color: var(--titanium); font-size: 0.9rem; margin-bottom: 24px;">
+        Inspect verified GGUF binary headers, memory consumption, context lengths, and layer offloading.
+      </p>
+      <div class="grid-2" id="modelCardsContainer">
+        <!-- JULY CARD -->
+        <div class="model-card active-border">
+          <div class="model-header">
+            <div>
+              <h3>JULY LLM</h3>
+              <div style="color: var(--titanium); font-size: 0.8rem;">Primary Foundation Intelligence</div>
+            </div>
+            <span class="status-tag tag-active">ACTIVE / MEMORY</span>
+          </div>
+          <table class="metrics-table">
+            <tr><td>Architecture</td><td>LLAMA 3.2 GQA</td></tr>
+            <tr><td>Verified Parameters</td><td>3.21 Billion</td></tr>
+            <tr><td>Quantization</td><td>Q4_K_M (File Type 15)</td></tr>
+            <tr><td>GGUF Size</td><td>1,925.83 MB</td></tr>
+            <tr><td>Context Window</td><td>4,096 Budgeted (131K Native)</td></tr>
+            <tr><td>GPU Layers</td><td>28 / 28 Offloaded (RTX 3050)</td></tr>
+          </table>
+          <div style="display:flex; gap: 8px; margin-top: 16px;">
+            <button class="model-btn active" onclick="switchModel('july')">Switch To</button>
+            <button class="model-btn" onclick="unloadModel('july')">Unload</button>
+          </div>
+        </div>
+
+        <!-- GRAVITY CARD -->
+        <div class="model-card">
+          <div class="model-header">
+            <div>
+              <h3>GRAVITY LLM</h3>
+              <div style="color: var(--titanium); font-size: 0.8rem;">Mathematical & Algorithmic Frontier</div>
+            </div>
+            <span class="status-tag tag-unloaded">UNLOADED</span>
+          </div>
+          <table class="metrics-table">
+            <tr><td>Architecture</td><td>GRAVITY GQA / ROPE</td></tr>
+            <tr><td>Verified Parameters</td><td>3.21 Billion</td></tr>
+            <tr><td>Quantization</td><td>Q4_K_M (File Type 15)</td></tr>
+            <tr><td>GGUF Size</td><td>1,925.83 MB</td></tr>
+            <tr><td>Context Window</td><td>4,096 Budgeted</td></tr>
+            <tr><td>GPU Acceleration</td><td>CUDA Ready</td></tr>
+          </table>
+          <div style="display:flex; gap: 8px; margin-top: 16px;">
+            <button class="model-btn" onclick="loadModel('gravity')">Load into RAM</button>
+            <button class="model-btn" onclick="switchModel('gravity')">Switch To</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- View 5: Hardware & Telemetry -->
+  <div class="view-container" id="view-performance">
+    <div style="max-width: 900px; margin: 0 auto;">
+      <h2 style="color: var(--gold); margin-bottom: 16px;">Compute Hardware & Acceleration Telemetry</h2>
+      <div class="model-card" id="hardwareTelemetryBox">
+        Loading hardware telemetry...
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+  let activeMode = "AUTO";
+
+  function switchTab(tabId) {
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
+
+    const tabMap = {
+      'chat': '💬 Chat & Reasoning',
+      'agent': '🤖 Autonomous Agent Engine',
+      'code': '💻 Code Studio',
+      'visual': '🎨 Universal Visual Studio',
+      'manager': '🧠 Model Manager',
+      'performance': '⚡ Hardware & Telemetry',
+      'settings': '⚙️ System Settings'
+    };
+
+    document.getElementById('view-' + tabId)?.classList.add('active');
+    document.getElementById('pageTitle').innerText = tabMap[tabId] || 'Workspace';
+    event.currentTarget.classList.add('active');
+
+    if (tabId === 'performance') fetchTelemetry();
+  }
+
+  function selectModelMode(mode) {
+    activeMode = mode;
+    document.getElementById('btnModeAuto').classList.toggle('active', mode === 'AUTO');
+    document.getElementById('btnModeJuly').classList.toggle('active', mode === 'JULY');
+    document.getElementById('btnModeGravity').classList.toggle('active', mode === 'GRAVITY');
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = '';
+    const messages = document.getElementById('chatMessages');
+
+    // Add user bubble
+    const userDiv = document.createElement('div');
+    userDiv.className = 'message-card user';
+    userDiv.innerText = text;
+    messages.appendChild(userDiv);
+
+    // Placeholder assistant bubble
+    const asstDiv = document.createElement('div');
+    asstDiv.className = 'message-card assistant';
+    asstDiv.innerHTML = '<span style="color:var(--titanium)">Thinking & routing...</span>';
+    messages.appendChild(asstDiv);
+    messages.scrollTop = messages.scrollHeight;
+
+    try {
+      const resp = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ message: text, mode: activeMode })
+      });
+      const data = await resp.json();
+
+      const badgeClass = data.model_used.includes('JULY') ? 'badge-july' : 'badge-gravity';
+      asstDiv.innerHTML = `
+        <div class="model-badge ${badgeClass}">${data.model_used} • ${data.routing.mode}</div>
+        <div>${data.response.replace(/\\n/g, '<br/>')}</div>
+        <div style="font-size:0.75rem; color:var(--titanium); margin-top:8px;">
+          Routing: ${data.routing.rationale} (${data.elapsed_seconds}s)
+        </div>
+      `;
+    } catch (e) {
+      asstDiv.innerHTML = `<span style="color:var(--red)">Inference Error: ${e.message}</span>`;
+    }
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function loadVisual(type, title) {
+    const frame = document.getElementById('visualFrame');
+    frame.src = `/api/visual/render?visualization_type=${type}&title=${encodeURIComponent(title)}`;
+    fetch('/api/visual/render', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ visualization_type: type, title: title })
+    }).then(r => r.text()).then(html => {
+      frame.srcdoc = html;
+    });
+  }
+
+  async function fetchTelemetry() {
+    try {
+      const resp = await fetch('/api/system/status');
+      const data = await resp.json();
+      const hw = data.hardware;
+      document.getElementById('hardwareTelemetryBox').innerHTML = `
+        <table class="metrics-table">
+          <tr><td>Host OS</td><td>${hw.os}</td></tr>
+          <tr><td>CPU Architecture</td><td>${hw.cpu}</td></tr>
+          <tr><td>Physical RAM</td><td>${hw.ram_gb}</td></tr>
+          <tr><td>GPU Accelerator</td><td>${hw.gpu} (${hw.gpu_backend.toUpperCase()})</td></tr>
+          <tr><td>VRAM Allocation</td><td>${hw.vram_mb}</td></tr>
+          <tr><td>Dual Model In-VRAM Permitted</td><td>${hw.allow_dual_vram ? 'YES (High Capacity)' : 'NO (Sequential Memory Guard Active)'}</td></tr>
+        </table>
+      `;
+    } catch(e) {}
+  }
+
+  async function switchModel(mid) {
+    await fetch('/api/model/switch', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ model_id: mid })
+    });
+    alert(`Switched active model to ${mid.toUpperCase()} LLM.`);
+  }
+
+  async function loadModel(mid) {
+    await fetch('/api/model/load', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ model_id: mid })
+    });
+    alert(`Loaded ${mid.toUpperCase()} LLM into RAM/VRAM.`);
+  }
+
+  async function unloadModel(mid) {
+    await fetch('/api/model/unload', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ model_id: mid })
+    });
+    alert(`Unloaded ${mid.toUpperCase()} LLM from memory.`);
+  }
+</script>
+</body>
+</html>
