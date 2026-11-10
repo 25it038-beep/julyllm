@@ -159,6 +159,23 @@ def get_current_user(
 # Health & Status Endpoints (Requirement 10)
 # ---------------------------------------------------------------------------
 
+@app.api_route("/", methods=["GET", "HEAD"])
+def root_index():
+    """Welcome endpoint for root visits and health probes."""
+    return {
+        "status": "online",
+        "service": "July LLM 3B Distribution Backend",
+        "organization": "HS AI Solutions",
+        "founder": "Harshan Seliyan",
+        "model": "July LLM 3B (july-final.gguf)",
+        "docs": "/docs",
+        "installer": "/install.ps1",
+        "health": "/health",
+        "status_api": "/api/v1/status",
+        "one_liner_install": "irm https://julyllm.onrender.com/install.ps1 | iex"
+    }
+
+
 @app.get("/health")
 def health_check():
     """Health check for Render / load balancers and system monitoring."""
