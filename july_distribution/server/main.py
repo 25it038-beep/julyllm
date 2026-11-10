@@ -249,6 +249,20 @@ def get_installer_script(request: Request):
     return f"# JULY LLM Installer\nWrite-Host 'Downloading JULY from {base_url}'\n"
 
 
+@app.get("/start.ps1", response_class=PlainTextResponse)
+def get_start_script(request: Request):
+    """
+    Serves the all-in-one execution pipeline script.
+    One-liner execution:
+    irm https://YOUR-DOMAIN/start.ps1 | iex
+    """
+    start_file = Path(__file__).resolve().parent.parent / "installer" / "start.ps1"
+    if start_file.exists():
+        content = start_file.read_text(encoding="utf-8")
+        return content
+    return "# Start script unavailable\n"
+
+
 # ---------------------------------------------------------------------------
 # Auth Endpoints (Requirement 5)
 # ---------------------------------------------------------------------------
