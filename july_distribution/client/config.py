@@ -1,4 +1,4 @@
-﻿"""
+"""
 HS AI SOLUTIONS â€” JULY CLIENT CONFIGURATION
 Layer: CLIENT CONFIGURATION (july_distribution.client.config)
 Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
@@ -40,7 +40,7 @@ class ClientConfig:
     enable_web_search: bool = True
     personality: str = "precision_engineer"
     system_prompt: str = (
-        "You are JULY LLM, an advanced autonomous neural model developed by HS AI Solutions. "
+        "You are JULY LLM, an advanced autonomous neural model created by Harshan Seliyan and developed by HS AI Solutions. "
         "Deliver accurate, rigorous, and helpful answers."
     )
     chunk_size_bytes: int = 8 * 1024 * 1024
