@@ -1,4 +1,4 @@
-﻿"""
+"""
 HS AI SOLUTIONS â€” JULY CLIENT LOCAL INFERENCE RUNTIME
 Layer: LOCAL INFERENCE (july_distribution.client.runtime)
 Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
@@ -121,26 +121,42 @@ class ClientInferenceRuntime:
         if getattr(self.config, "enable_web_search", True) and should_trigger_web_search(prompt):
             search_query = extract_search_query(prompt)
             try:
-                print(f"[JULY WEB SEARCH] Searching live web sources for: '{search_query}'...")
+                sys.stdout.write(f"\n \033[93m🔍 [HS AI SEARCH]\033[0m Querying live web sources for: '\033[1m{search_query}\033[0m'...\n")
+                sys.stdout.flush()
                 results = live_duckduckgo_search(search_query)
                 if results:
                     web_context = format_search_context(search_query, results)
-                    print(f"[JULY WEB SEARCH] Retrieved {len(results)} live source snippets.")
+                    sys.stdout.write(f" \033[92m[✓]\033[0m Grounded with {len(results)} live source snippets from web.\n\n")
+                    sys.stdout.flush()
+                else:
+                    sys.stdout.write(f" \033[90m[*] Live web search returned 0 matches; relying on neural weights.\033[0m\n\n")
+                    sys.stdout.flush()
             except Exception as e:
-                print(f"[JULY WEB SEARCH] Search unavailable: {e}")
+                sys.stdout.write(f" \033[90m[*] Web search unavailable ({e}); relying on neural weights.\033[0m\n\n")
+                sys.stdout.flush()
 
         # Build chat format
         formatted = f"<|start_header_id|>system<|end_header_id|>\n\n{sys_prompt}"
         if custom_kn:
             formatted += f"\n\nReference Knowledge:\n{custom_kn}"
         if web_context:
-            formatted += f"\n\n{web_context}"
+            formatted += (
+                f"\n\n{web_context}\n\n"
+                f"CRITICAL REAL-TIME GROUNDING DIRECTIVE:\n"
+                f"- You have access to verified real-time live internet facts above.\n"
+                f"- You MUST prioritize and base your response on these real-time search facts to provide accurate, up-to-date answers.\n"
+                f"- Override any older pretraining memory with the provided live web search data."
+            )
         formatted += "<|eot_id|>"
 
         for msg in history:
             formatted += f"<|start_header_id|>{msg['role']}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"
 
-        formatted += f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|>"
+        formatted += "<|start_header_id|>user<|end_header_id|>\n\n"
+        if web_context:
+            formatted += f"[Real-Time Live Web Search Information:\n{web_context}]\n\nQuestion: {prompt}<|eot_id|>"
+        else:
+            formatted += f"{prompt}<|eot_id|>"
         formatted += "<|start_header_id|>assistant<|end_header_id|>\n\n"
 
         # Unlimited tokens: if requested_max <= 0 or None, llama.cpp generates until EOS (<|eot_id|>)

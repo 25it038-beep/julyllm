@@ -1,12 +1,12 @@
-﻿"""
-HS AI SOLUTIONS â€” JULY CLIENT AUTONOMOUS WEB SEARCH ENGINE
+"""
+HS AI SOLUTIONS — JULY CLIENT AUTONOMOUS WEB SEARCH ENGINE
 Layer: LIVE WEB ACQUISITION (july_distribution.client.web_search)
 Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
-Product: JULY LLM 3B | Family: HS AI FAMILY
+Product: JULY LLM | Family: HS AI FAMILY
 
 Provides real-time web search integration:
 - Autonomous query intent detection (current events, recent news, live facts, dates).
-- Live multi-source retrieval (DuckDuckGo HTML + Instant Answer API).
+- Multi-source retrieval (DuckDuckGo HTML + DuckDuckGo Lite + Instant Answer API).
 - Zero external API key dependencies.
 - Structured contextual synthesis for LLM prompt grounding.
 """
@@ -21,14 +21,25 @@ import urllib.parse
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
-# Keywords and regex patterns that indicate real-time / current information needs
-TEMPORAL_PATTERNS = [
-    r"\b(current|currently|latest|today|yesterday|tomorrow|tonight|recent|recently|now)\b",
-    r"\b(news|weather|stock|price|score|scores|election|elections|update|updates|schedule)\b",
-    r"\b(2024|2025|2026|2027)\b",
-    r"\bwho is (the )?(current|new|now|president|prime minister|ceo|leader|champion)\b",
-    r"\bwhat is the (current|latest|present|newest|price of|score of|status of)\b",
-    r"\b(who won|what happened|when is the next|is it currently)\b"
+# Non-search greetings and system meta-prompts
+SKIP_PATTERNS = [
+    r"^(hi|hello|hey|greetings|hola|namaste|sup|yo)[.!?\s]*$",
+    r"^(good morning|good afternoon|good evening|good night)[.!?\s]*$",
+    r"^(how are you|how do you do|who are you|what are you|what is your name)[.!?\s]*$",
+    r"^(thanks|thank you|ok|okay|bye|goodbye|see you|exit|quit|q)[.!?\s]*$",
+    r"^(/clear|/help|/status|/studio|/mode)[.!?\s]*$",
+]
+
+# Patterns that indicate factual queries, entities, or real-time info needs
+SEARCH_PATTERNS = [
+    r"^(/search|/web|search:|google:|lookup:|browse:|--web)",
+    r"\b(who|what|where|when|why|how|which)\b",
+    r"\b(current|currently|latest|today|yesterday|tomorrow|tonight|recent|recently|now|update|updates|news)\b",
+    r"\b(2020|2021|2022|2023|2024|2025|2026|2027|2028|2029|2030)\b",
+    r"\b(cm|pm|chief minister|prime minister|president|ceo|cto|founder|governor|minister|chancellor|leader|mayor)\b",
+    r"\b(stock|price|market|score|scores|match|winner|won|champion|championship|election|elections|budget)\b",
+    r"\b(weather|temperature|forecast|flight|status|release|released|launch|launched)\b",
+    r"\b(tell me about|info on|details of|who is|what is|meaning of|definition of)\b",
 ]
 
 EXPLICIT_SEARCH_TRIGGERS = [
@@ -39,16 +50,27 @@ EXPLICIT_SEARCH_TRIGGERS = [
 def should_trigger_web_search(prompt: str) -> bool:
     """Detects whether a prompt requires live real-time web search grounding."""
     p_lower = prompt.strip().lower()
+    if not p_lower:
+        return False
 
-    # Explicit triggers
+    # Check skip patterns (greetings / conversational filler)
+    for pat in SKIP_PATTERNS:
+        if re.match(pat, p_lower):
+            return False
+
+    # Check explicit triggers
     for trig in EXPLICIT_SEARCH_TRIGGERS:
         if p_lower.startswith(trig):
             return True
 
-    # Pattern based triggers
-    for pat in TEMPORAL_PATTERNS:
+    # Check search patterns
+    for pat in SEARCH_PATTERNS:
         if re.search(pat, p_lower):
             return True
+
+    # Questions ending with question mark and having > 2 words
+    if p_lower.endswith("?") and len(p_lower.split()) > 2:
+        return True
 
     return False
 
@@ -61,8 +83,8 @@ def extract_search_query(prompt: str) -> str:
             q = q[len(trig):].strip()
             break
 
-    # Strip conversational noise
-    q = re.sub(r"^(please\s+)?(can\s+you\s+)?(tell\s+me\s+)?(what\s+is\s+|who\s+is\s+|search\s+for\s+)?", "", q, flags=re.IGNORECASE)
+    # Strip conversational prefixes
+    q = re.sub(r"^(please\s+)?(can\s+you\s+)?(tell\s+me\s+)?(search\s+for\s+|lookup\s+)?", "", q, flags=re.IGNORECASE).strip()
     q = re.sub(r"[?!.]+$", "", q).strip()
     return q if len(q) > 2 else prompt.strip()
 
@@ -72,17 +94,18 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
     results = []
     encoded_query = urllib.parse.quote(query)
 
-    # 1. Primary: DuckDuckGo HTML Search
+    # Strategy 1: Primary DuckDuckGo HTML Search
     url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
+        "Referer": "https://html.duckduckgo.com/",
     }
     req = urllib.request.Request(url, headers=headers)
 
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             content = resp.read().decode("utf-8", errors="ignore")
             snippet_matches = re.findall(r'<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</a>', content, re.DOTALL)
             title_matches = re.findall(r'<a[^>]+class="[^"]*result__a[^"]*"[^>]*>(.*?)</a>', content, re.DOTALL)
@@ -90,17 +113,38 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
             for i in range(min(len(snippet_matches), len(title_matches), max_results)):
                 t = html.unescape(re.sub(r"<[^>]+>", "", title_matches[i]).strip())
                 s = html.unescape(re.sub(r"<[^>]+>", "", snippet_matches[i]).strip())
-                if s:
+                if s and len(s) > 10:
                     results.append({"title": t, "snippet": s})
     except Exception:
         pass
 
-    # 2. Secondary Fallback: DuckDuckGo Instant Answer API
+    # Strategy 2: Fallback DuckDuckGo Lite Search
+    if len(results) < 2:
+        try:
+            lite_url = "https://lite.duckduckgo.com/lite/"
+            post_data = urllib.parse.urlencode({"q": query}).encode("utf-8")
+            lite_req = urllib.request.Request(lite_url, data=post_data, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Content-Type": "application/x-www-form-urlencoded"
+            })
+            with urllib.request.urlopen(lite_req, timeout=8) as resp:
+                body = resp.read().decode("utf-8", errors="ignore")
+                snippets = re.findall(r'class=[\"\']result-snippet[\"\']>(.*?)</td>', body, re.DOTALL | re.IGNORECASE)
+                titles = re.findall(r'class=[\"\']result-link[\"\'][^>]*>(.*?)</a>', body, re.DOTALL | re.IGNORECASE)
+                for i in range(min(len(snippets), len(titles), max_results)):
+                    t = html.unescape(re.sub(r"<[^>]+>", "", titles[i]).strip())
+                    s = html.unescape(re.sub(r"<[^>]+>", "", snippets[i]).strip())
+                    if s and len(s) > 10:
+                        results.append({"title": t, "snippet": s})
+        except Exception:
+            pass
+
+    # Strategy 3: Tertiary Fallback DuckDuckGo Instant Answer API
     if len(results) < 2:
         try:
             api_url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1&skip_disambig=1"
             api_req = urllib.request.Request(api_url, headers={"User-Agent": "JulyLLM/1.0"})
-            with urllib.request.urlopen(api_req, timeout=4) as resp:
+            with urllib.request.urlopen(api_req, timeout=6) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 abstract = data.get("AbstractText")
                 heading = data.get("Heading")
@@ -125,12 +169,11 @@ def format_search_context(query: str, results: List[Dict[str, str]]) -> str:
     current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     lines = [
         f"[REAL-TIME LIVE WEB SEARCH DATA - Retrieved: {current_date}]",
-        f'Query: "{query}"',
-        "Use the following real-time facts to answer the user accurately:"
+        f'Search Query: "{query}"',
+        "Verified live facts from the web:"
     ]
 
     for idx, r in enumerate(results, 1):
         lines.append(f"{idx}. {r['title']}: {r['snippet']}")
 
     return "\n".join(lines)
-
