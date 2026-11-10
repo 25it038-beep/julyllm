@@ -293,6 +293,55 @@ class VisualTokenFilter:
         return ""
 
 
+def read_terminal_input(prompt_label: str) -> str:
+    """Reads single-line or multi-line/bulk input from the user."""
+    try:
+        first_line = input(prompt_label)
+    except EOFError:
+        return "exit"
+
+    trimmed = first_line.strip()
+
+    # 1. Triple quotes multi-line trigger: """ or '''
+    if trimmed.startswith('"""') or trimmed.startswith("'''"):
+        quote = '"""' if trimmed.startswith('"""') else "'''"
+        if len(trimmed) > 3 and trimmed.endswith(quote):
+            return trimmed[3:-3].strip()
+
+        lines = [trimmed[3:]]
+        print(f" {UI.GRAY}[Bulk mode active. Paste your text, then type {quote} or /send on a new line]{UI.RESET}")
+        while True:
+            try:
+                line = input(f" {UI.GRAY}...{UI.RESET} ")
+                if quote in line:
+                    idx = line.find(quote)
+                    lines.append(line[:idx])
+                    break
+                if line.strip().lower() in ("/send", "/end", ":q"):
+                    break
+                lines.append(line)
+            except (EOFError, KeyboardInterrupt):
+                break
+        return "\n".join(lines).strip()
+
+    # 2. Backslash line continuation
+    if trimmed.endswith("\\"):
+        lines = [trimmed[:-1].strip()]
+        while True:
+            try:
+                line = input(f" {UI.GRAY}...{UI.RESET} ")
+                if line.endswith("\\"):
+                    lines.append(line[:-1].strip())
+                else:
+                    lines.append(line)
+                    break
+            except (EOFError, KeyboardInterrupt):
+                break
+        return "\n".join(lines).strip()
+
+    return trimmed
+
+
 def cmd_chat(args):
     active_path = get_active_ephemeral_path()
     if not active_path:
@@ -309,23 +358,48 @@ def cmd_chat(args):
     customizer = UserCustomizationManager(cfg)
     runtime = ClientInferenceRuntime(cfg, storage, customizer)
 
-    if not args.prompt:
+    # Check for piped input or file parameter
+    piped_prompt = None
+    if not sys.stdin.isatty():
+        try:
+            piped_prompt = sys.stdin.read().strip()
+        except Exception:
+            pass
+
+    prompt_to_run = getattr(args, "prompt", None)
+    file_arg = getattr(args, "file", None)
+    if file_arg:
+        fpath = Path(file_arg)
+        if fpath.exists() and fpath.is_file():
+            try:
+                with open(fpath, "r", encoding="utf-8", errors="replace") as f:
+                    prompt_to_run = f.read().strip()
+            except Exception as e:
+                print(f" {UI.RED}[!] Error reading prompt file:{UI.RESET} {e}")
+                sys.exit(1)
+        else:
+            print(f" {UI.RED}[!] File not found:{UI.RESET} {file_arg}")
+            sys.exit(1)
+    elif piped_prompt:
+        prompt_to_run = piped_prompt
+
+    if not prompt_to_run:
         UI.print_banner()
         print(f"  {UI.GRAY}Personality :{UI.RESET} {UI.YELLOW}{cfg.personality.replace('_', ' ').title()}{UI.RESET}")
-        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/help{UI.RESET}, {UI.CYAN}/visual{UI.RESET}, {UI.CYAN}/clear{UI.RESET}, {UI.CYAN}/status{UI.RESET}, {UI.CYAN}/studio{UI.RESET}, {UI.CYAN}/mode <preset>{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
+        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/help{UI.RESET}, {UI.CYAN}/paste{UI.RESET}, {UI.CYAN}/file <path>{UI.RESET}, {UI.CYAN}/visual{UI.RESET}, {UI.CYAN}/clear{UI.RESET}, {UI.CYAN}/status{UI.RESET}, {UI.CYAN}/studio{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
         print(f"{UI.GRAY}─────────────────────────────────────────────────────────────────────────────{UI.RESET}\n")
 
     runtime.load_model(active_path)
 
-    if args.prompt:
-        # One-off prompt
-        print(f"\n{UI.BOLD}{UI.GREEN}❯ You{UI.RESET} {UI.GRAY}›{UI.RESET} {args.prompt}")
+    if prompt_to_run:
+        # One-off or bulk prompt
+        print(f"\n{UI.BOLD}{UI.GREEN}❯ You{UI.RESET} {UI.GRAY}›{UI.RESET} {prompt_to_run[:200]}{'...' if len(prompt_to_run) > 200 else ''}")
         print(f"{UI.BOLD}{UI.CYAN}❯ JULY{UI.RESET} {UI.GRAY}›{UI.RESET} ", end="", flush=True)
         t0 = time.time()
         tok_count = 0
         full_response = []
         token_filter = VisualTokenFilter()
-        for token in runtime.generate_stream(args.prompt):
+        for token in runtime.generate_stream(prompt_to_run):
             chunk = token_filter.process(token)
             if chunk:
                 sys.stdout.write(chunk)
@@ -343,7 +417,7 @@ def cmd_chat(args):
         try:
             from .visual import VisualResponseEngine
             engine = VisualResponseEngine()
-            rendered = engine.process_and_render(user_prompt=args.prompt, model_response=full_text)
+            rendered = engine.process_and_render(user_prompt=prompt_to_run, model_response=full_text)
             if not rendered:
                 visual_info = detect_visual_content(full_text)
                 if visual_info:
@@ -363,7 +437,7 @@ def cmd_chat(args):
 
     while True:
         try:
-            user_input = input(f"{UI.BOLD}{UI.GREEN}❯ You{UI.RESET} {UI.GRAY}›{UI.RESET} ").strip()
+            user_input = read_terminal_input(f"{UI.BOLD}{UI.GREEN}❯ You{UI.RESET} {UI.GRAY}›{UI.RESET} ").strip()
             if not user_input:
                 continue
 
@@ -378,6 +452,9 @@ def cmd_chat(args):
 
                 if c == "/help":
                     print(f"\n {UI.BOLD}{UI.CYAN}Available Commands:{UI.RESET}")
+                    print(f"   {UI.CYAN}/paste, /bulk{UI.RESET}   - Enter multi-line bulk prompt mode (finish with /send)")
+                    print(f"   {UI.CYAN}/file <path>{UI.RESET}    - Load entire text file as prompt")
+                    print(f"   {UI.CYAN}\"\"\" <text> \"\"\"{UI.RESET} - Triple-quote multi-line prompt anytime")
                     print(f"   {UI.CYAN}/visual{UI.RESET}         - Show On-Demand Visual Response Engine status and visual capabilities")
                     print(f"   {UI.CYAN}/studio{UI.RESET}         - Open HS AI Studio Portal link")
                     print(f"   {UI.CYAN}/clear{UI.RESET}          - Clear terminal and reset chat history")
@@ -385,6 +462,44 @@ def cmd_chat(args):
                     print(f"   {UI.CYAN}/mode <name>{UI.RESET}   - Switch personality (precision_engineer, research_scientist, software_architect, tutor)")
                     print(f"   {UI.CYAN}exit, quit{UI.RESET}      - Exit and safely reclaim RAM\n")
                     continue
+
+                if c in ("/paste", "/bulk", "/multiline"):
+                    print(f"\n {UI.MAGENTA}┌── 📋 BULK PROMPT INPUT MODE ──────────────────────────────────────┐{UI.RESET}")
+                    print(f" {UI.GRAY}│ Paste or type unlimited lines of prompt, code, or data below.     │{UI.RESET}")
+                    print(f" {UI.GRAY}│ To submit: type {UI.CYAN}/send{UI.GRAY} or {UI.CYAN}/end{UI.GRAY} on a new line (or press Ctrl+Z then Enter). │{UI.RESET}")
+                    print(f" {UI.MAGENTA}└───────────────────────────────────────────────────────────────────┘{UI.RESET}\n")
+                    bulk_lines = []
+                    while True:
+                        try:
+                            line = input(f" {UI.CYAN}│{UI.RESET} ")
+                            if line.strip().lower() in ("/send", "/end", "/done", ":q", "eof"):
+                                break
+                            bulk_lines.append(line)
+                        except (EOFError, KeyboardInterrupt):
+                            break
+                    bulk_text = "\n".join(bulk_lines).strip()
+                    if not bulk_text:
+                        print(f" {UI.YELLOW}[*] Bulk prompt cancelled (empty).{UI.RESET}\n")
+                        continue
+                    user_input = bulk_text
+
+                elif c in ("/file", "/load", "/import"):
+                    if len(cmd_parts) > 1:
+                        target_file = Path(" ".join(cmd_parts[1:]).strip().strip('"').strip("'"))
+                        if target_file.exists() and target_file.is_file():
+                            try:
+                                with open(target_file, "r", encoding="utf-8", errors="replace") as f:
+                                    user_input = f.read().strip()
+                                print(f" {UI.GREEN}[✓] Loaded bulk prompt ({len(user_input)} chars) from: {target_file.name}{UI.RESET}\n")
+                            except Exception as e:
+                                print(f" {UI.RED}[!] Could not read file:{UI.RESET} {e}\n")
+                                continue
+                        else:
+                            print(f" {UI.RED}[!] File not found:{UI.RESET} {target_file}\n")
+                            continue
+                    else:
+                        print(f" {UI.YELLOW}Usage:{UI.RESET} /file <path_to_text_file>\n")
+                        continue
 
                 if c in ("/visual", "/view", "/preview"):
                     print(f"\n  {UI.MAGENTA}🎨 [HS AI ON-DEMAND VISUAL RESPONSE ENGINE]{UI.RESET}")
@@ -548,6 +663,7 @@ def main():
 
     chat_p = subparsers.add_parser("chat", help="Start chat session running genuine local inference")
     chat_p.add_argument("prompt", nargs="?", help="One-off prompt to execute")
+    chat_p.add_argument("-f", "--file", help="Path to text file containing a bulk or multi-line prompt")
 
     subparsers.add_parser("unload", help="Unload model and securely wipe RAM storage")
     subparsers.add_parser("update", help="Check for model version updates")
