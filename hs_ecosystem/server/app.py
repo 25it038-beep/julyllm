@@ -38,6 +38,10 @@ from hs_ecosystem.agent.tool_router import SharedToolRouter
 from hs_ecosystem.agent.agent_engine import SharedAgentEngine
 from hs_ecosystem.visual.visual_studio import UniversalVisualEngine
 from hs_ecosystem.storage.conversation_store import UniversalConversationStore
+from july_distribution.server.r2_manager import CloudflareR2DistributionGateway
+from july_distribution.server.main import CENTRAL_MODEL_REGISTRY
+
+r2_gateway = CloudflareR2DistributionGateway()
 
 app = FastAPI(
     title="HS AI Solutions — Universal AI Ecosystem",
@@ -97,6 +101,115 @@ class VisualRenderRequest(BaseModel):
 def get_system_status():
     """Returns overview of hardware, models, memory, and acceleration."""
     return manager.get_system_overview()
+
+
+@app.get("/api/models")
+def get_all_models_registry():
+    """Returns centralized model registry mapping July and Gravity."""
+    models_list = []
+    for mid, meta in CENTRAL_MODEL_REGISTRY.items():
+        r2_head = r2_gateway.verify_object_head(meta["object_key"])
+        is_avail = r2_head.get("success", False)
+        models_list.append({
+            "id": meta["id"],
+            "name": meta["name"],
+            "family": meta["family"],
+            "storage_provider": meta["storage_provider"],
+            "bucket": meta["bucket"],
+            "object_key": meta["object_key"],
+            "status": "available" if is_avail else "unavailable",
+            "size_bytes": r2_head.get("content_length", meta["size_bytes"]),
+            "architecture": meta["architecture"],
+            "base_model": meta["base_model"],
+            "layers": meta["layers"],
+            "context_length": meta["context_length"],
+            "description": meta["description"]
+        })
+    return {
+        "organization": "HS AI Solutions",
+        "founder": "Harshan Seliyan",
+        "models": models_list
+    }
+
+
+@app.get("/api/models/{model_id}")
+def get_single_model_registry(model_id: str):
+    """Returns verified metadata for an individual model (july or gravity)."""
+    mid = model_id.lower().strip()
+    if mid not in CENTRAL_MODEL_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found in registry")
+    meta = dict(CENTRAL_MODEL_REGISTRY[mid])
+    r2_head = r2_gateway.verify_object_head(meta["object_key"])
+    meta["status"] = "available" if r2_head.get("success") else "unavailable"
+    if r2_head.get("success"):
+        meta["size_bytes"] = r2_head["content_length"]
+        meta["etag"] = r2_head.get("etag")
+        meta["last_modified"] = r2_head.get("last_modified")
+    return meta
+
+
+@app.get("/api/models/{model_id}/status")
+def get_model_status_live(model_id: str):
+    """Performs live HeadObject verification on Cloudflare R2 for the exact model."""
+    mid = model_id.lower().strip()
+    if mid not in CENTRAL_MODEL_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found")
+    meta = CENTRAL_MODEL_REGISTRY[mid]
+    r2_status = r2_gateway.verify_object_head(meta["object_key"])
+    if not r2_status.get("success"):
+        return JSONResponse(
+            status_code=502,
+            content={
+                "model_id": mid,
+                "model_name": meta["name"],
+                "object_key": meta["object_key"],
+                "bucket": r2_gateway.bucket_name,
+                "status": "unavailable",
+                "error": r2_status.get("error", "HeadObject verification failed")
+            }
+        )
+    return {
+        "model_id": mid,
+        "model_name": meta["name"],
+        "object_key": meta["object_key"],
+        "bucket": r2_gateway.bucket_name,
+        "status": "available",
+        "content_length": r2_status["content_length"],
+        "etag": r2_status["etag"],
+        "last_modified": r2_status["last_modified"],
+        "architecture": meta["architecture"],
+        "context_length": meta["context_length"],
+        "sha256": meta["sha256"],
+        "storage_provider": "cloudflare_r2"
+    }
+
+
+@app.post("/api/models/{model_id}/download")
+def download_model_signed_url(model_id: str):
+    """Generates a short-lived presigned URL directly from private Cloudflare R2."""
+    mid = model_id.lower().strip()
+    if mid not in CENTRAL_MODEL_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found")
+    meta = CENTRAL_MODEL_REGISTRY[mid]
+    r2_check = r2_gateway.verify_object_head(meta["object_key"])
+    if not r2_check.get("success"):
+        raise HTTPException(status_code=502, detail=f"R2 verification failure: {r2_check.get('error')}")
+    url = r2_gateway.generate_short_lived_download_url(meta["object_key"], 900)
+    return {
+        "success": True,
+        "model_id": mid,
+        "model_name": meta["name"],
+        "storage_provider": "cloudflare_r2",
+        "bucket": r2_gateway.bucket_name,
+        "object_key": meta["object_key"],
+        "download_url": url,
+        "expires_in_seconds": 900,
+        "size_bytes": r2_check["content_length"],
+        "etag": r2_check.get("etag", ""),
+        "expected_sha256": meta["sha256"],
+        "architecture": meta["architecture"],
+        "chunk_size_bytes": 8 * 1024 * 1024
+    }
 
 
 @app.post("/api/model/load")

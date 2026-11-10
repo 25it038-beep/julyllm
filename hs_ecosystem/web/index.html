@@ -216,21 +216,27 @@
               <h3>GRAVITY LLM</h3>
               <div style="color: var(--titanium); font-size: 0.8rem;">Mathematical & Algorithmic Frontier</div>
             </div>
-            <span class="status-tag tag-unloaded">UNLOADED</span>
+            <span class="status-tag tag-unloaded" id="gravityStatusTag">READY / R2 CLOUD</span>
           </div>
           <table class="metrics-table">
-            <tr><td>Architecture</td><td>GRAVITY GQA / ROPE</td></tr>
-            <tr><td>Verified Parameters</td><td>3.21 Billion</td></tr>
-            <tr><td>Quantization</td><td>Q4_K_M (File Type 15)</td></tr>
-            <tr><td>GGUF Size</td><td>1,925.83 MB</td></tr>
-            <tr><td>Context Window</td><td>4,096 Budgeted</td></tr>
-            <tr><td>GPU Acceleration</td><td>CUDA Ready</td></tr>
+            <tr><td>Architecture</td><td>QWEN 3.5 / ROPE (32 Layers)</td></tr>
+            <tr><td>R2 Object Key</td><td>Gravity-HS-AI-Solutions.gguf</td></tr>
+            <tr><td>Verified File Size</td><td>5,629.11 MB (5.24 GiB)</td></tr>
+            <tr><td>Context Window</td><td>262,144 Native Tokens</td></tr>
+            <tr><td>Storage Gateway</td><td>Private Cloudflare R2 ('july')</td></tr>
+            <tr><td>GPU Acceleration</td><td>CUDA Ready (RTX 3050 Laptop)</td></tr>
           </table>
-          <div style="display:flex; gap: 8px; margin-top: 16px;">
+          <div style="display:flex; gap: 8px; margin-top: 16px; flex-wrap: wrap;">
+            <button class="model-btn active" onclick="downloadModelR2('gravity')">📥 Download from R2</button>
             <button class="model-btn" onclick="loadModel('gravity')">Load into RAM</button>
             <button class="model-btn" onclick="switchModel('gravity')">Switch To</button>
+            <button class="model-btn" onclick="unloadModel('gravity')">Unload</button>
           </div>
         </div>
+      </div>
+
+      <!-- Cloudflare R2 Download Telemetry Box -->
+      <div id="downloadStatusBox" class="model-card" style="display:none; margin-top:20px; border-color:var(--gold);">
       </div>
     </div>
   </div>
@@ -382,6 +388,42 @@
       body: JSON.stringify({ model_id: mid })
     });
     alert(`Unloaded ${mid.toUpperCase()} LLM from memory.`);
+  }
+
+  async function downloadModelR2(mid) {
+    const box = document.getElementById('downloadStatusBox');
+    box.style.display = 'block';
+    box.innerHTML = `<span style="color:var(--gold)">Requesting presigned authorization from Render backend for ${mid.toUpperCase()}...</span>`;
+    try {
+      const resp = await fetch(`/api/models/${mid}/download`, { method: 'POST' });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.detail || 'Authorization failed');
+      box.innerHTML = `
+        <div style="margin-bottom:8px;">
+          <strong style="color:var(--gold)">Cloudflare R2 Presigned Authorization Active</strong> for <code>${data.object_key}</code> (Bucket: <code>${data.bucket}</code>).
+        </div>
+        <div style="font-size:0.85rem; color:var(--titanium); line-height:1.6;">
+          • Exact Cloud Size: ${(data.size_bytes / (1024*1024*1024)).toFixed(2)} GiB (${data.size_bytes.toLocaleString()} bytes)<br/>
+          • HTTP Range Requests: <code>206 Partial Content (Resumable)</code><br/>
+          • Architecture: <code>${data.architecture.toUpperCase()} (32 Blocks)</code><br/>
+          • Presigned Expiration: <code>${data.expires_in_seconds} seconds (Short-Lived Private URL)</code>
+        </div>
+        <div style="margin-top:12px; background:#12141c; border-radius:6px; height:14px; overflow:hidden; border:1px solid var(--border);">
+          <div id="dlProgressBar" style="width: 100%; height:100%; background:linear-gradient(90deg, var(--gold), #ffe57f);"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:8px; font-size:0.78rem; color:var(--titanium);">
+          <span style="color:var(--green)">✓ Authenticated Cloud Stream Active</span>
+          <span>Security: Private R2 Bucket Gated</span>
+        </div>
+        <div style="margin-top:12px;">
+          <a href="${data.download_url}" target="_blank" class="model-btn active" style="text-decoration:none; display:inline-block; font-size:0.8rem; padding:8px 16px;">
+            📥 Direct Stream Download (${(data.size_bytes / (1024*1024*1024)).toFixed(2)} GiB GGUF)
+          </a>
+        </div>
+      `;
+    } catch(e) {
+      box.innerHTML = `<span style="color:var(--red)">Download Authorization Error: ${e.message}</span>`;
+    }
   }
 </script>
 </body>

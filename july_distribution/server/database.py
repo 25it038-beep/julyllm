@@ -176,6 +176,23 @@ def init_database():
             )
             db.add(model_record)
             db.commit()
+
+        # Seed Gravity LLM
+        existing_gravity = db.query(ModelVersion).filter(ModelVersion.version_tag == "gravity-v1.0.0").first()
+        if not existing_gravity:
+            gravity_record = ModelVersion(
+                version_tag="gravity-v1.0.0",
+                model_name="Gravity LLM (HS AI Solutions)",
+                bucket_name="july",
+                object_key="Gravity-HS-AI-Solutions.gguf",
+                size_bytes=5629108096,
+                sha256="4b6c93439e6df7db0b5da22bb133e9b119a018bc6bfcefd482f3c7ae46beee05",
+                release_notes="Official release of Gravity LLM from private Cloudflare R2 bucket. Frontier specialist for mathematics, CAS, and algorithmic proofs.",
+                is_active=True,
+                created_at=time.time()
+            )
+            db.add(gravity_record)
+            db.commit()
     finally:
         db.close()
 

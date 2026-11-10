@@ -78,7 +78,10 @@ class UniversalModelManager:
         },
         "gravity": {
             "name": "GRAVITY LLM",
-            "file_name": "gravity-final.gguf",
+            "file_name": "Gravity-HS-AI-Solutions.gguf",
+            "fallback_file": "gravity-final.gguf",
+            "r2_bucket": "july",
+            "r2_key": "Gravity-HS-AI-Solutions.gguf",
             "default_context": 4096,
             "system_prompt": (
                 "You are GRAVITY LLM, a frontier neural model developed and maintained by HS AI Solutions, "
@@ -129,6 +132,10 @@ class UniversalModelManager:
         """Inspects GGUF binary headers directly to retrieve exact architectural specifications."""
         spec = self.MODEL_SPECS.get(model_id.lower(), self.MODEL_SPECS["july"])
         file_path = self.models_dir / spec["file_name"]
+        if not file_path.exists() and "fallback_file" in spec:
+            fallback = self.models_dir / spec["fallback_file"]
+            if fallback.exists():
+                file_path = fallback
 
         if not file_path.exists():
             return ModelMetadata(

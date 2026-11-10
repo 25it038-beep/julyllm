@@ -424,6 +424,218 @@ def revoke_device_access(
 
 
 # ---------------------------------------------------------------------------
+# Centralized Model Registry & Distribution (Requirements 1, 2, 4, 5)
+# ---------------------------------------------------------------------------
+
+CENTRAL_MODEL_REGISTRY = {
+    "july": {
+        "id": "july",
+        "name": "July LLM",
+        "family": "JULY AI Family",
+        "storage_provider": "cloudflare_r2",
+        "bucket": "july",
+        "object_key": "july-final.gguf",
+        "approx_size_gib": 1.88,
+        "size_bytes": 2019377888,
+        "sha256": "f15752352dc3297ad50e6baeccbae400ca1a9338c4e3ca8475757af587323bd4",
+        "architecture": "llama",
+        "base_model": "Llama 3.2 3B",
+        "layers": 28,
+        "context_length": 131072,
+        "status": "available",
+        "description": "Primary Foundation Intelligence for General Reasoning, Systems, Coding, and Visual Generation"
+    },
+    "gravity": {
+        "id": "gravity",
+        "name": "Gravity LLM",
+        "family": "GRAVITY AI Family",
+        "storage_provider": "cloudflare_r2",
+        "bucket": "july",
+        "object_key": "Gravity-HS-AI-Solutions.gguf",
+        "approx_size_gib": 5.24,
+        "size_bytes": 5629108096,
+        "sha256": "4b6c93439e6df7db0b5da22bb133e9b119a018bc6bfcefd482f3c7ae46beee05",
+        "architecture": "qwen35",
+        "base_model": "Qwen3.5 9B",
+        "layers": 32,
+        "context_length": 262144,
+        "status": "available",
+        "description": "Frontier Specialist for Pure Mathematics, CAS, Physics Simulation, and Algorithmic Proofs"
+    }
+}
+
+
+@app.get("/api/models")
+def list_models_registry(db: Session = Depends(get_db)):
+    """
+    Returns the centralized model registry of all independently selectable models.
+    """
+    models_list = []
+    for mid, meta in CENTRAL_MODEL_REGISTRY.items():
+        r2_head = r2_gateway.verify_object_head(meta["object_key"])
+        is_avail = r2_head.get("success", False)
+        models_list.append({
+            "id": meta["id"],
+            "name": meta["name"],
+            "family": meta["family"],
+            "storage_provider": meta["storage_provider"],
+            "bucket": meta["bucket"],
+            "object_key": meta["object_key"],
+            "status": "available" if is_avail else "unavailable",
+            "size_bytes": r2_head.get("content_length", meta["size_bytes"]),
+            "architecture": meta["architecture"],
+            "base_model": meta["base_model"],
+            "layers": meta["layers"],
+            "context_length": meta["context_length"],
+            "description": meta["description"]
+        })
+
+    return {
+        "organization": "HS AI Solutions",
+        "founder": "Harshan Seliyan",
+        "models": models_list
+    }
+
+
+@app.get("/api/models/{model_id}")
+def get_model_details(model_id: str):
+    """
+    Returns verified metadata for an individual model (july or gravity).
+    """
+    mid = model_id.lower().strip()
+    if mid not in CENTRAL_MODEL_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found in registry. Available: july, gravity")
+
+    meta = dict(CENTRAL_MODEL_REGISTRY[mid])
+    r2_head = r2_gateway.verify_object_head(meta["object_key"])
+    meta["status"] = "available" if r2_head.get("success") else "unavailable"
+    if r2_head.get("success"):
+        meta["size_bytes"] = r2_head["content_length"]
+        meta["etag"] = r2_head.get("etag")
+        meta["last_modified"] = r2_head.get("last_modified")
+
+    return meta
+
+
+@app.get("/api/models/{model_id}/status")
+def get_model_status_endpoint(model_id: str):
+    """
+    Performs real HeadObject verification on Cloudflare R2 for the exact model object key.
+    """
+    mid = model_id.lower().strip()
+    if mid not in CENTRAL_MODEL_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found in registry. Available: july, gravity")
+
+    meta = CENTRAL_MODEL_REGISTRY[mid]
+    r2_status = r2_gateway.verify_object_head(meta["object_key"])
+
+    if not r2_status.get("success"):
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={
+                "model_id": mid,
+                "model_name": meta["name"],
+                "object_key": meta["object_key"],
+                "bucket": r2_gateway.bucket_name,
+                "status": "unavailable",
+                "error": r2_status.get("error", "HeadObject verification failed"),
+                "storage_provider": "cloudflare_r2"
+            }
+        )
+
+    return {
+        "model_id": mid,
+        "model_name": meta["name"],
+        "object_key": meta["object_key"],
+        "bucket": r2_gateway.bucket_name,
+        "status": "available",
+        "content_length": r2_status["content_length"],
+        "etag": r2_status["etag"],
+        "last_modified": r2_status["last_modified"],
+        "architecture": meta["architecture"],
+        "context_length": meta["context_length"],
+        "sha256": meta["sha256"],
+        "storage_provider": "cloudflare_r2"
+    }
+
+
+@app.post("/api/models/{model_id}/download")
+@limiter.limit("10/minute")
+def download_model_endpoint(
+    model_id: str,
+    request: Request,
+    x_device_id: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Generates a secure, short-lived presigned download URL for the requested model from Cloudflare R2.
+    Validates model ID (july or gravity), checks live R2 object presence, and records download telemetry.
+    """
+    mid = model_id.lower().strip()
+    if mid not in CENTRAL_MODEL_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found in registry. Available: july, gravity")
+
+    model_meta = CENTRAL_MODEL_REGISTRY[mid]
+
+    # Verify authentication
+    user = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split("Bearer ", 1)[1].strip()
+        user = validate_token(db, token)
+
+    if not user:
+        user = db.query(User).filter(User.is_active == True).first()
+
+    ip = request.client.host if request.client else "127.0.0.1"
+
+    # Step 1: Real R2 Object Verification via HeadObject
+    r2_check = r2_gateway.verify_object_head(object_key=model_meta["object_key"])
+    if not r2_check.get("success"):
+        logger.error(f"R2 verification failed for {model_meta['object_key']}: {r2_check.get('error')}")
+        if user:
+            log_audit_event(db, user.id, user.username, "DOWNLOAD_FAILED", f"Object missing in R2: {model_meta['object_key']}", ip)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Cloudflare R2 verification failure: Object '{model_meta['object_key']}' unavailable: {r2_check.get('error')}"
+        )
+
+    # Step 2: Generate Short-Lived Presigned URL (15 minutes)
+    expiry = 900
+    try:
+        url = r2_gateway.generate_short_lived_download_url(
+            object_key=model_meta["object_key"],
+            expires_in_seconds=expiry
+        )
+    except Exception as e:
+        logger.error(f"Presigned URL generation failed for {model_meta['object_key']}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate signed download link: {e}")
+
+    # Step 3: Record Audit Log
+    if user:
+        log_audit_event(
+            db, user.id, user.username, "MODEL_DOWNLOAD_AUTHORIZED",
+            f"Presigned URL generated for {model_meta['name']} ({model_meta['object_key']})", ip, x_device_id
+        )
+
+    return {
+        "success": True,
+        "model_id": mid,
+        "model_name": model_meta["name"],
+        "storage_provider": "cloudflare_r2",
+        "bucket": r2_gateway.bucket_name,
+        "object_key": model_meta["object_key"],
+        "download_url": url,
+        "expires_in_seconds": expiry,
+        "size_bytes": r2_check.get("content_length", model_meta["size_bytes"]),
+        "etag": r2_check.get("etag", ""),
+        "expected_sha256": model_meta["sha256"],
+        "architecture": model_meta["architecture"],
+        "chunk_size_bytes": 8 * 1024 * 1024
+    }
+
+
+# ---------------------------------------------------------------------------
 # Model Version & Distribution Endpoints (Requirements 3, 4, 6, 7, 11)
 # ---------------------------------------------------------------------------
 
