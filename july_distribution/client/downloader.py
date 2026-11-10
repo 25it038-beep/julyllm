@@ -185,6 +185,10 @@ class ClientModelDownloader:
         elif existing_bytes > target_size:
             dest_path.unlink()
             existing_bytes = 0
+        elif mid == "gravity" and existing_bytes == 2019377888:
+            print(f"[{mid.upper()} CLIENT] Detected residual buffer from July LLM ({existing_bytes:,} bytes). Clearing for Gravity...")
+            dest_path.unlink(missing_ok=True)
+            existing_bytes = 0
 
         # Step 3: Range Request Header setup for resumption
         headers = {}

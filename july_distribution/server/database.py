@@ -193,6 +193,11 @@ def init_database():
             )
             db.add(gravity_record)
             db.commit()
+        else:
+            if existing_gravity.sha256 != "f24a90361aaac8cb3dce9f18b276b1444af106d205f411c4e674b58a9adf53c8":
+                existing_gravity.sha256 = "f24a90361aaac8cb3dce9f18b276b1444af106d205f411c4e674b58a9adf53c8"
+                existing_gravity.size_bytes = 5629108096
+                db.commit()
     finally:
         db.close()
 

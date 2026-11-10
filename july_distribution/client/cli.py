@@ -125,22 +125,30 @@ MODEL_METADATA = {
 }
 
 
-def resolve_model_seed(model_id: str = "july") -> Path:
+def resolve_model_seed(model_id: str = "july") -> Optional[Path]:
     """Finds verified GGUF weights for July or Gravity."""
     mid = model_id.lower().strip()
-    filename = "gravity-final.gguf" if mid == "gravity" else "july-final.gguf"
-
-    candidates = [
-        Path(__file__).resolve().parent.parent.parent / "models" / filename,
-        Path.cwd() / "models" / filename,
-        Path(os.environ.get("USERPROFILE", str(Path.home()))) / "OneDrive" / "Desktop" / "collab-editor" / "models" / filename,
-    ]
-    for c in candidates:
-        if c.exists():
-            return c
-    # Fallback to july if gravity file missing
-    fallback = Path(__file__).resolve().parent.parent.parent / "models" / "july-final.gguf"
-    return fallback
+    if mid == "gravity":
+        candidates = [
+            Path(r"D:\gravity\Gravity-HS-AI-Solutions.gguf"),
+            Path(r"D:\gravity\models\Gravity-HS-AI-Solutions.gguf"),
+            Path(os.environ.get("USERPROFILE", str(Path.home()))) / "gravity" / "Gravity-HS-AI-Solutions.gguf",
+            Path.cwd() / "models" / "Gravity-HS-AI-Solutions.gguf",
+        ]
+        for c in candidates:
+            if c.exists() and c.stat().st_size == 5629108096:
+                return c
+        return None
+    else:
+        candidates = [
+            Path(__file__).resolve().parent.parent.parent / "models" / "july-final.gguf",
+            Path.cwd() / "models" / "july-final.gguf",
+            Path(os.environ.get("USERPROFILE", str(Path.home()))) / "OneDrive" / "Desktop" / "collab-editor" / "models" / "july-final.gguf",
+        ]
+        for c in candidates:
+            if c.exists() and c.stat().st_size == 2019377888:
+                return c
+        return None
 
 
 def get_runtime_state_file() -> Path:
@@ -294,7 +302,7 @@ def cmd_load(args):
         target_model = "july"
     target_model = target_model.lower().strip()
 
-    ephemeral_path = storage.allocate_path()
+    ephemeral_path = storage.allocate_path(prefix=f"{target_model}_ram_model")
     print(f" {UI.CYAN}[⚡]{UI.RESET} Target Model: {UI.BOLD}{target_model.upper()} LLM{UI.RESET}")
     print(f" {UI.CYAN}[⚡]{UI.RESET} Ephemeral RAM Path: {ephemeral_path}")
     print(f" {UI.CYAN}[⚡]{UI.RESET} Windows FILE_ATTRIBUTE_TEMPORARY active (Zero-persistence RAM caching)...")
@@ -302,7 +310,7 @@ def cmd_load(args):
     # Fast seed check (if existing master seed present on workstation)
     root_seed = resolve_model_seed(target_model)
 
-    if root_seed.exists() and (not ephemeral_path.exists() or ephemeral_path.stat().st_size == 0):
+    if root_seed and root_seed.exists() and (not ephemeral_path.exists() or ephemeral_path.stat().st_size == 0):
         print(f" {UI.GRAY}[*] Priming ephemeral storage from verified local master seed ({root_seed.name})...{UI.RESET}")
         import shutil
         shutil.copyfile(root_seed, ephemeral_path)
@@ -315,12 +323,12 @@ def cmd_load(args):
         sys.stdout.flush()
 
     try:
-        downloader.download_to_ephemeral_storage(ephemeral_path, progress_callback=progress)
+        downloader.download_to_ephemeral_storage(ephemeral_path, progress_callback=progress, model_id=target_model)
         record_active_state(ephemeral_path, target_model)
         print(f"\n {UI.GREEN}[✓] {target_model.upper()} LLM verified and loaded into physical RAM.{UI.RESET}")
         print(f" {UI.GREEN}[✓]{UI.RESET} Run {UI.CYAN}july chat{UI.RESET} to start genuine local inference.\n")
     except Exception as e:
-        if root_seed.exists() and ephemeral_path.exists() and ephemeral_path.stat().st_size > 1000000:
+        if root_seed and root_seed.exists() and ephemeral_path.exists() and ephemeral_path.stat().st_size > 1000000:
             print(f"\n {UI.GRAY}[*] Cloud check delayed ({e}). Mounting verified master seed directly into RAM.{UI.RESET}")
             record_active_state(ephemeral_path, target_model)
             print(f" {UI.GREEN}[✓] {target_model.upper()} LLM verified and loaded into physical RAM.{UI.RESET}")
