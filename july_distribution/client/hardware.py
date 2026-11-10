@@ -1,7 +1,7 @@
-"""
-HS AI SOLUTIONS — JULY CLIENT HARDWARE TELEMETRY & ENGINE DETECTION
+﻿"""
+HS AI SOLUTIONS â€” JULY CLIENT HARDWARE TELEMETRY & ENGINE DETECTION
 Layer: HARDWARE DETECTOR (july_distribution.client.hardware)
-Founder & Chief Architect: Harshan Seliyan
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 Product: JULY LLM 3B | Family: HS AI FAMILY
 
 Performs genuine hardware profiling on client machines:
@@ -86,3 +86,4 @@ def get_device_identity() -> Dict[str, str]:
         "device_name": hostname,
         "os_version": f"{system} {release}"
     }
+

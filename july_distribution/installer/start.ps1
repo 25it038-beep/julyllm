@@ -1,20 +1,30 @@
 # ================================================================================
-# HS AI SOLUTIONS — JULY LLM ALL-IN-ONE AUTOMATED RUNTIME
-# Founder & Chief Architect: Harshan Seliyan
+# HS AI SOLUTIONS — JULY LLM ALL-IN-ONE AUTONOMOUS RUNTIME
 # Organization: HS AI Solutions
+# Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 # One-liner execution:
 # irm https://raw.githubusercontent.com/25it038-beep/julyllm/main/july_distribution/installer/start.ps1 | iex
 # ================================================================================
 
 $ErrorActionPreference = 'Stop'
 $ServerUrl = 'https://julyllm.onrender.com'
+$StudioUrl = 'https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/'
 
-Write-Host ''
-Write-Host '================================================================================' -ForegroundColor Cyan
-Write-Host '                HS AI SOLUTIONS — JULY LLM AUTONOMOUS RUNTIME                    ' -ForegroundColor Cyan
-Write-Host '                           Founder: Harshan Seliyan                             ' -ForegroundColor Cyan
-Write-Host '================================================================================' -ForegroundColor Cyan
-Write-Host ''
+# Render ASCII Banner & Portal Header
+Clear-Host
+Write-Host ""
+Write-Host "     ██╗██╗   ██╗██╗  ██╗   ██╗    ██╗     ██╗     ███╗   ███╗" -ForegroundColor Cyan
+Write-Host "     ██║██║   ██║██║  ╚██╗ ██╔╝    ██║     ██║     ████╗ ████║" -ForegroundColor Cyan
+Write-Host "     ██║██║   ██║██║   ╚████╔╝     ██║     ██║     ██╔████╔██║" -ForegroundColor Cyan
+Write-Host "██   ██║██║   ██║██║    ╚██╔╝      ██║     ██║     ██║╚██╔╝██║" -ForegroundColor Cyan
+Write-Host "╚█████╔╝╚██████╔╝███████╗██║       ███████╗███████╗██║ ╚═╝ ██║" -ForegroundColor Cyan
+Write-Host " ╚════╝  ╚═════╝ ╚══════╝╚═╝       ╚══════╝╚══════╝╚═╝     ╚═╝" -ForegroundColor Cyan
+Write-Host "─────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+Write-Host "  HS AI SOLUTIONS  •  AUTONOMOUS NEURAL RUNTIME PLATFORM" -ForegroundColor White
+Write-Host "  Studio Portal    : " -NoNewline -ForegroundColor Gray
+Write-Host "$StudioUrl" -ForegroundColor Yellow
+Write-Host "─────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+Write-Host ""
 
 # [1] Ensure Client Runtime & Environment Installed
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'Programs\JulyRuntime'
@@ -22,7 +32,7 @@ $BinDir = Join-Path $InstallRoot 'bin'
 $JulyCmd = Join-Path $BinDir 'july.ps1'
 
 if (-not (Test-Path $JulyCmd)) {
-    Write-Host '[1/5] Client runtime not found. Initializing installation...' -ForegroundColor Yellow
+    Write-Host " [⚡] [1/4] Client runtime not found. Initializing installation..." -ForegroundColor Yellow
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     irm "$ServerUrl/install.ps1" | iex
 }
@@ -33,21 +43,21 @@ $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $env:Path = $machPath + ';' + $userPath + ';' + $BinDir
 
 # [2] Ensure Dependencies (Python & llama-cpp-python)
-Write-Host '[2/5] Verifying dependencies and environment...' -ForegroundColor Green
+Write-Host " [⚡] [2/4] Verifying hardware acceleration & Python engine..." -ForegroundColor Green
 $PythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
 if (-not $PythonExe) {
-    Write-Host '      [!] Error: Python 3.10+ is required. Please install Python from python.org.' -ForegroundColor Red
+    Write-Host "      [!] Error: Python 3.10+ is required. Please install Python from python.org." -ForegroundColor Red
     return
 }
 
 # Auto-install llama-cpp-python if missing
 $hasLlama = & $PythonExe -c "import llama_cpp" 2>$null; $LlamaOk = ($LASTEXITCODE -eq 0)
 if (-not $LlamaOk) {
-    Write-Host '      [+] Installing llama-cpp-python for local inference...' -ForegroundColor Yellow
+    Write-Host "      [+] Installing llama-cpp-python runtime..." -ForegroundColor Yellow
     & $PythonExe -m pip install --upgrade pip
     & $PythonExe -m pip install llama-cpp-python -q
 }
-Write-Host '      [+] Dependencies verified and ready.' -ForegroundColor Gray
+Write-Host "      [✓] Dependencies and compute environment active." -ForegroundColor Gray
 
 # Define internal CLI dispatcher to bypass PowerShell parameter binding
 function Invoke-JulyCli {
@@ -57,35 +67,37 @@ function Invoke-JulyCli {
 
 # Set target backend URL
 Invoke-JulyCli config --set server_url $ServerUrl | Out-Null
-Write-Host "      [+] Connected client to: $ServerUrl" -ForegroundColor Gray
+Write-Host "      [✓] Connected to HS AI Cloud Control: $ServerUrl" -ForegroundColor Gray
 
-# [3] Interactive Login or Register Selection
-Write-Host ''
-Write-Host 'Please choose an action:' -ForegroundColor White
-Write-Host '  [1] Login (Existing user)' -ForegroundColor Cyan
-Write-Host '  [2] Register (New account)' -ForegroundColor Cyan
-$choice = Read-Host 'Select [1 or 2]'
+# [3] Interactive Login or Register Selection Card
+Write-Host ""
+Write-Host " ┌──────────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
+Write-Host " │                    AUTHENTICATION SELECTION                      │" -ForegroundColor White
+Write-Host " │  [1]  🔑  Sign In to Existing Account                            │" -ForegroundColor Green
+Write-Host " │  [2]  ✨  Create New HS AI Solutions Account                     │" -ForegroundColor Yellow
+Write-Host " └──────────────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
+$choice = Read-Host " Select Option [1 or 2]"
 
 if ($choice -eq '2') {
-    Write-Host ''
-    Write-Host '--- ACCOUNT REGISTRATION ---' -ForegroundColor Yellow
-    $username = Read-Host 'Choose Username'
-    $email = Read-Host 'Enter Email'
-    $password = Read-Host 'Choose Password' -AsSecureString
+    Write-Host ""
+    Write-Host " ─── NEW ACCOUNT REGISTRATION ───" -ForegroundColor Yellow
+    $username = Read-Host "  Choose Username"
+    $email = Read-Host "  Enter Email    "
+    $password = Read-Host "  Choose Password" -AsSecureString
     $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
     $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
-    Write-Host 'Registering account on HS AI Solutions Cloud...' -ForegroundColor Gray
+    Write-Host "  Registering credentials on HS AI Cloud..." -ForegroundColor Gray
     Invoke-JulyCli register --username $username --email $email --password $pwd
     if ($LASTEXITCODE -ne 0) {
-        Write-Host '[!] Registration failed or user already exists. Proceeding to login...' -ForegroundColor Yellow
+        Write-Host "  [!] User registration skipped or exists. Continuing to authenticate..." -ForegroundColor Yellow
     }
     Invoke-JulyCli login --username $username --password $pwd
 } else {
-    Write-Host ''
-    Write-Host '--- USER AUTHENTICATION ---' -ForegroundColor Yellow
-    $username = Read-Host 'Username'
-    $password = Read-Host 'Password' -AsSecureString
+    Write-Host ""
+    Write-Host " ─── SIGN IN ───" -ForegroundColor Green
+    $username = Read-Host "  Username"
+    $password = Read-Host "  Password" -AsSecureString
     $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
     $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
@@ -93,12 +105,11 @@ if ($choice -eq '2') {
 }
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host '[!] Authentication failed. Please check credentials.' -ForegroundColor Red
+    Write-Host " [!] Authentication failed. Please verify credentials." -ForegroundColor Red
     return
 }
 
-# [4] Register Auto-Unload Handlers on Exit
-# Handles window close event
+# [4] Register Auto-Unload Handlers on Exit (Window close & process kill)
 Register-EngineEvent -SourceIdentifier 'PowerShell.Exiting' -Action {
     $p = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
     $root = Join-Path $env:LOCALAPPDATA 'Programs\JulyRuntime'
@@ -106,26 +117,27 @@ Register-EngineEvent -SourceIdentifier 'PowerShell.Exiting' -Action {
     & $p -m july_distribution.client.cli unload | Out-Null
 } -ErrorAction SilentlyContinue | Out-Null
 
-# [5] Load Model into RAM and Run Chat with Guaranteed Unload Finally
-Write-Host ''
-Write-Host '[4/5] Loading JULY LLM 3B into ephemeral RAM-backed storage...' -ForegroundColor Green
+# [5] Load Model into RAM and Run Chat with Guaranteed Clean-up
+Write-Host ""
+Write-Host " [⚡] [3/4] Initializing Ephemeral RAM Model..." -ForegroundColor Green
 Invoke-JulyCli load
 if ($LASTEXITCODE -ne 0) {
-    Write-Host '[!] Failed to load model from Cloudflare R2.' -ForegroundColor Red
+    Write-Host " [!] Could not initialize model." -ForegroundColor Red
     return
 }
 
-Write-Host ''
-Write-Host '[5/5] Model active in physical RAM. Entering chat session...' -ForegroundColor Green
-Write-Host 'NOTE: When you close PowerShell or exit chat, the model will be automatically wiped from RAM.' -ForegroundColor DarkYellow
-Write-Host ''
+Write-Host ""
+Write-Host " [⚡] [4/4] Model loaded in physical RAM. Entering interactive session..." -ForegroundColor Green
+Write-Host " 🛡️  Ephemeral Privacy: When you exit or close this terminal, the model is wiped from RAM immediately." -ForegroundColor DarkYellow
+Write-Host ""
 
 try {
     Invoke-JulyCli chat
 } finally {
-    Write-Host ''
-    Write-Host '[+] Session ended. Safely unloading model and wiping RAM...' -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host " [⚡] Session concluded. Securely wiping ephemeral RAM storage..." -ForegroundColor Yellow
     Invoke-JulyCli unload
     Unregister-Event -SourceIdentifier 'PowerShell.Exiting' -ErrorAction SilentlyContinue
-    Write-Host '[+] RAM storage wiped and memory reclaimed successfully.' -ForegroundColor Green
+    Write-Host " [✓] RAM reclaimed. Zero artifacts remain on disk or memory." -ForegroundColor Green
+    Write-Host ""
 }

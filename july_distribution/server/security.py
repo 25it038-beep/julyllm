@@ -1,7 +1,7 @@
-"""
-HS AI SOLUTIONS — JULY CONTROL SERVER SECURITY & ACCESS CONTROL
+﻿"""
+HS AI SOLUTIONS â€” JULY CONTROL SERVER SECURITY & ACCESS CONTROL
 Layer: SECURITY & TOKEN CONTROLLER (july_distribution.server.security)
-Founder & Chief Architect: Harshan Seliyan
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 Product: JULY LLM 3B | Family: HS AI FAMILY
 
 Implements:
@@ -203,3 +203,4 @@ def log_audit_event(
         db.commit()
     except Exception:
         pass
+

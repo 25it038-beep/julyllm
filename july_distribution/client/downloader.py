@@ -1,7 +1,7 @@
-"""
-HS AI SOLUTIONS — JULY CLIENT RESUMABLE RETRIEVAL
+﻿"""
+HS AI SOLUTIONS â€” JULY CLIENT RESUMABLE RETRIEVAL
 Layer: RETRIEVAL & INTEGRITY (july_distribution.client.downloader)
-Founder & Chief Architect: Harshan Seliyan
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 Product: JULY LLM 3B | Family: HS AI FAMILY
 
 Performs authenticated model acquisition:
@@ -149,3 +149,4 @@ class ClientModelDownloader:
 
         print(f"[JULY CLIENT] Integrity verified: {actual_sha}")
         return dest_path
+

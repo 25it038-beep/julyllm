@@ -1,7 +1,7 @@
-"""
-HS AI SOLUTIONS — JULY CLIENT CONFIGURATION
+﻿"""
+HS AI SOLUTIONS â€” JULY CLIENT CONFIGURATION
 Layer: CLIENT CONFIGURATION (july_distribution.client.config)
-Founder & Chief Architect: Harshan Seliyan
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 Product: JULY LLM 3B | Family: HS AI FAMILY
 
 Manages per-user local settings in %USERPROFILE%\\.july\\config.json.
@@ -67,3 +67,4 @@ class ClientConfig:
         p.parent.mkdir(parents=True, exist_ok=True)
         with open(p, "w", encoding="utf-8") as f:
             json.dump(asdict(self), f, indent=2)
+

@@ -1,7 +1,7 @@
-"""
-HS AI SOLUTIONS — JULY MULTI-COMPUTER DISTRIBUTION PLATFORM
+﻿"""
+HS AI SOLUTIONS â€” JULY MULTI-COMPUTER DISTRIBUTION PLATFORM
 Layer: CENTRAL CONTROL SERVER DATABASE (july_distribution.server.database)
-Founder & Chief Architect: Harshan Seliyan
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 Product: JULY LLM 3B | Family: HS AI FAMILY
 
 Production Database Architecture:
@@ -182,3 +182,4 @@ def init_database():
 
 # Ensure tables exist
 init_database()
+

@@ -1,7 +1,8 @@
 """
 HS AI SOLUTIONS — JULY CENTRAL CONTROL SERVER
 Root ASGI Entrypoint for Render Cloud Deployment
-Founder & Chief Architect: Harshan Seliyan
+Organization: HS AI Solutions
+Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 
 Exposes ASGI 'app' so that both:
   - Default Render command: 'uvicorn main:app --host 0.0.0.0 --port $PORT'

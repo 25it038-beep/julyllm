@@ -1,7 +1,7 @@
 # JULY LLM: MULTI-COMPUTER MODEL DISTRIBUTION PLATFORM
 ### Technical Architecture & Deployment Documentation
 **Organization**: HS AI Solutions  
-**Founder & Chief Architect**: Harshan Seliyan  
+**Studio Portal**: [HS AI Studio](https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/)  
 **Model**: July LLM 3B (`july-final.gguf`, 2,019,377,888 bytes)  
 **Storage**: Cloudflare R2 (`s3://july/july-final.gguf`)  
 **Platform Version**: v1.1.0-Distribution  

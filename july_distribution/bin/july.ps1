@@ -1,5 +1,5 @@
 # HS AI SOLUTIONS — JULY LLM CLI PowerShell Launcher
-# Founder & Chief Architect: Harshan Seliyan
+# Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 
 $PythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
 if (-not $PythonExe) { $PythonExe = "python.exe" }

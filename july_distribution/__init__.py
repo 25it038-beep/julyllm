@@ -1,5 +1,6 @@
-"""
-HS AI SOLUTIONS — JULY MULTI-COMPUTER DISTRIBUTION PLATFORM
+﻿"""
+HS AI SOLUTIONS â€” JULY MULTI-COMPUTER DISTRIBUTION PLATFORM
 Product: JULY LLM 3B | Family: HS AI FAMILY
-Founder & Chief Architect: Harshan Seliyan
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 """
+

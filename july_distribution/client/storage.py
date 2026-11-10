@@ -1,7 +1,7 @@
-"""
-HS AI SOLUTIONS — JULY CLIENT EPHEMERAL RAM STORAGE
+﻿"""
+HS AI SOLUTIONS â€” JULY CLIENT EPHEMERAL RAM STORAGE
 Layer: EPHEMERAL RAM STORAGE (july_distribution.client.storage)
-Founder & Chief Architect: Harshan Seliyan
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 Product: JULY LLM 3B | Family: HS AI FAMILY
 
 Implements Requirement 6 & 8:
@@ -83,3 +83,4 @@ class ClientEphemeralStorage:
                 ctypes.windll.psapi.EmptyWorkingSet(handle)
             except Exception:
                 pass
+

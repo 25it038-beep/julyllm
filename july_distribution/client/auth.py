@@ -1,7 +1,7 @@
-"""
-HS AI SOLUTIONS — JULY CLIENT AUTHENTICATION
+﻿"""
+HS AI SOLUTIONS â€” JULY CLIENT AUTHENTICATION
 Layer: CLIENT AUTH & SESSION (july_distribution.client.auth)
-Founder & Chief Architect: Harshan Seliyan
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 Product: JULY LLM 3B | Family: HS AI FAMILY
 
 Manages per-computer user authentication and active bearer token storage.
@@ -145,3 +145,4 @@ class ClientAuthManager:
         if self.session_file.exists():
             self.session_file.unlink(missing_ok=True)
         return True
+

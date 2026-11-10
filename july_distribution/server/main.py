@@ -1,8 +1,9 @@
-"""
-HS AI SOLUTIONS — JULY CENTRAL CONTROL SERVER (PRODUCTION BACKEND)
+﻿"""
+HS AI SOLUTIONS â€” JULY CENTRAL CONTROL SERVER (PRODUCTION BACKEND)
 Layer: CENTRAL CONTROL API (july_distribution.server.main)
-Founder & Chief Architect: Harshan Seliyan
-Product: JULY LLM 3B | Family: HS AI FAMILY
+Organization: HS AI Solutions
+Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
+Product: JULY LLM | Family: HS AI FAMILY
 
 Production Specifications:
 - Framework: FastAPI + Uvicorn + SlowAPI (Rate Limiting).
@@ -164,10 +165,10 @@ def root_index():
     """Welcome endpoint for root visits and health probes."""
     return {
         "status": "online",
-        "service": "July LLM 3B Distribution Backend",
+        "service": "July LLM Distribution Backend",
         "organization": "HS AI Solutions",
-        "founder": "Harshan Seliyan",
-        "model": "July LLM 3B (july-final.gguf)",
+        "portal": "https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/",
+        "model": "July LLM (july-final.gguf)",
         "docs": "/docs",
         "installer": "/install.ps1",
         "health": "/health",
@@ -183,6 +184,7 @@ def health_check():
     return {
         "status": "online",
         "service": "july-backend",
+        "portal": "https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/",
         "r2_gateway_connected": r2_status.get("success", False),
         "r2_object_size": r2_status.get("content_length", 2019377888),
         "timestamp": time.time()
@@ -210,8 +212,8 @@ def backend_detailed_status(db: Session = Depends(get_db)):
     return {
         "status": "healthy" if (db_connected and r2_status.get("success")) else "degraded",
         "organization": "HS AI Solutions",
-        "founder": "Harshan Seliyan",
-        "product": "July LLM 3B Distribution Backend",
+        "portal": "https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/",
+        "product": "July LLM Distribution Backend",
         "database": {
             "connected": db_connected,
             "dialect": "PostgreSQL" if "postgresql" in DATABASE_URL else "SQLite",
@@ -554,3 +556,4 @@ def report_telemetry(
     db.add(telemetry)
     db.commit()
     return {"success": True, "recorded": True}
+

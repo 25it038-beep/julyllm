@@ -1,7 +1,7 @@
-"""
-HS AI SOLUTIONS — JULY CLIENT AUTONOMOUS WEB SEARCH ENGINE
+﻿"""
+HS AI SOLUTIONS â€” JULY CLIENT AUTONOMOUS WEB SEARCH ENGINE
 Layer: LIVE WEB ACQUISITION (july_distribution.client.web_search)
-Founder & Chief Architect: Harshan Seliyan
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 Product: JULY LLM 3B | Family: HS AI FAMILY
 
 Provides real-time web search integration:
@@ -133,3 +133,4 @@ def format_search_context(query: str, results: List[Dict[str, str]]) -> str:
         lines.append(f"{idx}. {r['title']}: {r['snippet']}")
 
     return "\n".join(lines)
+

@@ -1,7 +1,7 @@
-"""
-HS AI SOLUTIONS — JULY CLOUDFLARE R2 DISTRIBUTION GATEWAY
+﻿"""
+HS AI SOLUTIONS â€” JULY CLOUDFLARE R2 DISTRIBUTION GATEWAY
 Layer: STORAGE GATEWAY (july_distribution.server.r2_manager)
-Founder & Chief Architect: Harshan Seliyan
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 Product: JULY LLM 3B | Family: HS AI FAMILY
 
 Connects control server to private Cloudflare R2 bucket:
@@ -102,3 +102,4 @@ class CloudflareR2DistributionGateway:
             ExpiresIn=expiry
         )
         return url
+

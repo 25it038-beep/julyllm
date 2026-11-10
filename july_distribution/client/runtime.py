@@ -1,7 +1,7 @@
-"""
-HS AI SOLUTIONS — JULY CLIENT LOCAL INFERENCE RUNTIME
+﻿"""
+HS AI SOLUTIONS â€” JULY CLIENT LOCAL INFERENCE RUNTIME
 Layer: LOCAL INFERENCE (july_distribution.client.runtime)
-Founder & Chief Architect: Harshan Seliyan
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 Product: JULY LLM 3B | Family: HS AI FAMILY
 
 Implements Requirement 4 & 6:
@@ -192,3 +192,4 @@ class ClientInferenceRuntime:
 
     def is_loaded(self) -> bool:
         return self._is_loaded
+

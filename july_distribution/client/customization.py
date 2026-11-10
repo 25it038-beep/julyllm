@@ -1,7 +1,7 @@
-"""
-HS AI SOLUTIONS — JULY USER CUSTOMIZATION ENGINE
+﻿"""
+HS AI SOLUTIONS â€” JULY USER CUSTOMIZATION ENGINE
 Layer: USER CUSTOMIZATION (july_distribution.client.customization)
-Founder & Chief Architect: Harshan Seliyan
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 Product: JULY LLM 3B | Family: HS AI FAMILY
 
 Implements Requirement 5:
@@ -168,3 +168,4 @@ class UserCustomizationManager:
             except Exception:
                 pass
         return "\n---\n".join(snippets[:2])
+

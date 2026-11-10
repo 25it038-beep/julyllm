@@ -1,18 +1,24 @@
 # ================================================================================
 # HS AI SOLUTIONS — JULY LLM WINDOWS INSTALLER
-# Founder & Chief Architect: Harshan Seliyan
 # Organization: HS AI Solutions
+# Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 # One-liner execution:
 # irm https://julyllm.onrender.com/install.ps1 | iex
 # ================================================================================
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "================================================================================" -ForegroundColor Cyan
-Write-Host "              JULY LLM: MULTI-COMPUTER DISTRIBUTION INSTALLER" -ForegroundColor Cyan
-Write-Host "                             HS AI SOLUTIONS" -ForegroundColor Cyan
-Write-Host "                      Founder: Harshan Seliyan" -ForegroundColor Cyan
-Write-Host "================================================================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "     ██╗██╗   ██╗██╗  ██╗   ██╗    ██╗     ██╗     ███╗   ███╗" -ForegroundColor Cyan
+Write-Host "     ██║██║   ██║██║  ╚██╗ ██╔╝    ██║     ██║     ████╗ ████║" -ForegroundColor Cyan
+Write-Host "     ██║██║   ██║██║   ╚████╔╝     ██║     ██║     ██╔████╔██║" -ForegroundColor Cyan
+Write-Host "██   ██║██║   ██║██║    ╚██╔╝      ██║     ██║     ██║╚██╔╝██║" -ForegroundColor Cyan
+Write-Host "╚█████╔╝╚██████╔╝███████╗██║       ███████╗███████╗██║ ╚═╝ ██║" -ForegroundColor Cyan
+Write-Host " ╚════╝  ╚═════╝ ╚══════╝╚═╝       ╚══════╝╚══════╝╚═╝     ╚═╝" -ForegroundColor Cyan
+Write-Host "================================================================================" -ForegroundColor DarkGray
+Write-Host "            HS AI SOLUTIONS — AUTONOMOUS RUNTIME INSTALLER" -ForegroundColor White
+Write-Host " Studio Portal : https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/" -ForegroundColor Yellow
+Write-Host "================================================================================" -ForegroundColor DarkGray
 Write-Host ""
 
 $InstallRoot = Join-Path $env:LOCALAPPDATA "Programs\JulyRuntime"
@@ -106,7 +112,7 @@ $ConfigObj = @{
     top_p = 0.9
     max_tokens = 512
     personality = "precision_engineer"
-    system_prompt = "You are JULY LLM, an advanced autonomous neural model developed by HS AI Solutions, founded by Harshan Seliyan. Deliver accurate, rigorous, and helpful answers."
+    system_prompt = "You are JULY LLM, an advanced autonomous neural model developed by HS AI Solutions. Deliver accurate, rigorous, and helpful answers."
     chunk_size_bytes = 8388608
 }
 if (Test-Path $ConfigFile) {

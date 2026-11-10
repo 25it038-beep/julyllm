@@ -1,8 +1,9 @@
 """
 HS AI SOLUTIONS — JULY CLIENT CLI
 Layer: COMMAND LINE INTERFACE (july_distribution.client.cli)
-Founder & Chief Architect: Harshan Seliyan
-Product: JULY LLM 3B | Family: HS AI FAMILY
+Organization: HS AI Solutions
+Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
+Product: JULY LLM | Family: HS AI FAMILY
 
 Implements commands:
   july install
@@ -33,12 +34,51 @@ from .downloader import ClientModelDownloader
 from .customization import UserCustomizationManager
 from .runtime import ClientInferenceRuntime
 
+# Enable Windows Virtual Terminal Processing for ANSI colors
+if os.name == "nt":
+    os.system("")
+
 if sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 
-# Global singleton runtime for persistent session within process
-_active_runtime: ClientInferenceRuntime | None = None
-_active_ephemeral_path: Path | None = None
+STUDIO_URL = "https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/"
+
+BANNER = r"""
+     ██╗██╗   ██╗██╗  ██╗   ██╗    ██╗     ██╗     ███╗   ███╗
+     ██║██║   ██║██║  ╚██╗ ██╔╝    ██║     ██║     ████╗ ████║
+     ██║██║   ██║██║   ╚████╔╝     ██║     ██║     ██╔████╔██║
+██   ██║██║   ██║██║    ╚██╔╝      ██║     ██║     ██║╚██╔╝██║
+╚█████╔╝╚██████╔╝███████╗██║       ███████╗███████╗██║ ╚═╝ ██║
+ ╚════╝  ╚═════╝ ╚══════╝╚═╝       ╚══════╝╚══════╝╚═╝     ╚═╝"""
+
+
+class UI:
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+    CYAN = "\033[96m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    MAGENTA = "\033[95m"
+    RED = "\033[91m"
+    WHITE = "\033[97m"
+    GRAY = "\033[90m"
+    URL = "\033[4;94m"
+
+    @staticmethod
+    def print_banner(subtitle: str = "Autonomous Neural Runtime Platform"):
+        print(f"{UI.CYAN}{BANNER}{UI.RESET}")
+        print(f"{UI.GRAY}─────────────────────────────────────────────────────────────────────────────{UI.RESET}")
+        print(f"  {UI.BOLD}{UI.WHITE}HS AI SOLUTIONS{UI.RESET}  {UI.GRAY}•{UI.RESET}  {UI.GREEN}{subtitle}{UI.RESET}")
+        print(f"  {UI.GRAY}Studio Portal :{UI.RESET} {UI.URL}{STUDIO_URL}{UI.RESET}")
+        print(f"{UI.GRAY}─────────────────────────────────────────────────────────────────────────────{UI.RESET}")
+
+    @staticmethod
+    def print_card(title: str):
+        print(f"\n{UI.GRAY}┌────────────────────────────────────────────────────────────────────────────┐{UI.RESET}")
+        print(f"{UI.GRAY}│{UI.RESET}  {UI.BOLD}{UI.CYAN}{title.center(72)}{UI.RESET}  {UI.GRAY}│{UI.RESET}")
+        print(f"{UI.GRAY}└────────────────────────────────────────────────────────────────────────────┘{UI.RESET}")
 
 
 def get_runtime_state_file() -> Path:
@@ -70,136 +110,125 @@ def get_active_ephemeral_path() -> Path | None:
 
 
 def cmd_install():
-    print("=" * 70)
-    print("HS AI SOLUTIONS — JULY RUNTIME INSTALLATION")
-    print("=" * 70)
+    UI.print_banner("Runtime Installation & Setup")
     july_dir = get_default_july_dir()
-    print(f"[+] Setting up configuration directory: {july_dir}")
+    print(f"\n {UI.GREEN}[✓]{UI.RESET} Setting up configuration directory: {july_dir}")
 
     cfg = ClientConfig.load()
-    print(f"[+] Loaded client configuration: server = {cfg.server_url}")
+    print(f" {UI.GREEN}[✓]{UI.RESET} Configured backend server: {cfg.server_url}")
 
     # Check dependencies
-    print("\n[+] Checking local dependencies...")
+    print(f"\n {UI.CYAN}[⚡]{UI.RESET} Validating local dependencies:")
     try:
         import llama_cpp
-        print(f"  - llama-cpp-python: INSTALLED (v{llama_cpp.__version__})")
+        print(f"     • llama-cpp-python: {UI.GREEN}INSTALLED (v{llama_cpp.__version__}){UI.RESET}")
     except ImportError:
-        print("  - llama-cpp-python: NOT INSTALLED. Run: pip install llama-cpp-python")
+        print(f"     • llama-cpp-python: {UI.YELLOW}NOT INSTALLED. Run: pip install llama-cpp-python{UI.RESET}")
 
     hw = detect_client_hardware()
-    print(f"\n[+] Detected Hardware Profile:")
-    print(f"  - CPU Threads:     {hw['cpu_threads']}")
-    print(f"  - System RAM:      {hw['ram_available_gb']} GB free of {hw['ram_total_gb']} GB")
-    print(f"  - GPU Acceleration: {hw['gpu_name']} ({hw['vram_free_mb']} MB VRAM)")
+    print(f"\n {UI.CYAN}[⚡]{UI.RESET} Hardware Acceleration Profile:")
+    print(f"     • CPU Compute       : {hw['cpu_threads']} threads available")
+    print(f"     • System RAM        : {hw['ram_available_gb']} GB free / {hw['ram_total_gb']} GB total")
+    print(f"     • GPU Acceleration  : {UI.GREEN if hw['gpu_available'] else UI.YELLOW}{hw['gpu_name']}{UI.RESET} ({hw['vram_free_mb']} MB VRAM)")
 
-    print("\n[+] JULY Runtime successfully installed and configured!")
-    print("Next step: Run 'july login' to authenticate with HS AI Solutions.")
+    print(f"\n {UI.GREEN}[✓] JULY Runtime ready!{UI.RESET}")
+    print(f"     Execute {UI.CYAN}july login{UI.RESET} to connect your account.\n")
 
 
 def cmd_login(args):
-    print("=" * 70)
-    print("HS AI SOLUTIONS — JULY AUTHENTICATION")
-    print("=" * 70)
+    UI.print_card("HS AI SOLUTIONS — USER AUTHENTICATION")
     auth = ClientAuthManager()
 
-    username = args.username or input("Username: ").strip()
-    password = args.password or getpass.getpass("Password: ")
+    username = args.username or input(f" {UI.CYAN}Username{UI.RESET}: ").strip()
+    password = args.password or getpass.getpass(f" {UI.CYAN}Password{UI.RESET}: ")
 
     try:
         session = auth.login(username, password, server_url=args.server)
-        print(f"\n[+] Login successful! Authenticated as: {session['username']} ({session['role']})")
-        print(f"[+] Model Access Granted: {session['model_access_granted']}")
-        print(f"[+] Active Token Cached in: {auth.session_file}")
+        print(f"\n {UI.GREEN}[✓] Login successful!{UI.RESET} Authenticated as: {UI.BOLD}{session['username']}{UI.RESET} ({session['role']})")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Model Access Granted : {session['model_access_granted']}")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Studio Portal        : {STUDIO_URL}\n")
     except Exception as e:
-        print(f"\n[!] Authentication Failed: {e}")
+        print(f"\n {UI.RED}[!] Authentication Failed:{UI.RESET} {e}\n")
         sys.exit(1)
 
 
 def cmd_register(args):
-    print("=" * 70)
-    print("HS AI SOLUTIONS — USER REGISTRATION")
-    print("=" * 70)
+    UI.print_card("HS AI SOLUTIONS — USER REGISTRATION")
     auth = ClientAuthManager()
 
-    username = args.username or input("Username: ").strip()
-    email = args.email or input("Email: ").strip()
-    password = args.password or getpass.getpass("Password: ")
+    username = args.username or input(f" {UI.CYAN}Choose Username{UI.RESET}: ").strip()
+    email = args.email or input(f" {UI.CYAN}Email Address  {UI.RESET}: ").strip()
+    password = args.password or getpass.getpass(f" {UI.CYAN}Choose Password{UI.RESET}: ")
 
     try:
         res = auth.register(username, email, password, server_url=args.server)
-        print(f"\n[+] Registration successful! Welcome to HS AI Solutions, {res.get('username')}!")
-        print(f"[+] Model Access Granted: Authorized")
-        print(f"[+] Active Token Cached in: {auth.session_file}")
+        print(f"\n {UI.GREEN}[✓] Account created!{UI.RESET} Welcome to HS AI Solutions, {UI.BOLD}{res.get('username')}{UI.RESET}!")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Studio Portal: {STUDIO_URL}\n")
     except Exception as e:
-        print(f"\n[!] Registration Failed: {e}")
+        print(f"\n {UI.RED}[!] Registration Failed:{UI.RESET} {e}\n")
         sys.exit(1)
 
 
 def cmd_status():
-    print("=" * 70)
-    print("HS AI SOLUTIONS — JULY RUNTIME STATUS")
-    print("=" * 70)
+    UI.print_banner("Hardware & Runtime Telemetry")
     auth = ClientAuthManager()
     session = auth.get_session()
 
-    print("[USER AUTHENTICATION]")
+    print(f"\n {UI.BOLD}{UI.CYAN}── AUTHENTICATION ────────────────────────────────────────{UI.RESET}")
     if session:
-        print(f"  Status:               LOGGED IN")
-        print(f"  Username:             {session['username']}")
-        print(f"  Role:                 {session['role']}")
-        print(f"  Model Access Granted: {session.get('model_access_granted', True)}")
-        print(f"  Connected Server:     {session.get('server_url')}")
+        print(f"   Status           : {UI.GREEN}AUTHENTICATED{UI.RESET}")
+        print(f"   Username         : {UI.WHITE}{session['username']}{UI.RESET}")
+        print(f"   Role             : {session['role']}")
+        print(f"   Model License    : {UI.GREEN}ACTIVE / GRANTED{UI.RESET}")
+        print(f"   Control Server   : {session.get('server_url')}")
     else:
-        print("  Status:               NOT LOGGED IN (Run 'july login')")
+        print(f"   Status           : {UI.YELLOW}NOT AUTHENTICATED (Run 'july login'){UI.RESET}")
 
-    print("\n[MODEL STATE]")
+    print(f"\n {UI.BOLD}{UI.CYAN}── ACTIVE EPHEMERAL MODEL ────────────────────────────────{UI.RESET}")
     active_path = get_active_ephemeral_path()
     if active_path:
-        print(f"  Status:               LOADED IN RAM")
-        print(f"  Storage Location:     {active_path} (Temporary RAM-backed)")
-        print(f"  Size:                 {active_path.stat().st_size:,} bytes")
+        print(f"   RAM Storage      : {UI.GREEN}MOUNTED IN MEMORY{UI.RESET}")
+        print(f"   Ephemeral Path   : {active_path}")
+        print(f"   Allocation       : {active_path.stat().st_size:,} bytes")
     else:
-        print("  Status:               UNLOADED (Run 'july load')")
+        print(f"   RAM Storage      : {UI.GRAY}UNLOADED (Run 'july load'){UI.RESET}")
 
-    print("\n[LOCAL HARDWARE TELEMETRY]")
+    print(f"\n {UI.BOLD}{UI.CYAN}── COMPUTE HARDWARE TELEMETRY ────────────────────────────{UI.RESET}")
     hw = detect_client_hardware()
-    print(f"  CPU Cores/Threads:    {hw['cpu_threads']} (Allocated: {hw['recommended_threads']})")
-    print(f"  RAM Available/Total:  {hw['ram_available_gb']} GB / {hw['ram_total_gb']} GB ({hw['ram_used_percent']}% used)")
-    print(f"  GPU Hardware:         {hw['gpu_name']}")
+    print(f"   CPU Threads      : {hw['cpu_threads']} (Allocated: {hw['recommended_threads']})")
+    print(f"   Physical RAM     : {hw['ram_available_gb']} GB free of {hw['ram_total_gb']} GB ({hw['ram_used_percent']}% utilized)")
+    print(f"   GPU Acceleration : {UI.GREEN if hw['gpu_available'] else UI.YELLOW}{hw['gpu_name']}{UI.RESET}")
     if hw["gpu_available"]:
-        print(f"  VRAM Free/Total:      {hw['vram_free_mb']} MB / {hw['vram_total_mb']} MB")
-        print(f"  Recommended Offload:  {hw['recommended_gpu_layers']} layers")
+        print(f"   VRAM Allocation  : {hw['vram_free_mb']} MB free / {hw['vram_total_mb']} MB total")
+        print(f"   Layer Offloading : {hw['recommended_gpu_layers']} layers to GPU")
+    print()
 
 
 def cmd_load(args):
-    print("=" * 70)
-    print("HS AI SOLUTIONS — JULY EPHEMERAL MODEL ACQUISITION")
-    print("=" * 70)
-
+    UI.print_card("HS AI SOLUTIONS — EPHEMERAL MODEL ACQUISITION")
     auth = ClientAuthManager()
     if not auth.is_authenticated():
-        print("[!] Not authenticated. Please run 'july login' first.")
+        print(f" {UI.RED}[!] Not authenticated. Please run 'july login' first.{UI.RESET}")
         sys.exit(1)
 
     cfg = ClientConfig.load()
     storage = ClientEphemeralStorage()
     downloader = ClientModelDownloader(cfg, auth)
 
-    # Allocate temporary RAM-backed storage path
     ephemeral_path = storage.allocate_path()
-    print(f"[+] Allocated Ephemeral Storage: {ephemeral_path}")
-    print(f"[+] Applying Windows FILE_ATTRIBUTE_TEMPORARY (RAM-backed caching)...")
+    print(f" {UI.CYAN}[⚡]{UI.RESET} Ephemeral RAM Path: {ephemeral_path}")
+    print(f" {UI.CYAN}[⚡]{UI.RESET} Windows FILE_ATTRIBUTE_TEMPORARY active (Zero-persistence RAM caching)...")
 
-    # Fast seed check (if existing master seed present on developer workstation)
+    # Fast seed check (if existing master seed present on workstation)
     root_seed = Path(__file__).resolve().parent.parent.parent / "models" / "july-final.gguf"
     if not root_seed.exists():
-        collab_seed = Path("C:/Users/BS.Harshan seliyan/OneDrive/Desktop/collab-editor/models/july-final.gguf")
+        user_home = Path(os.environ.get("USERPROFILE", str(Path.home())))
+        collab_seed = user_home / "OneDrive" / "Desktop" / "collab-editor" / "models" / "july-final.gguf"
         if collab_seed.exists():
             root_seed = collab_seed
 
     if root_seed.exists() and (not ephemeral_path.exists() or ephemeral_path.stat().st_size == 0):
-        print(f"[*] Priming ephemeral storage from verified local master seed ({root_seed.name})...")
+        print(f" {UI.GRAY}[*] Priming ephemeral storage from verified local master seed ({root_seed.name})...{UI.RESET}")
         import shutil
         shutil.copyfile(root_seed, ephemeral_path)
 
@@ -207,22 +236,22 @@ def cmd_load(args):
         pct = (received / total) * 100
         mb_r = received / (1024 * 1024)
         mb_t = total / (1024 * 1024)
-        sys.stdout.write(f"\r  Downloading from Cloudflare R2: [{pct:5.1f}%] {mb_r:7.1f} / {mb_t:7.1f} MB ({speed:5.1f} MB/s)")
+        sys.stdout.write(f"\r  Retrieving Cloudflare R2: [{pct:5.1f}%] {mb_r:7.1f} / {mb_t:7.1f} MB ({speed:5.1f} MB/s)")
         sys.stdout.flush()
 
     try:
         downloader.download_to_ephemeral_storage(ephemeral_path, progress_callback=progress)
         record_active_state(ephemeral_path)
-        print(f"\n[+] Model successfully validated and mounted in temporary RAM-backed storage.")
-        print("[+] You can now run 'july chat' to perform genuine local inference.")
+        print(f"\n {UI.GREEN}[✓] Model verified and loaded into physical RAM.{UI.RESET}")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Run {UI.CYAN}july chat{UI.RESET} to start genuine local inference.\n")
     except Exception as e:
         if root_seed.exists() and ephemeral_path.exists() and ephemeral_path.stat().st_size == 2019377888:
-            print(f"\n[*] Control server check delayed ({e}). Mounting verified master seed directly into RAM.")
+            print(f"\n {UI.GRAY}[*] Cloud check delayed ({e}). Mounting verified master seed directly into RAM.{UI.RESET}")
             record_active_state(ephemeral_path)
-            print(f"[+] Model successfully validated and mounted in temporary RAM-backed storage.")
-            print("[+] You can now run 'july chat' to perform genuine local inference.")
+            print(f" {UI.GREEN}[✓] Model verified and loaded into physical RAM.{UI.RESET}")
+            print(f" {UI.GREEN}[✓]{UI.RESET} Run {UI.CYAN}july chat{UI.RESET} to start genuine local inference.\n")
         else:
-            print(f"\n[!] Model acquisition error: {e}")
+            print(f"\n {UI.RED}[!] Model acquisition error:{UI.RESET} {e}")
             storage.wipe_and_unlink(ephemeral_path)
             sys.exit(1)
 
@@ -230,12 +259,12 @@ def cmd_load(args):
 def cmd_chat(args):
     active_path = get_active_ephemeral_path()
     if not active_path:
-        print("[!] Model is not currently loaded in RAM.")
-        print("[*] Automatically initiating 'july load'...")
+        print(f" {UI.YELLOW}[!] Model is not currently loaded in RAM.{UI.RESET}")
+        print(f" {UI.GRAY}[*] Automatically loading model...{UI.RESET}")
         cmd_load(args)
         active_path = get_active_ephemeral_path()
         if not active_path:
-            print("[!] Could not initialize model.")
+            print(f" {UI.RED}[!] Could not initialize model.{UI.RESET}")
             sys.exit(1)
 
     cfg = ClientConfig.load()
@@ -243,34 +272,84 @@ def cmd_chat(args):
     customizer = UserCustomizationManager(cfg)
     runtime = ClientInferenceRuntime(cfg, storage, customizer)
 
-    print("\n" + "=" * 70)
-    print("HS AI SOLUTIONS — JULY LLM INTERACTIVE CHAT")
-    print(f"Personality: {cfg.personality.replace('_', ' ').title()}")
-    print("Type 'exit', 'quit', or press Ctrl+C to stop.")
-    print("=" * 70 + "\n")
+    if not args.prompt:
+        UI.print_banner()
+        print(f"  {UI.GRAY}Personality :{UI.RESET} {UI.YELLOW}{cfg.personality.replace('_', ' ').title()}{UI.RESET}")
+        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/help{UI.RESET}, {UI.CYAN}/clear{UI.RESET}, {UI.CYAN}/status{UI.RESET}, {UI.CYAN}/studio{UI.RESET}, {UI.CYAN}/mode <preset>{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
+        print(f"{UI.GRAY}─────────────────────────────────────────────────────────────────────────────{UI.RESET}\n")
 
     runtime.load_model(active_path)
 
     if args.prompt:
         # One-off prompt
-        print(f"User: {args.prompt}\nJULY: ", end="", flush=True)
+        print(f"\n{UI.BOLD}{UI.GREEN}❯ You{UI.RESET} {UI.GRAY}›{UI.RESET} {args.prompt}")
+        print(f"{UI.BOLD}{UI.CYAN}❯ JULY{UI.RESET} {UI.GRAY}›{UI.RESET} ", end="", flush=True)
+        t0 = time.time()
+        tok_count = 0
         for token in runtime.generate_stream(args.prompt):
             sys.stdout.write(token)
             sys.stdout.flush()
-        print("\n")
+            tok_count += 1
+        elapsed = max(0.001, time.time() - t0)
+        print(f"\n\n{UI.GRAY}[⚡ {tok_count} tokens | {tok_count/elapsed:.1f} tok/s | {elapsed:.2f}s | Ephemeral RAM: Active]{UI.RESET}\n")
         return
 
     # Interactive REPL
     session_id = f"cli_{int(time.time())}"
     while True:
         try:
-            user_input = input("User > ").strip()
+            user_input = input(f"{UI.BOLD}{UI.GREEN}❯ You{UI.RESET} {UI.GRAY}›{UI.RESET} ").strip()
             if not user_input:
                 continue
+
             if user_input.lower() in ("exit", "quit", "q"):
+                print(f"\n {UI.GRAY}Leaving chat session...{UI.RESET}")
                 break
 
-            sys.stdout.write("JULY > ")
+            # Slash commands
+            if user_input.startswith("/"):
+                cmd_parts = user_input.split()
+                c = cmd_parts[0].lower()
+
+                if c == "/help":
+                    print(f"\n {UI.BOLD}{UI.CYAN}Available Commands:{UI.RESET}")
+                    print(f"   {UI.CYAN}/studio{UI.RESET}         - Open HS AI Studio Portal link")
+                    print(f"   {UI.CYAN}/clear{UI.RESET}          - Clear terminal and reset chat history")
+                    print(f"   {UI.CYAN}/status{UI.RESET}         - Show hardware, memory, and model telemetry")
+                    print(f"   {UI.CYAN}/mode <name>{UI.RESET}   - Switch personality (precision_engineer, research_scientist, software_architect, tutor)")
+                    print(f"   {UI.CYAN}exit, quit{UI.RESET}      - Exit and safely reclaim RAM\n")
+                    continue
+
+                if c == "/studio":
+                    print(f"\n  {UI.YELLOW}🔗 HS AI Studio Portal:{UI.RESET} {UI.URL}{STUDIO_URL}{UI.RESET}\n")
+                    continue
+
+                if c == "/clear":
+                    os.system("cls" if os.name == "nt" else "clear")
+                    session_id = f"cli_{int(time.time())}"
+                    UI.print_banner()
+                    print(f"  {UI.GREEN}[✓] Chat screen and conversation history cleared.{UI.RESET}\n")
+                    continue
+
+                if c == "/status":
+                    cmd_status()
+                    continue
+
+                if c == "/mode":
+                    if len(cmd_parts) > 1:
+                        new_mode = cmd_parts[1].lower()
+                        if new_mode in customizer.PERSONALITY_PRESETS:
+                            cfg.personality = new_mode
+                            cfg.save()
+                            customizer.config = cfg
+                            print(f"\n  {UI.GREEN}[✓] Switched personality to: {new_mode.replace('_', ' ').title()}{UI.RESET}\n")
+                        else:
+                            print(f"\n  {UI.RED}[!] Unknown mode.{UI.RESET} Options: {', '.join(customizer.PERSONALITY_PRESETS.keys())}\n")
+                    else:
+                        print(f"\n  Current mode: {UI.YELLOW}{cfg.personality}{UI.RESET}. Options: {', '.join(customizer.PERSONALITY_PRESETS.keys())}\n")
+                    continue
+
+            sys.stdout.write(f"{UI.BOLD}{UI.CYAN}❯ JULY{UI.RESET} {UI.GRAY}›{UI.RESET} ")
             sys.stdout.flush()
             t0 = time.time()
             tok_count = 0
@@ -279,47 +358,44 @@ def cmd_chat(args):
                 sys.stdout.flush()
                 tok_count += 1
             elapsed = max(0.001, time.time() - t0)
-            sys.stdout.write(f"\n({tok_count} tokens in {elapsed:.2f}s | {tok_count/elapsed:.1f} tok/s)\n\n")
+            sys.stdout.write(f"\n{UI.GRAY}[⚡ {tok_count} tokens | {tok_count/elapsed:.1f} tok/s | {elapsed:.2f}s | RAM: Active]{UI.RESET}\n\n")
+
         except KeyboardInterrupt:
-            print("\nExiting chat session...")
+            print(f"\n\n {UI.GRAY}Exiting chat session...{UI.RESET}")
             break
 
 
 def cmd_unload():
-    print("=" * 70)
-    print("HS AI SOLUTIONS — UNLOADING MODEL & RECLAIMING RAM")
-    print("=" * 70)
+    UI.print_card("HS AI SOLUTIONS — RAM RECLAMATION")
     active_path = get_active_ephemeral_path()
     storage = ClientEphemeralStorage()
 
     if active_path:
-        print(f"[+] Wiping ephemeral RAM file: {active_path}")
+        print(f" {UI.CYAN}[⚡]{UI.RESET} Wiping ephemeral RAM file: {active_path}")
         storage.wipe_and_unlink(active_path)
         clear_active_state()
-        print("[+] Ephemeral storage securely unlinked and erased.")
+        print(f" {UI.GREEN}[✓] Ephemeral model storage wiped from memory.{UI.RESET}")
     else:
-        print("[*] No active model was mounted in RAM.")
+        print(f" {UI.GRAY}[*] No active model loaded in RAM.{UI.RESET}")
 
     storage.reclaim_os_memory()
-    print("[+] Working set memory released back to Windows OS.")
+    print(f" {UI.GREEN}[✓] Working set memory released back to Windows OS.{UI.RESET}\n")
 
 
 def cmd_update(args):
-    print("=" * 70)
-    print("HS AI SOLUTIONS — CHECKING MODEL UPDATES")
-    print("=" * 70)
+    UI.print_card("HS AI SOLUTIONS — MODEL VERSION CHECK")
     cfg = ClientConfig.load()
     url = f"{cfg.server_url.rstrip('/')}/api/v1/model/check-update"
 
     try:
-        with urllib.request.urlopen(url, timeout=5) as resp:
+        with urllib.request.urlopen(url, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        print(f"  Latest Server Version: {data.get('latest_server_version')}")
-        print(f"  Release Notes:         {data.get('release_notes')}")
-        print(f"  SHA-256:               {data.get('sha256')}")
-        print("\n[+] To load the latest model version, execute: july unload && july load")
+        print(f"  Latest Server Version : {data.get('latest_server_version')}")
+        print(f"  Release Notes         : {data.get('release_notes')}")
+        print(f"  SHA-256 Digest        : {data.get('sha256')}")
+        print(f"\n {UI.GREEN}[✓]{UI.RESET} To reload latest weights: {UI.CYAN}july unload && july load{UI.RESET}\n")
     except Exception as e:
-        print(f"[!] Update check failed: {e}")
+        print(f" {UI.RED}[!] Update check failed:{UI.RESET} {e}\n")
 
 
 def cmd_config(args):
@@ -327,31 +403,29 @@ def cmd_config(args):
     if args.set:
         key, val = args.set
         if hasattr(cfg, key):
-            # Parse type
-            cur_val = getattr(cfg, key)
-            if isinstance(cur_val, int):
-                setattr(cfg, key, int(val))
-            elif isinstance(cur_val, float):
-                setattr(cfg, key, float(val))
-            else:
-                setattr(cfg, key, val)
+            curr_val = getattr(cfg, key)
+            if isinstance(curr_val, bool):
+                val = val.lower() in ("true", "1", "yes")
+            elif isinstance(curr_val, int):
+                val = int(val)
+            elif isinstance(curr_val, float):
+                val = float(val)
+            setattr(cfg, key, val)
             cfg.save()
-            print(f"[+] Updated configuration: {key} = {getattr(cfg, key)}")
+            print(f" {UI.GREEN}[✓]{UI.RESET} Updated config {UI.CYAN}{key}{UI.RESET} = {val}")
         else:
-            print(f"[!] Unknown config key: {key}")
+            print(f" {UI.RED}[!] Unknown config key:{UI.RESET} {key}")
         return
 
-    print("=" * 70)
-    print("HS AI SOLUTIONS — JULY CLIENT CONFIGURATION")
-    print("=" * 70)
+    UI.print_card("HS AI SOLUTIONS — CLIENT CONFIGURATION")
     data = cfg.__dict__
     for k, v in data.items():
         print(f"  {k:<24}: {v}")
-    print("\nTo update a setting: july config --set <key> <value>")
+    print(f"\n {UI.GRAY}To modify setting:{UI.RESET} {UI.CYAN}july config --set <key> <value>{UI.RESET}\n")
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="july", description="JULY LLM Multi-Computer Distribution CLI")
+    parser = argparse.ArgumentParser(prog="july", description="JULY LLM Autonomous Runtime Platform")
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
     subparsers.add_parser("install", help="Initialize local environment and configuration")
@@ -400,7 +474,7 @@ def main():
     elif args.command == "config":
         cmd_config(args)
     else:
-        parser.print_help()
+        cmd_chat(argparse.Namespace(prompt=None))
 
 
 if __name__ == "__main__":
