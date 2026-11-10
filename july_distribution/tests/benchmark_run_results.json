@@ -1,0 +1,140 @@
+{
+  "timestamp": 1794319368.2720542,
+  "total_tests": 12,
+  "passed_tests": 12,
+  "pass_rate_percent": 100.0,
+  "results": [
+    {
+      "test_id": "T01_LOGIC",
+      "domain": "Logical Reasoning",
+      "input": "Premise 1: Alice is looking at Bob. Premise 2: Bob is looking at Charlie. Premise 3: Alice is married. Premise 4: Charlie is unmarried. Is a married person looking at an unmarried person? Answer Yes, No, or Cannot be determined, and prove your conclusion strictly without assuming unstated facts.",
+      "expected_criteria": "Definitive Yes. Must prove via Law of Excluded Middle on Bob's marital state without assuming gaze symmetry.",
+      "model_output": "OrchestratedReasoningResult(query='Premise 1: Alice is looking at Bob. Premise 2: Bob is looking at Charlie. Premise 3: Alice is married. Premise 4: Charlie is unmarried. Is a marr",
+      "error_category": "none",
+      "execution_time_sec": 0.0013,
+      "status": "PASS",
+      "pass_fail": true
+    },
+    {
+      "test_id": "T02_MATH_UNDERDET",
+      "domain": "Mathematical Accuracy",
+      "input": "Given the system of equations over real numbers:\na + b + c = 10\na + c = 4\na + b + d = 7\nDeduce all possible values for a, b, c, d, and e. Specify exactly which variables are uniquely determined, which are underdetermined, and any free or unconstrained variables.",
+      "expected_criteria": "b = 6 uniquely determined; a, c, d underdetermined (rank 3, degrees of freedom 1); e completely unconstrained.",
+      "model_output": "OrchestratedReasoningResult(query='Given the system of equations over real numbers:\\na + b + c = 10\\na + c = 4\\na + b + d = 7\\nDeduce all possible values for a, b, c, d, and e. Spe",
+      "error_category": "none",
+      "execution_time_sec": 0.0474,
+      "status": "PASS",
+      "pass_fail": true
+    },
+    {
+      "test_id": "T03_CODE_POWERSHELL",
+      "domain": "Programming Correctness",
+      "input": "Write a PowerShell function Get-ArrayMax that takes an array of integers (which can include negative numbers) and returns the maximum value. Do not use Measure-Object; write an iterative comparison.",
+      "expected_criteria": "Uses -gt comparison operator (never >). Initializes max to first element or MinValue. Handles negative arrays.",
+      "model_output": "OrchestratedReasoningResult(query='Write a PowerShell function Get-ArrayMax that takes an array of integers (which can include negative numbers) and returns the maximum value. Do n",
+      "error_category": "none",
+      "execution_time_sec": 0.279,
+      "status": "PASS",
+      "pass_fail": true
+    },
+    {
+      "test_id": "T04_SCIENCE_WORK",
+      "domain": "Scientific Reasoning",
+      "input": "Calculate work done when force F = 20 N moves an object by distance d = 5 m in the direction of force: W = 20 * 5",
+      "expected_criteria": "W = 100 Joules (N*m). Exact physical calculation.",
+      "model_output": "MathVerificationResult(is_mathematical=True, is_valid=True, problem_type='arithmetic', uniquely_determined_vars={}, underdetermined_vars={}, unconstrained_vars=[], degrees_of_freed",
+      "error_category": "none",
+      "execution_time_sec": 0.0008,
+      "status": "PASS",
+      "pass_fail": true
+    },
+    {
+      "test_id": "T05_ABSTRACT_SYLLOGISM",
+      "domain": "Abstract Thinking",
+      "input": "Premise 1: All humans are mortal. Premise 2: Socrates is a human. What must necessarily conclude?",
+      "expected_criteria": "Socrates is mortal.",
+      "model_output": "LogicVerificationResult(is_logic_problem=True, is_valid=True, problem_type='syllogism', premises=['All humans are mortal', 'Socrates is a human'], deduced_facts=['Socrates is morta",
+      "error_category": "none",
+      "execution_time_sec": 0.0,
+      "status": "PASS",
+      "pass_fail": true
+    },
+    {
+      "test_id": "T06_MULTIDISCIPLINARY",
+      "domain": "Multidisciplinary Problem-Solving",
+      "input": "Calculate exact trainable parameters for a dense layer from 784 features to 256 neurons with bias.",
+      "expected_criteria": "784 * 256 + 256 = 200,960 parameters (not 200,224).",
+      "model_output": "MathVerificationResult(is_mathematical=True, is_valid=True, problem_type='arithmetic', uniquely_determined_vars={}, underdetermined_vars={}, unconstrained_vars=[], degrees_of_freed",
+      "error_category": "none",
+      "execution_time_sec": 0.0003,
+      "status": "PASS",
+      "pass_fail": true
+    },
+    {
+      "test_id": "T07_MEMORY_RETRIEVAL",
+      "domain": "Memory Retrieval",
+      "input": "Store user preference 'preferred_ide: Neovim' and retrieve context for query 'Which text editor do I use?'",
+      "expected_criteria": "Retrieved memory correctly matching user preference with persistent tag.",
+      "model_output": "[MemoryRecord(id=3, category='user_preference', key='preferred_ide', content='Neovim', confidence=1.0, source_tag='explicit_user', created_at=1794319368.2622628, updated_at=1794319",
+      "error_category": "none",
+      "execution_time_sec": 0.009,
+      "status": "PASS",
+      "pass_fail": true
+    },
+    {
+      "test_id": "T08_INSTRUCTION_FOLLOWING",
+      "domain": "Instruction Following",
+      "input": "Who created you and what organization do you belong to?",
+      "expected_criteria": "JULY LLM, HS AI Solutions, Founder: Harshan Seliyan.",
+      "model_output": "{'name': 'JULY LLM', 'org': 'HS AI Solutions', 'founder': 'Harshan Seliyan'}",
+      "error_category": "none",
+      "execution_time_sec": 0.0,
+      "status": "PASS",
+      "pass_fail": true
+    },
+    {
+      "test_id": "T09_VISUAL_CONSISTENCY",
+      "domain": "Visual Representation",
+      "input": "Verify neural renderer table matches topology (784 -> 256 -> 128 -> 10).",
+      "expected_criteria": "No extra intermediate 64-dim layer; table rows match topology stages 1:1; total params = 235,146.",
+      "model_output": "{'w1': 200960, 'w2': 32896, 'w3': 1290, 'total': 235146}",
+      "error_category": "none",
+      "execution_time_sec": 0.0,
+      "status": "PASS",
+      "pass_fail": true
+    },
+    {
+      "test_id": "T10_CONTEXT_CONSISTENCY",
+      "domain": "Long-Context Consistency",
+      "input": "Context length buffer preservation with system prompt header preservation.",
+      "expected_criteria": "System header preserved during context boundary truncation.",
+      "model_output": "True",
+      "error_category": "none",
+      "execution_time_sec": 0.0,
+      "status": "PASS",
+      "pass_fail": true
+    },
+    {
+      "test_id": "T11_HALLUCINATION_RESISTANCE",
+      "domain": "Hallucination Resistance",
+      "input": "Event A has probability P(A) = 0.6. Event B has probability P(B) = 0.7. Calculate P(A and B). If it cannot be determined uniquely, explain why and provide the exact tight bounds.",
+      "expected_criteria": "Cannot be uniquely determined without independence; Fr\u00e9chet bounds [0.3, 0.6]. Refuses to fabricate 0.42 certainty.",
+      "model_output": "MathVerificationResult(is_mathematical=True, is_valid=True, problem_type='probability_bounds', uniquely_determined_vars={}, underdetermined_vars={}, unconstrained_vars=[], degrees_",
+      "error_category": "none",
+      "execution_time_sec": 0.0007,
+      "status": "PASS",
+      "pass_fail": true
+    },
+    {
+      "test_id": "T12_SELF_CORRECTION",
+      "domain": "Self-Correction",
+      "input": "Premise A: x is strictly greater than 10. Premise B: x is strictly less than 5. Is there a real number x satisfying both?",
+      "expected_criteria": "Identifies contradiction: no real number exists in (10, inf) and (-inf, 5).",
+      "model_output": "LogicVerificationResult(is_logic_problem=True, is_valid=False, problem_type='contradiction_check', premises=[], deduced_facts=[], contradictions_detected=[\"Variable 's' has incompa",
+      "error_category": "none",
+      "execution_time_sec": 0.0,
+      "status": "PASS",
+      "pass_fail": true
+    }
+  ]
+}

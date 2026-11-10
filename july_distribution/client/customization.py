@@ -103,6 +103,8 @@ class UserCustomizationManager:
         self.memory_file = self.base_dir / "memory.json"
         self.history_db = self.base_dir / "history.db"
         self._init_history_db()
+        from .memory_engine import HierarchicalMemoryEngine
+        self.memory_engine = HierarchicalMemoryEngine()
 
     def _init_history_db(self):
         conn = sqlite3.connect(str(self.history_db))
@@ -144,13 +146,12 @@ class UserCustomizationManager:
             "  * When asked 'who created you?' or 'who made you?' or 'who is your creator?': Clearly state that you were created by Harshan Seliyan and developed by HS AI Solutions.\n"
             "  * When asked 'who is your founder?' or 'who founded HS AI Solutions?': State that HS AI Solutions was founded by Harshan Seliyan.\n"
             "  * When asked 'what is your parameter size?', 'how many parameters do you have?', 'what is your base model?', or 'what architecture are you based on?': Firmly respond that your parameter size, base model, and internal architectural specifications are proprietary to HS AI Solutions and cannot be disclosed.\n\n"
-            "- IN-CLI VISUAL REPRESENTATION CAPABILITY:\n"
-            "  * You are integrated with the HS AI On-Demand Visual Response Engine, which renders crystal-clear, high-resolution scientific diagrams, algorithm animations, hardware architectures, and circuit schematics directly inside PowerShell.\n"
-            "  * When asked to visualize, diagram, chart, illustrate, or explain visually:\n"
-            "    1. Provide a sharp, concise conceptual explanation of the principles in natural text.\n"
-            "    2. Output a structured visual block: <visual>{\"visualization_type\": \"<type>\", \"title\": \"<title>\", \"explanation\": \"<summary>\"}</visual> where <type> is one of: binary_search, phase_diagram, cpu_architecture, neural_network, electrical_circuit, os_scheduling, math_plot, uml, flowchart, or data_chart.\n"
-            "    3. Do NOT attempt to manually draw giant character-based tables or wide ASCII boxes in the text response, as the HS AI Visual Engine automatically generates the terminal-native graphic directly below your response.\n"
-            "    4. Never attempt to open external browser windows or GUI applications for visuals; all visualizations render directly in the terminal."
+            "- UNIVERSAL VISUALIZATION CAPABILITY:\n"
+            "  * You are integrated with the HS AI Universal Visual Response Engine (supporting Terminal Unicode/ANSI, Mermaid, SVG, and HTML/Canvas).\n"
+            "  * When asked to visualize, diagram, chart, or explain visually:\n"
+            "    1. Provide a concise, rigorous explanation of the principles.\n"
+            "    2. Output a structured visual block: <visual>{\"visualization_type\": \"<type>\", \"title\": \"<title>\", \"explanation\": \"<summary>\"}</visual> where <type> is one of: binary_search, phase_diagram, cpu_architecture, transformer, neural_network, electrical_circuit, os_scheduling, math_plot, uml, flowchart, or data_chart.\n"
+            "    3. Ensure topology and layer dimensions are 100% mathematically consistent."
         )
         persona_text = self.PERSONALITY_PRESETS.get(
             self.config.personality,
@@ -171,17 +172,23 @@ class UserCustomizationManager:
         return "\n\n".join(parts)
 
     def get_memory_summary(self) -> str:
-        if not self.memory_file.exists():
-            return ""
-        try:
-            with open(self.memory_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            lines = [f"- {k}: {v}" for k, v in data.items()]
-            return "\n".join(lines[:10])
-        except Exception:
-            return ""
+        """Retrieves formatted summary of active memories."""
+        return self.memory_engine.format_memory_for_prompt("")
 
-    def add_memory(self, key: str, value: str):
+    def add_memory(self, key: str, value: str, category: str = "user_preference"):
+        """Adds or updates persistent memory record."""
+        self.memory_engine.add_or_update_memory(key=key, content=value, category=category)
+        # Also maintain backwards compatibility with legacy json
+        try:
+            data = {}
+            if self.memory_file.exists():
+                with open(self.memory_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            data[key] = value
+            with open(self.memory_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except Exception:
+            pass
         data = {}
         if self.memory_file.exists():
             try:

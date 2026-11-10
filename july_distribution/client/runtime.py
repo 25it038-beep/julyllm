@@ -22,6 +22,7 @@ from .config import ClientConfig
 from .hardware import detect_client_hardware
 from .storage import ClientEphemeralStorage
 from .customization import UserCustomizationManager
+from .reasoning import JulyReasoningOrchestrator, OrchestratedReasoningResult
 from .web_search import (
     should_trigger_web_search,
     extract_search_query,
@@ -31,7 +32,7 @@ from .web_search import (
 
 
 class ClientInferenceRuntime:
-    """Manages local llama.cpp execution on the client computer."""
+    """Manages local llama.cpp execution on the client computer with external reasoning orchestration."""
 
     def __init__(
         self,
@@ -42,6 +43,7 @@ class ClientInferenceRuntime:
         self.config = config or ClientConfig.load()
         self.storage = storage or ClientEphemeralStorage()
         self.customizer = customizer or UserCustomizationManager(self.config)
+        self.orchestrator = JulyReasoningOrchestrator()
         self.llm = None
         self.active_model_path: Optional[Path] = None
         self._is_loaded = False
@@ -135,10 +137,15 @@ class ClientInferenceRuntime:
                 sys.stdout.write(f" \033[90m[*] Web search unavailable ({e}); relying on neural weights.\033[0m\n\n")
                 sys.stdout.flush()
 
+        # Reasoning Orchestration Invariants Pre-pass
+        guidance = self.orchestrator.prepare_reasoning_guidance(prompt)
+
         # Build chat format
         formatted = f"<|start_header_id|>system<|end_header_id|>\n\n{sys_prompt}"
         if custom_kn:
             formatted += f"\n\nReference Knowledge:\n{custom_kn}"
+        if guidance:
+            formatted += f"\n\n[HS AI REASONING ORCHESTRATOR INVARIANTS]:\n{guidance}\nFollow these formal invariants strictly."
         if web_context:
             formatted += (
                 f"\n\n{web_context}\n\n"
@@ -181,9 +188,36 @@ class ClientInferenceRuntime:
                     full_response.append(delta)
                     yield delta
 
+        raw_text = "".join(full_response)
+
+        # Post-stream verification & validation check
+        verified_res = self.orchestrator.validate_and_synthesize_response(prompt, raw_text)
+        if verified_res.corrections_applied and verified_res.verified_final_response != raw_text:
+            # Yield post-validation synthesis note
+            yield f"\n\n\033[93m[HS AI REASONING VERIFIER: Applied {len(verified_res.corrections_applied)} verified formal corrections]:\033[0m\n{verified_res.verified_final_response}"
+            logged_text = verified_res.verified_final_response
+        else:
+            logged_text = raw_text
+
         # Record to history
         self.customizer.log_message(session_id, "user", prompt)
-        self.customizer.log_message(session_id, "assistant", "".join(full_response))
+        self.customizer.log_message(session_id, "assistant", logged_text)
+
+    def generate_verified(
+        self,
+        prompt: str,
+        session_id: str = "default",
+        max_tokens: Optional[int] = None
+    ) -> OrchestratedReasoningResult:
+        """
+        Executes foundation model generation through the 9-stage Reasoning Orchestrator.
+        Returns complete verified result with CAS, logic, code, and uncertainty artifacts.
+        """
+        t0 = time.time()
+        tokens = list(self.generate_stream(prompt, session_id=session_id, max_tokens=max_tokens))
+        elapsed = time.time() - t0
+        raw_text = "".join(tokens)
+        return self.orchestrator.validate_and_synthesize_response(prompt, raw_text, elapsed=elapsed)
 
     def unload(self, wipe_storage: bool = True):
         """Safe model unloading and memory reclamation."""

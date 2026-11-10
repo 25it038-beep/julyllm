@@ -98,6 +98,15 @@ class VisualRouter:
                 data={"subtype": "neural_network"}
             )
 
+        # 4b. Transformer Architecture
+        if ("transformer" in p and any(w in p for w in ["architecture", "draw", "show", "visual", "block", "layer"])) or "attention mechanism" in p or "gqa" in p:
+            return VisualRequest(
+                visualization_type="transformer",
+                title="Decoder-Only Transformer Block (GQA, RoPE & SwiGLU)",
+                explanation="Grouped-Query Attention with Rotary Embeddings followed by RMSNorm and SwiGLU Feed-Forward Networks.",
+                data={"subtype": "transformer"}
+            )
+
         # 5. Electrical Circuit
         if ("circuit" in p and any(w in p for w in ["draw", "show", "explain", "diagram", "electrical", "schematic"])) or "electrical circuit" in p:
             subtype = "rlc" if "rlc" in p or "ac" in p else ("logic" if "logic" in p or "gate" in p else "dc")

@@ -1,9 +1,8 @@
 """
 HS AI SOLUTIONS — MULTI-COMPUTER DISTRIBUTION INTEGRATION TEST
 Layer: INTEGRATION TEST (july_distribution.tests.test_multi_computer_distribution)
-Organization: HS AI Solutions
-Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
-Product: JULY LLM | Family: HS AI FAMILY
+Founder & Chief Architect: Harshan Seliyan
+Product: JULY LLM 3B | Family: HS AI FAMILY
 
 Verifies:
 1. Central Control Server user registration, login, token issuance, and RBAC permissions.

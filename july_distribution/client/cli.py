@@ -561,6 +561,8 @@ def cmd_chat(args):
                     print(f"   {UI.CYAN}/studio{UI.RESET}         - Open HS AI Studio Portal link")
                     print(f"   {UI.CYAN}/clear{UI.RESET}          - Clear terminal and reset chat history")
                     print(f"   {UI.CYAN}/status{UI.RESET}         - Show hardware, memory, and model telemetry")
+                    print(f"   {UI.CYAN}/memory{UI.RESET}         - View active long-term persistent memories")
+                    print(f"   {UI.CYAN}/feedback{UI.RESET}       - Record feedback or failure report for continuous evolution")
                     print(f"   {UI.CYAN}/mode <name>{UI.RESET}   - Switch personality (precision_engineer, research_scientist, software_architect, tutor)")
                     print(f"   {UI.CYAN}exit, quit{UI.RESET}      - Exit and safely reclaim RAM\n")
                     continue
@@ -625,6 +627,30 @@ def cmd_chat(args):
 
                 if c == "/status":
                     cmd_status()
+                    continue
+
+                if c in ("/memory", "/mem"):
+                    from .memory_engine import HierarchicalMemoryEngine
+                    mem_eng = HierarchicalMemoryEngine()
+                    mems = mem_eng.get_all_active_memories()
+                    print(f"\n  {UI.CYAN}🧠 [HS AI PERSISTENT MEMORY STORE]{UI.RESET}")
+                    if mems:
+                        for m in mems:
+                            print(f"  • [{m.category.upper()}] {UI.BOLD}{m.key}{UI.RESET}: {m.content} {UI.GRAY}(source: {m.source_tag}){UI.RESET}")
+                    else:
+                        print("  No persistent memories currently recorded.")
+                    print()
+                    continue
+
+                if c in ("/feedback", "/report"):
+                    from .evolution_engine import ContinuousEvolutionEngine
+                    evo = ContinuousEvolutionEngine()
+                    stats = evo.analyze_recurring_weaknesses()
+                    print(f"\n  {UI.CYAN}📋 [HS AI FEEDBACK & CONTINUOUS EVOLUTION]{UI.RESET}")
+                    print(f"  Total Feedback Entries : {stats['total_feedback']}")
+                    print(f"  Negative Reports       : {stats['negative_count']}")
+                    print(f"  Top Recurring Weakness : {stats['top_recurring_weakness']}")
+                    print(f"  System Recommendation  : {stats['recommendation']}\n")
                     continue
 
                 if c in ("/mode", "/personality", "/persona"):
