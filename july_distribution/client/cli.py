@@ -342,6 +342,88 @@ def read_terminal_input(prompt_label: str) -> str:
     return trimmed
 
 
+def interactive_select_personality(cfg: ClientConfig, customizer: UserCustomizationManager) -> Optional[str]:
+    """Displays an interactive numbered menu for selecting assistant personality."""
+    print(f"\n {UI.MAGENTA}┌── 🎭 SELECT JULY PERSONALITY PROFILE ─────────────────────────────────┐{UI.RESET}")
+    print(f" {UI.GRAY}│ Choose how July reasons, structures responses, and communicates.     │{UI.RESET}")
+    print(f" {UI.MAGENTA}├───────────────────────────────────────────────────────────────────────┤{UI.RESET}")
+
+    items = list(customizer.PERSONALITY_METADATA.items())
+    for i, (k, meta) in enumerate(items, 1):
+        is_curr = (k == cfg.personality)
+        mark = f"{UI.GREEN}● ACTIVE{UI.RESET}" if is_curr else " "
+        title_colored = f"{UI.BOLD}{UI.CYAN}{meta['title']}{UI.RESET}" if is_curr else f"{UI.WHITE}{meta['title']}{UI.RESET}"
+        print(f" {UI.GRAY}│{UI.RESET} [{UI.YELLOW}{i}{UI.RESET}] {meta['icon']} {title_colored:<30} {mark}")
+        print(f" {UI.GRAY}│     {UI.DIM}{meta['description'][:60]}{UI.RESET}")
+
+    print(f" {UI.MAGENTA}└───────────────────────────────────────────────────────────────────────┘{UI.RESET}")
+    curr_meta = customizer.PERSONALITY_METADATA.get(cfg.personality, {})
+    curr_title = curr_meta.get("title", cfg.personality)
+    curr_icon = curr_meta.get("icon", "🎭")
+    print(f"  Current Active: {curr_icon} {UI.GREEN}{curr_title}{UI.RESET}")
+
+    try:
+        choice = input(f"\n  Choose personality [1-{len(items)}] (or Enter to keep current): ").strip()
+        if not choice:
+            return None
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(items):
+                selected_key = items[idx][0]
+                cfg.personality = selected_key
+                cfg.save()
+                customizer.config = cfg
+                sel_meta = items[idx][1]
+                print(f"\n  {UI.GREEN}[✓] Switched personality to:[/] {UI.BOLD}{sel_meta['icon']} {sel_meta['title']}{UI.RESET}")
+                print(f"      {UI.GRAY}{sel_meta['description']}{UI.RESET}\n")
+                return selected_key
+            else:
+                print(f"  {UI.RED}[!] Invalid choice number.{UI.RESET}\n")
+        else:
+            matched = None
+            for k, meta in items:
+                if choice.lower() in k.lower() or choice.lower() in meta["title"].lower():
+                    matched = (k, meta)
+                    break
+            if matched:
+                cfg.personality = matched[0]
+                cfg.save()
+                customizer.config = cfg
+                print(f"\n  {UI.GREEN}[✓] Switched personality to:[/] {UI.BOLD}{matched[1]['icon']} {matched[1]['title']}{UI.RESET}\n")
+                return matched[0]
+            else:
+                print(f"  {UI.RED}[!] Unknown personality name.{UI.RESET}\n")
+    except (EOFError, KeyboardInterrupt):
+        print()
+    return None
+
+
+def cmd_personality(args):
+    UI.print_banner("Personality & Tone Configuration")
+    cfg = ClientConfig.load()
+    customizer = UserCustomizationManager(cfg)
+    target = getattr(args, "name", None)
+    if target:
+        items = list(customizer.PERSONALITY_METADATA.items())
+        matched = None
+        if target.isdigit():
+            idx = int(target) - 1
+            if 0 <= idx < len(items):
+                matched = items[idx]
+        if not matched:
+            for k, meta in items:
+                if target.lower() in k.lower() or target.lower() in meta["title"].lower():
+                    matched = (k, meta)
+                    break
+        if matched:
+            cfg.personality = matched[0]
+            cfg.save()
+            print(f"\n {UI.GREEN}[✓] Switched personality to:[/] {UI.BOLD}{matched[1]['icon']} {matched[1]['title']}{UI.RESET}")
+            print(f"     {UI.GRAY}{matched[1]['description']}{UI.RESET}\n")
+            return
+    interactive_select_personality(cfg, customizer)
+
+
 def cmd_chat(args):
     active_path = get_active_ephemeral_path()
     if not active_path:
@@ -356,6 +438,26 @@ def cmd_chat(args):
     cfg = ClientConfig.load()
     storage = ClientEphemeralStorage()
     customizer = UserCustomizationManager(cfg)
+
+    # Check for CLI personality override
+    cli_persona = getattr(args, "personality", None)
+    if cli_persona:
+        items = list(customizer.PERSONALITY_METADATA.items())
+        matched = None
+        if cli_persona.isdigit():
+            idx = int(cli_persona) - 1
+            if 0 <= idx < len(items):
+                matched = items[idx]
+        if not matched:
+            for k, meta in items:
+                if cli_persona.lower() in k.lower() or cli_persona.lower() in meta["title"].lower():
+                    matched = (k, meta)
+                    break
+        if matched:
+            cfg.personality = matched[0]
+            cfg.save()
+            customizer.config = cfg
+
     runtime = ClientInferenceRuntime(cfg, storage, customizer)
 
     # Check for piped input or file parameter
@@ -525,18 +627,30 @@ def cmd_chat(args):
                     cmd_status()
                     continue
 
-                if c == "/mode":
+                if c in ("/mode", "/personality", "/persona"):
                     if len(cmd_parts) > 1:
-                        new_mode = cmd_parts[1].lower()
-                        if new_mode in customizer.PERSONALITY_PRESETS:
-                            cfg.personality = new_mode
+                        target = " ".join(cmd_parts[1:]).lower().strip()
+                        items = list(customizer.PERSONALITY_METADATA.items())
+                        matched = None
+                        if target.isdigit():
+                            idx = int(target) - 1
+                            if 0 <= idx < len(items):
+                                matched = items[idx]
+                        if not matched:
+                            for k, meta in items:
+                                if target in k.lower() or target in meta["title"].lower():
+                                    matched = (k, meta)
+                                    break
+                        if matched:
+                            cfg.personality = matched[0]
                             cfg.save()
                             customizer.config = cfg
-                            print(f"\n  {UI.GREEN}[✓] Switched personality to: {new_mode.replace('_', ' ').title()}{UI.RESET}\n")
+                            print(f"\n  {UI.GREEN}[✓] Switched personality to:[/] {UI.BOLD}{matched[1]['icon']} {matched[1]['title']}{UI.RESET}")
+                            print(f"      {UI.GRAY}{matched[1]['description']}{UI.RESET}\n")
                         else:
-                            print(f"\n  {UI.RED}[!] Unknown mode.{UI.RESET} Options: {', '.join(customizer.PERSONALITY_PRESETS.keys())}\n")
+                            print(f"\n  {UI.RED}[!] Unknown personality.{UI.RESET} Type {UI.CYAN}/mode{UI.RESET} to open the interactive menu.\n")
                     else:
-                        print(f"\n  Current mode: {UI.YELLOW}{cfg.personality}{UI.RESET}. Options: {', '.join(customizer.PERSONALITY_PRESETS.keys())}\n")
+                        interactive_select_personality(cfg, customizer)
                     continue
 
             sys.stdout.write(f"{UI.BOLD}{UI.CYAN}❯ JULY{UI.RESET} {UI.GRAY}›{UI.RESET} ")
@@ -664,6 +778,13 @@ def main():
     chat_p = subparsers.add_parser("chat", help="Start chat session running genuine local inference")
     chat_p.add_argument("prompt", nargs="?", help="One-off prompt to execute")
     chat_p.add_argument("-f", "--file", help="Path to text file containing a bulk or multi-line prompt")
+    chat_p.add_argument("-m", "--mode", "--personality", dest="personality", help="Run chat with a specific personality")
+
+    pers_p = subparsers.add_parser("personality", help="Choose assistant personality profile")
+    pers_p.add_argument("name", nargs="?", help="Optional personality name or number")
+
+    mode_p = subparsers.add_parser("mode", help="Alias for personality")
+    mode_p.add_argument("name", nargs="?", help="Optional personality name or number")
 
     subparsers.add_parser("unload", help="Unload model and securely wipe RAM storage")
     subparsers.add_parser("update", help="Check for model version updates")
@@ -683,6 +804,8 @@ def main():
         cmd_status()
     elif args.command == "load":
         cmd_load(args)
+    elif args.command in ("personality", "mode"):
+        cmd_personality(args)
     elif args.command == "chat":
         cmd_chat(args)
     elif args.command == "unload":

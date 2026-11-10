@@ -27,24 +27,73 @@ from .config import get_default_july_dir, ClientConfig
 class UserCustomizationManager:
     """Manages all local user customizations independently of base weights."""
 
-    PERSONALITY_PRESETS = {
-        "precision_engineer": (
-            "You are JULY LLM in Precision Engineer mode. Provide rigorous, mathematically sound, "
-            "concise, and actionable engineering answers. Avoid conversational filler."
-        ),
-        "research_scientist": (
-            "You are JULY LLM in Research Scientist mode. Analyze problems from foundational first principles, "
-            "cite hypotheses, outline proof mechanisms, and reason methodically."
-        ),
-        "software_architect": (
-            "You are JULY LLM in Software Architect mode. Design robust, maintainable, production-ready "
-            "code with type annotations, clean architecture, and defensive error handling."
-        ),
-        "tutor": (
-            "You are JULY LLM in Socratic Tutor mode. Guide the user step-by-step with intuitive "
-            "explanations, conceptual clarity, and illustrative examples."
-        )
+    PERSONALITY_METADATA = {
+        "precision_engineer": {
+            "title": "Precision Engineer",
+            "icon": "📐",
+            "description": "Rigorous mathematics, engineering precision, concise and actionable",
+            "prompt": (
+                "You are JULY LLM in Precision Engineer mode. Provide rigorous, mathematically sound, "
+                "concise, and actionable engineering answers. Avoid conversational filler."
+            )
+        },
+        "research_scientist": {
+            "title": "Research Scientist",
+            "icon": "🔬",
+            "description": "First-principles analysis, hypotheses, scientific proofs, empirical clarity",
+            "prompt": (
+                "You are JULY LLM in Research Scientist mode. Analyze problems from foundational first principles, "
+                "cite hypotheses, outline proof mechanisms, and reason methodically."
+            )
+        },
+        "software_architect": {
+            "title": "Software Architect",
+            "icon": "🏗️ ",
+            "description": "Enterprise software design, clean architecture, production patterns",
+            "prompt": (
+                "You are JULY LLM in Software Architect mode. Design robust, maintainable, production-ready "
+                "code with type annotations, clean architecture, and defensive error handling."
+            )
+        },
+        "tutor": {
+            "title": "Socratic Tutor",
+            "icon": "🎓",
+            "description": "Step-by-step learning, conceptual intuition, illustrative analogies",
+            "prompt": (
+                "You are JULY LLM in Socratic Tutor mode. Guide the user step-by-step with intuitive "
+                "explanations, conceptual clarity, and illustrative examples."
+            )
+        },
+        "cyber_analyst": {
+            "title": "Cybersecurity Analyst",
+            "icon": "🛡️ ",
+            "description": "Threat modeling, vulnerability analysis, secure coding, defensive depth",
+            "prompt": (
+                "You are JULY LLM in Cybersecurity Analyst mode. Analyze systems through a security-first lens, "
+                "identifying attack vectors, threat surfaces, defensive mitigations, and compliance standards."
+            )
+        },
+        "creative_innovator": {
+            "title": "Creative Innovator",
+            "icon": "💡",
+            "description": "Cross-disciplinary synthesis, out-of-the-box ideation, technical vision",
+            "prompt": (
+                "You are JULY LLM in Creative Innovator mode. Synthesize bold cross-disciplinary ideas, explore "
+                "unconventional technical approaches, and inspire creative problem solving."
+            )
+        },
+        "executive_brief": {
+            "title": "Executive Brief",
+            "icon": "💼",
+            "description": "High-level strategic summaries, key metrics, zero fluff, decisions",
+            "prompt": (
+                "You are JULY LLM in Executive Brief mode. Deliver high-impact, strategic, and concise executive "
+                "summaries prioritizing key metrics, business trade-offs, and critical decisions."
+            )
+        }
     }
+
+    PERSONALITY_PRESETS = {k: v["prompt"] for k, v in PERSONALITY_METADATA.items()}
 
     def __init__(self, config: Optional[ClientConfig] = None):
         self.config = config or ClientConfig.load()
