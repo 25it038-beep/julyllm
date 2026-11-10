@@ -62,18 +62,21 @@ class MathPlotRenderer:
             y_vals = [x * x for x in x_vals]
             plt.plot(x_vals, y_vals, label="f(x) = x²", color="cyan")
 
+        w = max(30, min(self.console.width - 24, 54))
         plt.title(title.upper())
         plt.xlabel(data.get("x_label", "x-axis"))
         plt.ylabel(data.get("y_label", "y-axis"))
-        plt.plotsize(84, 20)
+        plt.plotsize(w, 12)
 
         chart_str = plt.build()
 
-        panel = Panel.fit(
-            chart_str,
+        from rich.text import Text
+        panel = Panel(
+            Text.from_ansi(chart_str),
             title=f"[bold green]📐 MATHEMATICAL VISUALIZATION — {title}[/]",
             subtitle="[dim cyan]HS AI Solutions • July Math Plot Engine[/]",
-            border_style="cyan"
+            border_style="cyan",
+            expand=False
         )
         self.console.print(panel)
         if req.explanation:

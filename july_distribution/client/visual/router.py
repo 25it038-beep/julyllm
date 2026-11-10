@@ -23,10 +23,16 @@ class VisualRouter:
         Inspects model response or prompt text for structured <visual>...</visual>
         or ```visual ... ``` blocks.
         """
-        # 1. Look for <visual> JSON block
+        # 1. Look for <visual> JSON block or <visual { ... }>
         m = re.search(r"<visual>([\s\S]*?)</visual>", text, re.IGNORECASE)
         if m:
             req = VisualRequest.from_json(m.group(1).strip())
+            if req:
+                return req
+
+        m2 = re.search(r"<visual\s*(\{[^{}]*\"visualization_type\"[^{}]*\})", text, re.IGNORECASE)
+        if m2:
+            req = VisualRequest.from_json(m2.group(1).strip())
             if req:
                 return req
 

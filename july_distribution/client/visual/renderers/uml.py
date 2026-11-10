@@ -24,52 +24,53 @@ class UMLRenderer:
     def render(self, req: VisualRequest):
         title = req.title or "UML Class Architecture"
 
-        uml_art = """
-        ┌─────────────────────────────────────────────────────────┐
-        │                 [bold cyan]<<interface / abstract>>[/]                 │
-        │                      [bold yellow]NeuralModel[/]                        │
-        ├─────────────────────────────────────────────────────────┤
-        │ - model_id: UUID                                        │
-        │ - param_count: int                                      │
-        │ - is_quantized: bool                                    │
-        ├─────────────────────────────────────────────────────────┤
-        │ + forward(inputs: Tensor): Tensor                       │
-        │ + backward(loss: Tensor): None                          │
-        │ + save_weights(path: Path): bool                        │
-        └────────────────────────────┬────────────────────────────┘
-                                     │
-                                     ▲ [dim]<<implements / inherits>>[/]
-                     ┌───────────────┴───────────────┐
-                     │                               │
-        ┌────────────┴────────────┐     ┌────────────┴────────────┐
-        │      [bold green]TransformerDecoder[/]  │     │      [bold magenta]ConvolutionalBackbone[/]│
-        ├─────────────────────────┤     ├─────────────────────────┤
-        │ - num_heads: int        │     │ - kernel_size: int      │
-        │ - context_window: int   │     │ - channels: int         │
-        │ - rotary_emb: RoPE      │     │ - stride: int           │
-        ├─────────────────────────┤     ├─────────────────────────┤
-        │ + generate_tokens()     │     │ + extract_features()    │
-        │ + compute_attention()   │     │ + max_pool_2d()         │
-        └─────────────────────────┘     └─────────────────────────┘
-                     │                               │
-                     │ [dim]1[/]                             │ [dim]*[/]
-                     ▼ [dim]<<aggregates>>[/]                 ▼ [dim]<<composed of>>[/]
-        ┌─────────────────────────┐     ┌─────────────────────────┐
-        │      [bold cyan]KVCacheManager[/]     │     │      [bold cyan]ResidualBlock[/]      │
-        ├─────────────────────────┤     ├─────────────────────────┤
-        │ - cache_tensors: list   │     │ - conv1: Conv2d         │
-        │ + evict_oldest()        │     │ - bn1: BatchNorm2d      │
-        └─────────────────────────┘     └─────────────────────────┘
-        """
+        uml_art = (
+            " ┌─────────────────────────────────────────────────────────┐\n"
+            " │                 [bold cyan]<<interface / abstract>>[/]                 │\n"
+            " │                      [bold yellow]NeuralModel[/]                        │\n"
+            " ├─────────────────────────────────────────────────────────┤\n"
+            " │ - model_id: UUID                                        │\n"
+            " │ - param_count: int                                      │\n"
+            " │ - is_quantized: bool                                    │\n"
+            " ├─────────────────────────────────────────────────────────┤\n"
+            " │ + forward(inputs: Tensor): Tensor                       │\n"
+            " │ + backward(loss: Tensor): None                          │\n"
+            " │ + save_weights(path: Path): bool                        │\n"
+            " └────────────────────────────┬────────────────────────────┘\n"
+            "                              │\n"
+            "                              ▲ [dim]<<implements / inherits>>[/]\n"
+            "              ┌───────────────┴───────────────┐\n"
+            "              │                               │\n"
+            " ┌────────────┴────────────┐     ┌────────────┴────────────┐\n"
+            " │      [bold green]TransformerDecoder[/]  │     │      [bold magenta]ConvolutionalBackbone[/]│\n"
+            " ├─────────────────────────┤     ├─────────────────────────┤\n"
+            " │ - num_heads: int        │     │ - kernel_size: int      │\n"
+            " │ - context_window: int   │     │ - channels: int         │\n"
+            " │ - rotary_emb: RoPE      │     │ - stride: int           │\n"
+            " ├─────────────────────────┤     ├─────────────────────────┤\n"
+            " │ + generate_tokens()     │     │ + extract_features()    │\n"
+            " │ + compute_attention()   │     │ + max_pool_2d()         │\n"
+            " └─────────────────────────┘     └─────────────────────────┘\n"
+            "              │                               │\n"
+            "              │ [dim]1[/]                             │ [dim]*[/]\n"
+            "              ▼ [dim]<<aggregates>>[/]                 ▼ [dim]<<composed of>>[/]\n"
+            " ┌─────────────────────────┐     ┌─────────────────────────┐\n"
+            " │      [bold cyan]KVCacheManager[/]     │     │      [bold cyan]ResidualBlock[/]      │\n"
+            " ├─────────────────────────┤     ├─────────────────────────┤\n"
+            " │ - cache_tensors: list   │     │ - conv1: Conv2d         │\n"
+            " │ + evict_oldest()        │     │ - bn1: BatchNorm2d      │\n"
+            " └─────────────────────────┘     └─────────────────────────┘"
+        )
 
         self.console.print(Panel(
             f"[bold white]{title.upper()}[/]\n"
             "[dim]Object-Oriented Design, Inheritance & Association Schema[/]",
             title="[bold cyan]📐 UML CLASS ARCHITECTURE[/]",
-            border_style="cyan"
+            border_style="cyan",
+            expand=False
         ))
 
-        self.console.print(Panel(uml_art, title="[bold yellow]CLASS SPECIFICATION & HIERARCHY[/]", border_style="yellow"))
+        self.console.print(Panel(uml_art, title="[bold yellow]CLASS SPECIFICATION & HIERARCHY[/]", border_style="yellow", expand=False))
 
         if req.explanation:
             self.console.print(Panel(f"[bold white]{req.explanation}[/]", title="[bold green]Design Pattern Analysis[/]", border_style="green"))

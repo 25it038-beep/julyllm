@@ -257,6 +257,42 @@ def cmd_load(args):
             sys.exit(1)
 
 
+class VisualTokenFilter:
+    """Filters out raw <visual ...> tags during streaming so text stays clean."""
+    def __init__(self):
+        self.in_tag = False
+        self.buffer = ""
+
+    def process(self, token: str) -> str:
+        self.buffer += token
+        if not self.in_tag:
+            low = self.buffer.lower()
+            if "<visual" in low:
+                idx = low.find("<visual")
+                to_print = self.buffer[:idx]
+                self.buffer = self.buffer[idx:]
+                self.in_tag = True
+                return to_print
+            elif len(self.buffer) > 10:
+                flush_len = len(self.buffer) - 8
+                to_print = self.buffer[:flush_len]
+                self.buffer = self.buffer[flush_len:]
+                return to_print
+            return ""
+        else:
+            if "</visual>" in self.buffer.lower() or (">" in self.buffer and "}" in self.buffer):
+                self.in_tag = False
+                self.buffer = ""
+            return ""
+
+    def flush(self) -> str:
+        if not self.in_tag:
+            out = self.buffer
+            self.buffer = ""
+            return out
+        return ""
+
+
 def cmd_chat(args):
     active_path = get_active_ephemeral_path()
     if not active_path:
@@ -288,11 +324,18 @@ def cmd_chat(args):
         t0 = time.time()
         tok_count = 0
         full_response = []
+        token_filter = VisualTokenFilter()
         for token in runtime.generate_stream(args.prompt):
-            sys.stdout.write(token)
-            sys.stdout.flush()
+            chunk = token_filter.process(token)
+            if chunk:
+                sys.stdout.write(chunk)
+                sys.stdout.flush()
             tok_count += 1
             full_response.append(token)
+        rem = token_filter.flush()
+        if rem:
+            sys.stdout.write(rem)
+            sys.stdout.flush()
         elapsed = max(0.001, time.time() - t0)
         print(f"\n\n{UI.GRAY}[⚡ {tok_count} tokens | {tok_count/elapsed:.1f} tok/s | {elapsed:.2f}s | Ephemeral RAM: Active]{UI.RESET}")
 
@@ -386,11 +429,18 @@ def cmd_chat(args):
             t0 = time.time()
             tok_count = 0
             full_response = []
+            token_filter = VisualTokenFilter()
             for token in runtime.generate_stream(user_input, session_id=session_id):
-                sys.stdout.write(token)
-                sys.stdout.flush()
+                chunk = token_filter.process(token)
+                if chunk:
+                    sys.stdout.write(chunk)
+                    sys.stdout.flush()
                 tok_count += 1
                 full_response.append(token)
+            rem = token_filter.flush()
+            if rem:
+                sys.stdout.write(rem)
+                sys.stdout.flush()
             elapsed = max(0.001, time.time() - t0)
             sys.stdout.write(f"\n{UI.GRAY}[⚡ {tok_count} tokens | {tok_count/elapsed:.1f} tok/s | {elapsed:.2f}s | RAM: Active]{UI.RESET}\n")
 

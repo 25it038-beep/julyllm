@@ -39,42 +39,39 @@ class FlowchartRenderer:
 
         if not comps and not conns:
             # Fallback high-clarity generic flowchart
-            art = """
-            ┌────────────────────────────────────────┐
-            │          [bold green]START: Receive User Prompt[/]          │
-            └───────────────────┬────────────────────┘
-                                │
-                                ▼
-            ┌────────────────────────────────────────┐
-            │ [bold cyan]Syntax & Semantics Parsing (July Engine)[/] │
-            └───────────────────┬────────────────────┘
-                                │
-                                ▼
-                        ╱───────────────╲
-                       ╱                 ╲
-                      ╱   Need Visual?    ╲ ─── No ──▶ [bold white][ Fast Streaming Text ][/]
-                      ╲                   ╱
-                       ╲                 ╱
-                        ╲───────────────╱
-                                │
-                               │ Yes
-                                ▼
-            ┌────────────────────────────────────────┐
-            │ [bold yellow]Visual Dispatcher: Select Renderer[/]     │
-            │ (Scientific, Neural, Circuit, Algorith)│
-            └───────────────────┬────────────────────┘
-                                │
-                                ▼
-            ┌────────────────────────────────────────┐
-            │   [bold magenta]Render Directly into PowerShell TUI[/]    │
-            └───────────────────┬────────────────────┘
-                                │
-                                ▼
-            ┌────────────────────────────────────────┐
-            │          [bold green]END: Display AI Response[/]            │
-            └────────────────────────────────────────┘
-            """
-            self.console.print(Panel(art, title=f"[bold green]📊 FLOWCHART — {title.upper()}[/]", border_style="cyan"))
+            art = (
+                " ┌────────────────────────────────────────┐\n"
+                " │      [bold green]START: Receive User Query[/]         │\n"
+                " └──────────────────┬─────────────────────┘\n"
+                "                    │\n"
+                "                    ▼\n"
+                " ┌────────────────────────────────────────┐\n"
+                " │ [bold cyan]Intent & Modality Parser (July Engine)[/]  │\n"
+                " └──────────────────┬─────────────────────┘\n"
+                "                    │\n"
+                "                    ▼\n"
+                "            ╱───────────────╲\n"
+                "           ╱   Visual Mode?  ╲ ─── No ──▶ [bold white][ Fast Streaming Text ][/]\n"
+                "           ╲                 ╱\n"
+                "            ╲───────────────╱\n"
+                "                    │ Yes\n"
+                "                    ▼\n"
+                " ┌────────────────────────────────────────┐\n"
+                " │ [bold yellow]Visual Dispatcher: Specialized Engine[/]  │\n"
+                " │ (Scientific, Neural, Circuit, Algorith)│\n"
+                " └──────────────────┬─────────────────────┘\n"
+                "                    │\n"
+                "                    ▼\n"
+                " ┌────────────────────────────────────────┐\n"
+                " │   [bold magenta]Render Directly into PowerShell TUI[/]    │\n"
+                " └──────────────────┬─────────────────────┘\n"
+                "                    │\n"
+                "                    ▼\n"
+                " ┌────────────────────────────────────────┐\n"
+                " │      [bold green]END: Present Labeled Graphic[/]      │\n"
+                " └────────────────────────────────────────┘"
+            )
+            self.console.print(Panel(art, title=f"[bold green]📊 FLOWCHART — {title.upper()}[/]", border_style="cyan", expand=False))
             return
 
         # Render custom components if supplied

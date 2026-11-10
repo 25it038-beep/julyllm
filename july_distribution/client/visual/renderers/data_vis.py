@@ -33,14 +33,17 @@ class DataVisRenderer:
         plt.bar(labels, values, color="cyan")
         plt.title(title.upper())
         plt.ylabel("Score / Performance (%)")
-        plt.plotsize(80, 16)
+        w = max(30, min(self.console.width - 24, 54))
+        plt.plotsize(w, 12)
 
         chart_str = plt.build()
 
-        panel = Panel.fit(
-            chart_str,
+        from rich.text import Text
+        panel = Panel(
+            Text.from_ansi(chart_str),
             title=f"[bold green]📊 DATA VISUALIZATION — {title}[/]",
             subtitle="[dim cyan]HS AI Solutions • July Data Engine[/]",
-            border_style="cyan"
+            border_style="cyan",
+            expand=False
         )
         self.console.print(panel)
