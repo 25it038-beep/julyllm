@@ -1,9 +1,10 @@
-# Python Bytecode & Environments
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+env/
 build/
 develop-eggs/
 dist/
@@ -21,41 +22,39 @@ wheels/
 *.egg
 
 # Virtual Environments
-venv/
-.venv/
+.env
+.venv
 env/
+venv/
 ENV/
 
-# Secrets & Environment Configurations
-.env
-.env.local
-.env.*.local
-
-# Database & Persistent Storage
-*.db
-*.sqlite3
-conversations.db
-/models/
-
-# Model Checkpoints & Weights (NEVER COMMIT GGUF OR WEIGHTS)
-*.gguf
-*.bin
-*.pt
-*.pth
-*.safetensors
-*.onnx
-*.tmp
-
-# Testing & Coverage
+# Testing & Cache
 .pytest_cache/
 .coverage
 htmlcov/
-.mypy_cache/
 
-# OS Specific
+# Local databases and runtime state
+*.db
+*.sqlite
+*.sqlite3
+distribution.db
+history.db
+session.json
+token.txt
+ephemeral_state.json
+
+# Model weights (hosted in Cloudflare R2 - DO NOT COMMIT TO GIT)
+*.gguf
+*.bin
+*.safetensors
+*.pt
+*.pth
+models/
+
+# Logs
+*.log
+*.err
+
+# OS files
 .DS_Store
 Thumbs.db
-desktop.ini
-
-# Client Local Configuration
-powershell/config.json

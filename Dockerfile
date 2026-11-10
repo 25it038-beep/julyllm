@@ -1,50 +1,33 @@
 # ==============================================================================
-# HS AI SOLUTIONS - JULY CLOUD AI DOCKERFILE
-# Production Docker Container for Render CPU Inference
+# HS AI SOLUTIONS — PRODUCTION DOCKERFILE
+# Service: July Distribution Backend
 # Founder: Harshan Seliyan
 # ==============================================================================
 
-FROM python:3.11-slim-bookworm
+FROM python:3.11-slim
 
-# Set container environment flags
-ENV DEBIAN_FRONTEND=noninteractive \
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PORT=8000 \
-    MODELS_DIR=/models \
-    MODEL_PATH=/models/Gravity_HS.gguf \
-    CMAKE_ARGS="-DGGML_BLAS=OFF"
+    PORT=8000
 
-# Install essential system build tools for llama-cpp-python
+# Install build dependencies for psycopg2 and curl for health checks
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    cmake \
-    git \
+    libpq-dev \
     curl \
-    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create working directory and persistent mount directory
-WORKDIR /app
-RUN mkdir -p /models && chmod 777 /models
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy dependency definition
-COPY requirements.txt .
+COPY july_distribution /app/july_distribution
+COPY scripts /app/scripts
 
-# Install dependencies with pre-compiled wheels where possible
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
-
-# Copy application source code
-COPY app/ ./app/
-COPY scripts/ ./scripts/
-
-# Health check probe
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python scripts/health_check.py http://localhost:${PORT} || exit 1
-
-# Expose dynamic HTTP port
 EXPOSE 8000
 
-# Execute FastAPI via Uvicorn with single worker to conserve CPU/RAM
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+CMD ["sh", "-c", "uvicorn july_distribution.server.main:app --host 0.0.0.0 --port ${PORT}"]

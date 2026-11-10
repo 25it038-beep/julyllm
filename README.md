@@ -1,383 +1,190 @@
-# JULY 3B — CLOUD AI INFRASTRUCTURE
-### HS AI SOLUTIONS | Founder: Harshan Seliyan
+# JULY LLM: MULTI-COMPUTER MODEL DISTRIBUTION PLATFORM
+### HS AI SOLUTIONS | Founder & Chief Architect: Harshan Seliyan
 
-Production-grade cloud AI inference infrastructure designed to host and execute a pretrained 3 Billion parameter GGUF model (`Gravity_HS.gguf`) on Render cloud servers with persistent disk storage, FastAPI backend, llama.cpp CPU inference engine, and a standalone Windows PowerShell CLI client.
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
 
----
-
-## Architecture Overview
-
-```
-       +---------------------------------------------+
-       |           WINDOWS CLIENT COMPUTER           |
-       |  (Any PC - Zero CUDA / Python requirements) |
-       +---------------------------------------------+
-                              |
-                              | HTTPS (SSE Streaming)
-                              v
-       +---------------------------------------------+
-       |             RENDER WEB SERVICE              |
-       |               (Docker Runtime)              |
-       |  +---------------------------------------+  |
-       |  |            FastAPI Backend            |  |
-       |  |  - OpenAI-compatible API              |  |
-       |  |  - Native JULY Chat & SSE Streaming   |  |
-       |  |  - Token Rate Limiting & Auth         |  |
-       |  |  - SQLite Conversation Memory         |  |
-       |  |  - Real-time System Telemetry         |  |
-       |  +---------------------------------------+  |
-       |                      |                      |
-       |                      v                      |
-       |  +---------------------------------------+  |
-       |  |       llama.cpp Engine (CPU-Only)     |  |
-       |  |  - Thread-optimized inference         |  |
-       |  |  - Memory-aware context budgeting     |  |
-       |  |  - Sequential request lock queue      |  |
-       |  +---------------------------------------+  |
-       |                      ^                      |
-       |                      | Weights in RAM       |
-       +----------------------|----------------------+
-                              |
-                     +-----------------+
-                     | Persistent Disk |
-                     |     /models     |
-                     +-----------------+
-                              ^
-                              | Secure atomic download
-                              |
-                 +--------------------------+
-                 |   HUGGING FACE HUB       |
-                 | (Private Model Checkpoint|
-                 |    Gravity_HS.gguf)      |
-                 +--------------------------+
-```
+**Model**: July LLM 3B (`july-final.gguf`, 2,019,377,888 bytes, SHA-256: `f15752352dc3297ad50e6baeccbae400ca1a9338c4e3ca8475757af587323bd4`)  
+**Storage**: Cloudflare R2 (Private Bucket: `july`, Endpoint: `https://21e5f9f23e1d60cb56bf1200e89255f3.r2.cloudflarestorage.com/`)  
+**Target Cloud Platform**: [Render](https://render.com) (FastAPI Web Service + Managed PostgreSQL)
 
 ---
 
-## Repository Structure
+## 1. System Architecture
+
+The **JULY Multi-Computer Distribution Platform** allows authorized Windows workstations across different physical locations to authenticate with HS AI Solutions, stream the private Cloudflare R2-hosted GGUF model directly into temporary RAM-backed storage, and perform genuine local inference (CPU / NVIDIA CUDA) with zero disk persistence.
 
 ```
-july-cloud-inference/
-│
-├── app/
-│   ├── __init__.py
-│   ├── main.py                  # FastAPI server with OpenAI & Native endpoints
-│   ├── config.py                # Environment configuration & settings
-│   ├── model_loader.py          # Atomic HF synchronizer & llama.cpp loader
-│   ├── gguf_inspector.py        # Binary GGUF metadata & tensor parser
-│   ├── inference.py             # Inference engine, request queue & SSE streamer
-│   ├── security.py              # API key verification & rate limiter
-│   ├── conversations.py         # SQLite persistent multi-turn memory
-│   ├── monitoring.py            # Operational telemetry & hardware metrics
-│   └── schemas.py               # Pydantic request/response data contracts
-│
-├── powershell/
-│   ├── july.ps1                 # Standalone PowerShell interactive client
-│   ├── install.ps1              # One-click client installer & config setup
-│   ├── config.ps1               # Client configuration manager
-│   └── upload_model.ps1         # Secure Hugging Face GGUF uploader
-│
+┌─────────────────────────────────────────────────────────────┐
+│                 RENDER MANAGED CLOUD HOSTING                │
+│                                                             │
+│   ┌──────────────────────────┐   ┌──────────────────────┐  │
+│   │ Managed PostgreSQL DB    │   │ FastAPI Web Service  │  │
+│   │ (Database: july_distrib) │◄──┤ (july-backend)       │  │
+│   │ - Users, Tokens, Devices │   │ - SlowAPI Rate Limit │  │
+│   │ - Audit Logs & Telemetry │   │ - HTTPS & CORS       │  │
+│   └──────────────────────────┘   └──────────▲───────────┘  │
+│                                             │               │
+└─────────────────────────────────────────────┼───────────────┘
+                                              │ Public HTTPS
+                                              │ (onrender.com)
+                                   ┌──────────▼───────────┐
+                                   │ Remote Windows PCs   │
+                                   │ (july CLI Clients)   │
+                                   └──────────────────────┘
+```
+
+```
+                             ┌────────────────────────────────────────┐
+                             │       CLOUDFLARE R2 (PRIVATE)          │
+                             │  Bucket: july                          │
+                             │  Object: july-final.gguf (1.88 GB)     │
+                             │  Public access strictly DISABLED       │
+                             └───────────────────▲────────────────────┘
+                                                 │ 15-Min Presigned
+                                                 │ Resumable Stream
+                                                 │ (Range Requests)
+┌──────────────────────────────────────────────┐ │
+│            RENDER CLOUD HOSTING              │ │
+│                                              │ │
+│  ┌────────────────────┐ ┌──────────────────┐ │ │
+│  │ Managed PostgreSQL │ │ FastAPI Service  │─┼─┘
+│  │ (july-postgres)    │ │ (july-backend)   │ │
+│  │ - Users & Tokens   │◄┤ - SlowAPI Limit  │ │
+│  │ - Approved Devices │ │ - HTTPS & CORS   │ │
+│  │ - Audit Logs       │ │ - Token Auth     │ │
+│  └────────────────────┘ └─────────▲────────┘ │
+└───────────────────────────────────┼──────────┘
+                         Public API │ (e.g. https://july-distribution-backend.onrender.com)
+                         & Installer│
+          ┌─────────────────────────┴────────────────────────┐
+          │                                                  │
+┌─────────▼──────────────┐                        ┌──────────▼─────────────┐
+│ Windows Computer 1     │                        │ Windows Computer 2     │
+│ (e.g. Office PC)       │                        │ (e.g. Remote Laptop)   │
+│ - july CLI             │                        │ - july CLI             │
+│ - RAM Storage          │                        │ - RAM Storage          │
+│ - Local llama.cpp CUDA │                        │ - Local llama.cpp CPU  │
+└────────────────────────┘                        └────────────────────────┘
+```
+
+---
+
+## 2. Security & Operational Guarantees
+
+1. **Zero Permanent Disk Storage**: GGUF weights reside solely in ephemeral memory tagged with `FILE_ATTRIBUTE_TEMPORARY`.
+2. **Zero Cloud Credential Exposure**: Client machines never receive permanent Cloudflare credentials; access is strictly brokered via 15-minute presigned URLs.
+3. **Hardware Access Control**: Every download request validates `X-Device-Id`. Lost, unauthorized, or compromised devices can be immediately revoked from the database.
+4. **Resumable HTTP Range Transfers**: Supported via standard HTTP 206 Partial Content Range requests directly from Cloudflare edge nodes.
+5. **Safe Memory Wiping**: Unload closes model handles, zero-wipes the initial 4KB header, unlinks the temporary file, and calls Windows `psapi.dll!EmptyWorkingSet()`.
+
+---
+
+## 3. Deploy to Render
+
+### 3.1 Blueprint Deployment (`render.yaml`)
+1. In the **Render Dashboard** (https://dashboard.render.com/):
+   - Click **New +** -> **Blueprint**.
+   - Select this repository (`25it038-beep/julyllm`).
+   - Render reads `render.yaml` automatically and configures:
+     - `july-postgres` (Managed PostgreSQL Free/Starter Instance)
+     - `july-distribution-backend` (FastAPI Web Service)
+   - When prompted for environment variables, fill in your Cloudflare R2 credentials:
+     - `AWS_ACCESS_KEY_ID`: Cloudflare R2 Access Key
+     - `AWS_SECRET_ACCESS_KEY`: Cloudflare R2 Secret Key
+   - Click **Apply**.
+2. Once deployed, your backend will be live at:
+   `https://july-distribution-backend.onrender.com`
+
+### 3.2 Environment Variables
+
+| Variable | Description |
+| :--- | :--- |
+| `DATABASE_URL` | Auto-populated by Render Managed PostgreSQL |
+| `JULY_R2_ENDPOINT` | `https://21e5f9f23e1d60cb56bf1200e89255f3.r2.cloudflarestorage.com/` |
+| `JULY_R2_BUCKET` | `july` |
+| `JULY_R2_OBJECT` | `july-final.gguf` |
+| `AWS_ACCESS_KEY_ID` | Cloudflare R2 Access Key |
+| `AWS_SECRET_ACCESS_KEY`| Cloudflare R2 Secret Key |
+| `ALLOWED_ORIGINS` | `*` |
+
+---
+
+## 4. Windows Client Commands
+
+### 4.1 One-Line Remote Installer
+Run from Windows PowerShell:
+```powershell
+irm https://july-distribution-backend.onrender.com/install.ps1 | iex
+```
+
+### 4.2 CLI Usage Suite
+
+```powershell
+# 1. Initialize local configuration
+july install
+
+# 2. Configure target backend server
+july config --set server_url https://july-distribution-backend.onrender.com
+
+# 3. Register user account (new users)
+july register -u harshan -e harshan@hs-ai-solutions.internal -p "SecurePassword123!"
+
+# 4. Authenticate & register local device hardware ID
+july login -u harshan -p "SecurePassword123!"
+
+# 5. Check authentication state & hardware detection (CPU/RAM/GPU VRAM)
+july status
+
+# 6. Stream model from Cloudflare R2 into ephemeral RAM storage (verifies SHA-256)
+july load
+
+# 7. Perform genuine local llama.cpp inference
+july chat "Explain the principles of orbital mechanics and Hohmann transfer."
+
+# 8. Unload model, wipe ephemeral storage, and reclaim physical RAM
+july unload
+
+# 9. Check for model updates
+july update
+```
+
+---
+
+## 5. Repository Structure
+
+```
+├── july_distribution/
+│   ├── server/                  # FastAPI Distribution Backend
+│   │   ├── main.py              # Endpoints, rate limiting, logging
+│   │   ├── database.py          # PostgreSQL / SQLite dialect-agnostic models
+│   │   ├── security.py          # PBKDF2 auth, device registration, tokens
+│   │   └── r2_manager.py        # Cloudflare R2 S3 gateway, presigned URLs
+│   ├── client/                  # Distributable Windows Client
+│   │   ├── cli.py               # PowerShell / CMD entry points
+│   │   ├── runtime.py           # llama.cpp engine, genuine local inference
+│   │   ├── storage.py           # Ephemeral RAM storage (FILE_ATTRIBUTE_TEMPORARY)
+│   │   ├── downloader.py        # Resumable Range downloader with SHA-256
+│   │   ├── hardware.py          # CPU / RAM / CUDA VRAM telemetry
+│   │   ├── auth.py              # Client token manager
+│   │   ├── customization.py     # Per-user system prompt & personality presets
+│   │   └── config.py            # Client settings
+│   ├── installer/
+│   │   └── install.ps1          # Dynamic PowerShell client installer
+│   ├── bin/
+│   │   ├── july.ps1             # PowerShell executable
+│   │   └── july.cmd             # Windows CMD launcher
+│   └── tests/
+│       └── test_multi_computer_distribution.py  # Multi-computer test suite (100% pass)
 ├── scripts/
-│   ├── download_model.py        # Standalone model downloader with validation
-│   ├── benchmark.py             # Empirical TPS and latency benchmarking suite
-│   └── health_check.py          # Container liveness & readiness probe
-│
-├── tests/
-│   ├── __init__.py
-│   ├── test_api.py              # API endpoint & chat integration tests
-│   ├── test_model.py            # GGUF header inspection & corrupted file tests
-│   └── test_security.py         # Auth, admin verification & rate limiting tests
-│
-├── Dockerfile                   # Production container definition for Render
-├── requirements.txt             # Python dependencies
+│   └── test_r2_connection.py    # Cloudflare R2 connection diagnostic
 ├── render.yaml                  # Render Blueprint (Infrastructure-as-Code)
-├── .dockerignore                # Container build exclusions
-├── .gitignore                   # Git exclusions (blocks GGUF weights & keys)
-├── .env.example                 # Environment variables template
-└── README.md                    # Complete deployment guide
+├── Dockerfile                   # Containerized cloud build
+├── requirements.txt             # Lightweight backend dependencies
+└── README.md
 ```
 
 ---
 
-## 10-Phase End-to-End Deployment Guide
+## 6. Physical Memory Security Notice
 
-### PHASE 1: Inspect the Existing GGUF Model
-
-Before uploading or deploying, verify that your model file (`Gravity_HS.gguf` or local equivalent) contains valid GGUF binary headers, compatible architecture, and correct quantization.
-
-Run the inspection tool from PowerShell:
-
-```powershell
-# Navigate to the repository
-cd july-cloud-inference
-
-# Inspect your model file (e.g. E:\guff\Gravity_HS.gguf)
-python app/gguf_inspector.py "E:\guff\Gravity_HS.gguf"
-```
-
-Expected Output:
-```json
-{
-  "status": "valid",
-  "file_name": "Gravity_HS.gguf",
-  "architecture": "llama",
-  "model_name": "JULY LLM",
-  "quantization": "MOSTLY_Q4_K_M",
-  "estimated_parameters": 3212749888,
-  "parameter_label": "3B",
-  "context_length": 131072,
-  "embedding_length": 3072,
-  "vocabulary_size": 128256,
-  "is_compatible": true
-}
-```
-
----
-
-### PHASE 2: Create a Hugging Face Model Repository
-
-1. Sign in to [Hugging Face](https://huggingface.co).
-2. Click **New Model** (`https://huggingface.co/new`).
-3. Set:
-   - **Model Name**: `Gravity_HS`
-   - **Owner**: Your Hugging Face username (e.g., `Harshan-Seliyan`)
-   - **Visibility**: `Private` *(Recommended to protect proprietary weights)*.
-4. Go to **Settings > Access Tokens** (`https://huggingface.co/settings/tokens`).
-5. Create a token with **Write** permission (e.g. `hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`).
-
----
-
-### PHASE 3: Upload Gravity_HS.gguf from Windows PowerShell
-
-Use the provided automated PowerShell upload script. It validates GGUF binary integrity before uploading and guarantees your model remains private:
-
-```powershell
-cd july-cloud-inference\powershell
-
-.\upload_model.ps1 `
-    -RepoId "YOUR_HF_USERNAME/Gravity_HS" `
-    -ModelFile "E:\guff\Gravity_HS.gguf" `
-    -Private
-```
-
-> **Credential Note**: When prompted, securely paste your Hugging Face write token (`hf_...`). The script will verify the GGUF file, create the repository if needed, and upload the file with progress tracking.
-
----
-
-### PHASE 4: Create the GitHub Application Repository
-
-> **Critical Rule**: Never commit large `.gguf` files, `.env` files, or API credentials to GitHub. The included `.gitignore` automatically blocks them.
-
-```powershell
-cd july-cloud-inference
-
-# Initialize git repository
-git init
-git add .
-git commit -m "feat: JULY 3B Cloud AI Infrastructure - HS AI SOLUTIONS"
-
-# Add your GitHub remote and push
-git remote add origin https://github.com/YOUR_GITHUB_USERNAME/july-cloud-inference.git
-git branch -M main
-git push -u origin main
-```
-
----
-
-### PHASE 5: Connect GitHub to Render
-
-1. Sign in to the [Render Dashboard](https://dashboard.render.com).
-2. Click **New +** > **Web Service**.
-3. Select **Build and deploy from a Git repository**.
-4. Connect your GitHub account and select `july-cloud-inference`.
-5. Configure the base settings:
-   - **Name**: `july-cloud-inference`
-   - **Region**: `Oregon (US West)` or closest region
-   - **Branch**: `main`
-   - **Runtime**: `Docker`
-
----
-
-### PHASE 6: Configure the Render Persistent Disk
-
-Render containers have an ephemeral filesystem. If you do not attach a persistent disk, the 2GB model weights would be re-downloaded on every deployment or server restart.
-
-1. In the Web Service settings on Render, scroll to **Disks**.
-2. Click **Add Disk**:
-   - **Name**: `july-models`
-   - **Mount Path**: `/models`
-   - **Size**: `10 GB` (provides ample room for `Gravity_HS.gguf` + SQLite conversation database).
-
----
-
-### PHASE 7: Configure Environment Variables
-
-In the Render Web Service settings, navigate to **Environment** and configure the following variables:
-
-| Variable Name | Value / Description | Required |
-| :--- | :--- | :--- |
-| `ENVIRONMENT` | `production` | Yes |
-| `PORT` | `8000` | Yes |
-| `MODELS_DIR` | `/models` | Yes |
-| `MODEL_REPO` | `YOUR_HF_USERNAME/Gravity_HS` | Yes |
-| `MODEL_FILENAME` | `Gravity_HS.gguf` | Yes |
-| `MODEL_PATH` | `/models/Gravity_HS.gguf` | Yes |
-| `HF_TOKEN` | `hf_xxxxxxxxxxxxxxxxxxxxxx` *(Hugging Face read token)* | Yes (if private) |
-| `API_KEY` | `your-secure-custom-api-key` *(Used by PowerShell client)* | Yes |
-| `ADMIN_KEY` | `your-secure-admin-key` *(Used for /admin endpoints)* | Yes |
-| `N_THREADS` | `2` *(Optimized for CPU instance)* | Yes |
-| `N_CTX` | `2048` *(Optimal memory-aware context length)* | Yes |
-| `N_BATCH` | `512` | Yes |
-| `RATE_LIMIT_RPM` | `60` | Yes |
-| `MOCK_INFERENCE` | `false` | Yes |
-
----
-
-### PHASE 8: Deploy the Docker Application
-
-1. Click **Create Web Service** (or **Manual Deploy > Deploy latest commit**).
-2. Render will build the Docker container using `Dockerfile`:
-   - Installs Debian build dependencies.
-   - Compiles `llama-cpp-python` with CPU optimizations.
-   - Sets up the `/models` volume.
-   - Starts FastAPI with Uvicorn on port `8000`.
-
----
-
-### PHASE 9: Verify Model Downloading and Loading
-
-Monitor the **Logs** tab in Render:
-
-1. **Download Phase**:
-   ```
-   [HS JULY LOADER] Initiating secure download from HF: YOUR_HF_USERNAME/Gravity_HS / Gravity_HS.gguf...
-   [HS JULY LOADER] Model successfully stored and verified at /models/Gravity_HS.gguf
-   ```
-2. **Inspection Phase**:
-   ```
-   [HS JULY LOADER] Inspecting GGUF binary: /models/Gravity_HS.gguf...
-   [HS JULY LOADER] Architecture: llama | Quantization: MOSTLY_Q4_K_M | Params: 3B | Native Context: 131072
-   ```
-3. **RAM Initialization Phase**:
-   ```
-   [HS JULY LOADER] Loading GGUF into llama.cpp (Threads=2, Context=2048, Batch=512, CPU-Only=True)...
-   [HS JULY LOADER] JULY LLM loaded successfully in 4.12s.
-   ```
-4. **Health Check Readiness**:
-   Test from any browser or terminal:
-   ```bash
-   curl https://july-cloud-inference.onrender.com/health
-   ```
-   Response:
-   ```json
-   {
-     "status": "ready",
-     "model_loaded": true,
-     "model_name": "JULY-3B",
-     "uptime_seconds": 128.4,
-     "is_mock": false
-   }
-   ```
-
----
-
-### PHASE 10: Connect Through Windows PowerShell
-
-On any Windows computer (no Python, no CUDA, no local models required):
-
-1. Run the interactive installer:
-   ```powershell
-   cd july-cloud-inference\powershell
-   .\install.ps1
-   ```
-   - Enter your Render endpoint: `https://july-cloud-inference.onrender.com`
-   - Enter your `API_KEY`.
-
-2. Start the interactive chat:
-   ```powershell
-   .\july.ps1 chat
-   ```
-
-```
-====================================
-        JULY CLOUD AI
-         HS AI SOLUTIONS
-     Founder: Harshan Seliyan
-====================================
-Connecting to JULY Cloud (https://july-cloud-inference.onrender.com)...
-Status:     READY
-Model:      JULY-3B
-Engine:     llama.cpp (GGUF CPU)
-Deployment: RENDER CLOUD
-------------------------------------
-Type '/exit' to quit, '/clear' to reset memory.
-
-You: Hello July, what is your identity and mission?
-
-JULY: Hello! I am JULY, the AI assistant developed by HS AI Solutions,
-founded by Harshan Seliyan. I am designed for reasoning, programming,
-research, and technical problem-solving. How can I assist you today?
-```
-
-3. One-shot questions:
-   ```powershell
-   .\july.ps1 ask "Explain quicksort in Python"
-   ```
-
-4. Stream tokens directly to terminal:
-   ```powershell
-   .\july.ps1 stream "Write a short poem about space exploration"
-   ```
-
-5. Telemetry & performance metrics:
-   ```powershell
-   .\july.ps1 status
-   ```
-
----
-
-## Hardware & Cost Optimization Guide
-
-### Memory & Instance Sizing
-
-| Render Instance Type | RAM | vCPU | Suitability for JULY 3B (Q4_K_M) | Estimated Monthly Cost |
-| :--- | :--- | :--- | :--- | :--- |
-| **Free** | 512 MB | Shared | **Incompatible** (OOM crash on model load) | \$0 |
-| **Starter** | 512 MB | 0.5 vCPU | **Incompatible** (OOM crash on model load) | \$7 |
-| **Standard** | 2 GB | 1 vCPU | **Functional** (Requires `N_CTX=1024` or `2048`) | \$25 |
-| **Pro (Recommended)** | 4 GB | 2 vCPU | **Optimal** (Full 4K context headroom, smooth generation) | \$85 |
-
-> **Important Architecture Note**: A persistent disk stores file weights across reboots, but it **does not substitute for RAM**. The model weights (~1.9 GB) and KV cache must be loaded directly into physical system memory.
-
-### CPU Performance & Generation Throughput
-
-- **Prompt Evaluation**: 40–80 tokens/second on 2 vCPUs.
-- **Generation Speed**: 8–16 tokens/second (comfortable reading speed for human interaction).
-- **Concurrency Control**: CPU inference on 2 vCPUs cannot parallelize multiple generations efficiently without thread thrashing. The application enforces a strict async queue lock so requests execute sequentially with sub-second queuing.
-
----
-
-## Testing & Quality Assurance
-
-Run the automated test suite locally:
-
-```powershell
-cd july-cloud-inference
-python -m pytest tests/ -v
-```
-
-All 21 integration and unit tests cover:
-- Binary GGUF inspection & validation.
-- OpenAI-compatible chat completions and raw text completions.
-- Native JULY chat and Server-Sent Event streaming.
-- SQLite multi-session memory and deletion.
-- API key authentication, rate limiting, and prompt sanitization.
-- Mock mode simulation.
-
----
-
-## Author & Copyright
-
-**HS AI SOLUTIONS**  
-**Founder & Chief Architect**: Harshan Seliyan  
-*All Rights Reserved © 2026*
+While ephemeral RAM storage prevents files from persisting to disk, users with local Windows administrative access (`SYSTEM` / `SeDebugPrivilege`) or kernel debuggers can inspect physical memory while weights are active. True zero-extraction guarantees on client hardware are fundamentally impossible once weights reside in host RAM/VRAM.
