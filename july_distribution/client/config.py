@@ -12,7 +12,7 @@ import os
 import json
 from pathlib import Path
 from typing import Dict, Any, Optional
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, fields
 
 
 def get_default_july_dir() -> Path:
@@ -30,13 +30,14 @@ def get_default_july_dir() -> Path:
 class ClientConfig:
     server_url: str = "https://julyllm.onrender.com"
     hardware_mode: str = "auto"  # auto, cuda, cpu
-    context_length: int = 2048
+    context_length: int = 4096
     n_threads: int = 4
     n_batch: int = 64
     n_gpu_layers: int = 0
     temperature: float = 0.7
     top_p: float = 0.9
-    max_tokens: int = 512
+    max_tokens: int = 0  # 0 indicates unlimited generation up to context length
+    enable_web_search: bool = True
     personality: str = "precision_engineer"
     system_prompt: str = (
         "You are JULY LLM, an advanced autonomous neural model developed by HS AI Solutions, "
@@ -55,7 +56,9 @@ class ClientConfig:
         try:
             with open(p, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return cls(**data)
+            valid_fields = {f.name for f in fields(cls)}
+            filtered = {k: v for k, v in data.items() if k in valid_fields}
+            return cls(**filtered)
         except Exception:
             return cls()
 

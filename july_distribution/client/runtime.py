@@ -22,6 +22,12 @@ from .config import ClientConfig
 from .hardware import detect_client_hardware
 from .storage import ClientEphemeralStorage
 from .customization import UserCustomizationManager
+from .web_search import (
+    should_trigger_web_search,
+    extract_search_query,
+    live_duckduckgo_search,
+    format_search_context
+)
 
 
 class ClientInferenceRuntime:
@@ -110,10 +116,25 @@ class ClientInferenceRuntime:
         history = self.customizer.get_session_history(session_id, limit=4)
         custom_kn = self.customizer.retrieve_custom_knowledge(prompt)
 
+        # Autonomous Real-Time Web Search Grounding
+        web_context = ""
+        if getattr(self.config, "enable_web_search", True) and should_trigger_web_search(prompt):
+            search_query = extract_search_query(prompt)
+            try:
+                print(f"[JULY WEB SEARCH] Searching live web sources for: '{search_query}'...")
+                results = live_duckduckgo_search(search_query)
+                if results:
+                    web_context = format_search_context(search_query, results)
+                    print(f"[JULY WEB SEARCH] Retrieved {len(results)} live source snippets.")
+            except Exception as e:
+                print(f"[JULY WEB SEARCH] Search unavailable: {e}")
+
         # Build chat format
-        formatted = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{sys_prompt}"
+        formatted = f"<|start_header_id|>system<|end_header_id|>\n\n{sys_prompt}"
         if custom_kn:
             formatted += f"\n\nReference Knowledge:\n{custom_kn}"
+        if web_context:
+            formatted += f"\n\n{web_context}"
         formatted += "<|eot_id|>"
 
         for msg in history:
@@ -122,13 +143,16 @@ class ClientInferenceRuntime:
         formatted += f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|>"
         formatted += "<|start_header_id|>assistant<|end_header_id|>\n\n"
 
-        tokens_to_gen = max_tokens or self.config.max_tokens
+        # Unlimited tokens: if requested_max <= 0 or None, llama.cpp generates until EOS (<|eot_id|>)
+        requested_max = max_tokens if max_tokens is not None else self.config.max_tokens
+        tokens_to_gen = None if (requested_max is None or requested_max <= 0) else requested_max
 
         stream = self.llm(
             formatted,
             max_tokens=tokens_to_gen,
             temperature=self.config.temperature,
             top_p=self.config.top_p,
+            stop=["<|eot_id|>", "<|end_of_text|>", "<|endoftext|>"],
             stream=True
         )
 
