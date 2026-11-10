@@ -3,7 +3,7 @@
 # Founder & Chief Architect: Harshan Seliyan
 # Organization: HS AI Solutions
 # One-liner execution:
-# irm https://julyllm.onrender.com/start.ps1 | iex
+# irm https://raw.githubusercontent.com/25it038-beep/julyllm/main/july_distribution/installer/start.ps1 | iex
 # ================================================================================
 
 $ErrorActionPreference = 'Stop'
@@ -49,8 +49,14 @@ if (-not $LlamaOk) {
 }
 Write-Host '      [+] Dependencies verified and ready.' -ForegroundColor Gray
 
+# Define internal CLI dispatcher to bypass PowerShell parameter binding
+function Invoke-JulyCli {
+    $env:PYTHONPATH = $InstallRoot
+    & $PythonExe -m july_distribution.client.cli $args
+}
+
 # Set target backend URL
-& "$JulyCmd" config --set server_url $ServerUrl | Out-Null
+Invoke-JulyCli config --set server_url $ServerUrl | Out-Null
 Write-Host "      [+] Connected client to: $ServerUrl" -ForegroundColor Gray
 
 # [3] Interactive Login or Register Selection
@@ -70,11 +76,11 @@ if ($choice -eq '2') {
     $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
     Write-Host 'Registering account on HS AI Solutions Cloud...' -ForegroundColor Gray
-    & "$JulyCmd" register -u $username -e $email -p $pwd
+    Invoke-JulyCli register --username $username --email $email --password $pwd
     if ($LASTEXITCODE -ne 0) {
         Write-Host '[!] Registration failed or user already exists. Proceeding to login...' -ForegroundColor Yellow
     }
-    & "$JulyCmd" login -u $username -p $pwd
+    Invoke-JulyCli login --username $username --password $pwd
 } else {
     Write-Host ''
     Write-Host '--- USER AUTHENTICATION ---' -ForegroundColor Yellow
@@ -83,7 +89,7 @@ if ($choice -eq '2') {
     $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
     $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
-    & "$JulyCmd" login -u $username -p $pwd
+    Invoke-JulyCli login --username $username --password $pwd
 }
 
 if ($LASTEXITCODE -ne 0) {
@@ -94,13 +100,16 @@ if ($LASTEXITCODE -ne 0) {
 # [4] Register Auto-Unload Handlers on Exit
 # Handles window close event
 Register-EngineEvent -SourceIdentifier 'PowerShell.Exiting' -Action {
-    & "$env:LOCALAPPDATA\Programs\JulyRuntime\bin\july.ps1" unload | Out-Null
+    $p = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+    $root = Join-Path $env:LOCALAPPDATA 'Programs\JulyRuntime'
+    $env:PYTHONPATH = $root
+    & $p -m july_distribution.client.cli unload | Out-Null
 } -ErrorAction SilentlyContinue | Out-Null
 
 # [5] Load Model into RAM and Run Chat with Guaranteed Unload Finally
 Write-Host ''
 Write-Host '[4/5] Loading JULY LLM 3B into ephemeral RAM-backed storage...' -ForegroundColor Green
-& "$JulyCmd" load
+Invoke-JulyCli load
 if ($LASTEXITCODE -ne 0) {
     Write-Host '[!] Failed to load model from Cloudflare R2.' -ForegroundColor Red
     return
@@ -112,11 +121,11 @@ Write-Host 'NOTE: When you close PowerShell or exit chat, the model will be auto
 Write-Host ''
 
 try {
-    & "$JulyCmd" chat
+    Invoke-JulyCli chat
 } finally {
     Write-Host ''
     Write-Host '[+] Session ended. Safely unloading model and wiping RAM...' -ForegroundColor Yellow
-    & "$JulyCmd" unload
+    Invoke-JulyCli unload
     Unregister-Event -SourceIdentifier 'PowerShell.Exiting' -ErrorAction SilentlyContinue
     Write-Host '[+] RAM storage wiped and memory reclaimed successfully.' -ForegroundColor Green
 }
