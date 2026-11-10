@@ -1,0 +1,61 @@
+# Python Bytecode & Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Secrets & Environment Configurations
+.env
+.env.local
+.env.*.local
+
+# Database & Persistent Storage
+*.db
+*.sqlite3
+conversations.db
+/models/
+
+# Model Checkpoints & Weights (NEVER COMMIT GGUF OR WEIGHTS)
+*.gguf
+*.bin
+*.pt
+*.pth
+*.safetensors
+*.onnx
+*.tmp
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# OS Specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Client Local Configuration
+powershell/config.json
