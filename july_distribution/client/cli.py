@@ -193,8 +193,13 @@ def cmd_load(args):
 
     # Fast seed check (if existing master seed present on developer workstation)
     root_seed = Path(__file__).resolve().parent.parent.parent / "models" / "july-final.gguf"
-    if root_seed.exists() and not ephemeral_path.exists():
-        print("[*] Priming ephemeral storage from verified seed...")
+    if not root_seed.exists():
+        collab_seed = Path("C:/Users/BS.Harshan seliyan/OneDrive/Desktop/collab-editor/models/july-final.gguf")
+        if collab_seed.exists():
+            root_seed = collab_seed
+
+    if root_seed.exists() and (not ephemeral_path.exists() or ephemeral_path.stat().st_size == 0):
+        print(f"[*] Priming ephemeral storage from verified local master seed ({root_seed.name})...")
         import shutil
         shutil.copyfile(root_seed, ephemeral_path)
 

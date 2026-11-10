@@ -26,14 +26,15 @@ FILE_ATTRIBUTE_TEMPORARY = 0x00000100
 class ClientEphemeralStorage:
     """Manages ephemeral RAM-backed model storage on client machines."""
 
-    def __init__(self):
+    def __init__(self, auto_wipe_atexit: bool = False):
         self._active_files: set[Path] = set()
-        atexit.register(self.wipe_all)
+        if auto_wipe_atexit:
+            atexit.register(self.wipe_all)
 
     def allocate_path(self, prefix: str = "july_ram_model") -> Path:
         temp_dir = Path(tempfile.gettempdir()) / "july_ephemeral_runtime"
         temp_dir.mkdir(parents=True, exist_ok=True)
-        file_path = temp_dir / f"{prefix}_{os.getpid()}_{id(self)}.gguf"
+        file_path = temp_dir / f"{prefix}.gguf"
 
         self._active_files.add(file_path)
 
