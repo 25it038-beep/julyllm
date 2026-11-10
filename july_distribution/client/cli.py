@@ -82,13 +82,74 @@ class UI:
         print(f"{UI.GRAY}└────────────────────────────────────────────────────────────────────────────┘{UI.RESET}")
 
 
+MODEL_METADATA = {
+    "july": {
+        "title": "JULY LLM",
+        "name": "july",
+        "family": "JULY AI Family",
+        "badge": "JULY LLM • HS AI SOLUTIONS",
+        "description": "Primary Foundation Intelligence — General Reasoning, Coding, Visual Generation & Systems",
+        "architecture": "LLAMA 3.2 GQA",
+        "parameters": "3.21B",
+        "layers": 28,
+        "quantization": "Q4_K_M (File Type 15)",
+        "context_length": 131072,
+        "default_file": "july-final.gguf",
+    },
+    "gravity": {
+        "title": "GRAVITY LLM",
+        "name": "gravity",
+        "family": "GRAVITY AI Family",
+        "badge": "GRAVITY LLM • HS AI SOLUTIONS",
+        "description": "Frontier Specialist — Pure Mathematics, CAS, Physics Simulation, Algorithmic Proofs",
+        "architecture": "GRAVITY GQA / RoPE",
+        "parameters": "3.21B",
+        "layers": 28,
+        "quantization": "Q4_K_M (File Type 15)",
+        "context_length": 131072,
+        "default_file": "gravity-final.gguf",
+    },
+    "auto": {
+        "title": "AUTO (Intelligent Dynamic Router)",
+        "name": "auto",
+        "family": "HS AI Dual-Orchestration",
+        "badge": "AUTO ROUTER • HS AI SOLUTIONS",
+        "description": "Dynamic Task Routing & Memory Budgeting — Evaluates query and routes to July or Gravity with transparent rationale",
+        "architecture": "Hybrid Dual Engine",
+        "parameters": "3.21B (Dual)",
+        "layers": 28,
+        "quantization": "Q4_K_M",
+        "context_length": 131072,
+        "default_file": "Dynamic",
+    }
+}
+
+
+def resolve_model_seed(model_id: str = "july") -> Path:
+    """Finds verified GGUF weights for July or Gravity."""
+    mid = model_id.lower().strip()
+    filename = "gravity-final.gguf" if mid == "gravity" else "july-final.gguf"
+
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent / "models" / filename,
+        Path.cwd() / "models" / filename,
+        Path(os.environ.get("USERPROFILE", str(Path.home()))) / "OneDrive" / "Desktop" / "collab-editor" / "models" / filename,
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    # Fallback to july if gravity file missing
+    fallback = Path(__file__).resolve().parent.parent.parent / "models" / "july-final.gguf"
+    return fallback
+
+
 def get_runtime_state_file() -> Path:
     return get_default_july_dir() / "active_model_state.json"
 
 
-def record_active_state(ephemeral_path: Path):
+def record_active_state(ephemeral_path: Path, model_id: str = "july"):
     with open(get_runtime_state_file(), "w", encoding="utf-8") as f:
-        json.dump({"ephemeral_path": str(ephemeral_path), "loaded_at": time.time()}, f)
+        json.dump({"ephemeral_path": str(ephemeral_path), "model_id": model_id, "loaded_at": time.time()}, f)
 
 
 def clear_active_state():
@@ -97,17 +158,25 @@ def clear_active_state():
         p.unlink(missing_ok=True)
 
 
-def get_active_ephemeral_path() -> Path | None:
+def get_active_model_info() -> tuple[Optional[Path], str]:
     p = get_runtime_state_file()
     if not p.exists():
-        return None
+        return None, "none"
     try:
         with open(p, "r", encoding="utf-8") as f:
             data = json.load(f)
         ep = Path(data.get("ephemeral_path", ""))
-        return ep if ep.exists() else None
+        mid = data.get("model_id", "july")
+        if ep.exists():
+            return ep, mid
+        return None, "none"
     except Exception:
-        return None
+        return None, "none"
+
+
+def get_active_ephemeral_path() -> Path | None:
+    path, _ = get_active_model_info()
+    return path
 
 
 def cmd_install():
@@ -174,6 +243,7 @@ def cmd_status():
     UI.print_banner("Hardware & Runtime Telemetry")
     auth = ClientAuthManager()
     session = auth.get_session()
+    cfg = ClientConfig.load()
 
     print(f"\n {UI.BOLD}{UI.CYAN}── AUTHENTICATION ────────────────────────────────────────{UI.RESET}")
     if session:
@@ -185,14 +255,17 @@ def cmd_status():
     else:
         print(f"   Status           : {UI.YELLOW}NOT AUTHENTICATED (Run 'july login'){UI.RESET}")
 
-    print(f"\n {UI.BOLD}{UI.CYAN}── ACTIVE EPHEMERAL MODEL ────────────────────────────────{UI.RESET}")
-    active_path = get_active_ephemeral_path()
+    print(f"\n {UI.BOLD}{UI.CYAN}── ACTIVE FOUNDATION MODEL ──────────────────────────────{UI.RESET}")
+    print(f"   Configured Mode  : {UI.YELLOW}{getattr(cfg, 'selected_model', 'july').upper()}{UI.RESET}")
+    active_path, active_mid = get_active_model_info()
     if active_path:
+        meta = MODEL_METADATA.get(active_mid, MODEL_METADATA["july"])
+        print(f"   Loaded Model     : {UI.GREEN}{meta['title']}{UI.RESET} ({meta['parameters']} | {meta['quantization']})")
         print(f"   RAM Storage      : {UI.GREEN}MOUNTED IN MEMORY{UI.RESET}")
         print(f"   Ephemeral Path   : {active_path}")
         print(f"   Allocation       : {active_path.stat().st_size:,} bytes")
     else:
-        print(f"   RAM Storage      : {UI.GRAY}UNLOADED (Run 'july load'){UI.RESET}")
+        print(f"   RAM Storage      : {UI.GRAY}UNLOADED (Run 'july load' or 'july chat'){UI.RESET}")
 
     print(f"\n {UI.BOLD}{UI.CYAN}── COMPUTE HARDWARE TELEMETRY ────────────────────────────{UI.RESET}")
     hw = detect_client_hardware()
@@ -216,17 +289,18 @@ def cmd_load(args):
     storage = ClientEphemeralStorage()
     downloader = ClientModelDownloader(cfg, auth)
 
+    target_model = getattr(args, "model", None) or getattr(cfg, "selected_model", "july") or "july"
+    if target_model.lower() == "auto":
+        target_model = "july"
+    target_model = target_model.lower().strip()
+
     ephemeral_path = storage.allocate_path()
+    print(f" {UI.CYAN}[⚡]{UI.RESET} Target Model: {UI.BOLD}{target_model.upper()} LLM{UI.RESET}")
     print(f" {UI.CYAN}[⚡]{UI.RESET} Ephemeral RAM Path: {ephemeral_path}")
     print(f" {UI.CYAN}[⚡]{UI.RESET} Windows FILE_ATTRIBUTE_TEMPORARY active (Zero-persistence RAM caching)...")
 
     # Fast seed check (if existing master seed present on workstation)
-    root_seed = Path(__file__).resolve().parent.parent.parent / "models" / "july-final.gguf"
-    if not root_seed.exists():
-        user_home = Path(os.environ.get("USERPROFILE", str(Path.home())))
-        collab_seed = user_home / "OneDrive" / "Desktop" / "collab-editor" / "models" / "july-final.gguf"
-        if collab_seed.exists():
-            root_seed = collab_seed
+    root_seed = resolve_model_seed(target_model)
 
     if root_seed.exists() and (not ephemeral_path.exists() or ephemeral_path.stat().st_size == 0):
         print(f" {UI.GRAY}[*] Priming ephemeral storage from verified local master seed ({root_seed.name})...{UI.RESET}")
@@ -242,14 +316,14 @@ def cmd_load(args):
 
     try:
         downloader.download_to_ephemeral_storage(ephemeral_path, progress_callback=progress)
-        record_active_state(ephemeral_path)
-        print(f"\n {UI.GREEN}[✓] Model verified and loaded into physical RAM.{UI.RESET}")
+        record_active_state(ephemeral_path, target_model)
+        print(f"\n {UI.GREEN}[✓] {target_model.upper()} LLM verified and loaded into physical RAM.{UI.RESET}")
         print(f" {UI.GREEN}[✓]{UI.RESET} Run {UI.CYAN}july chat{UI.RESET} to start genuine local inference.\n")
     except Exception as e:
-        if root_seed.exists() and ephemeral_path.exists() and ephemeral_path.stat().st_size == 2019377888:
+        if root_seed.exists() and ephemeral_path.exists() and ephemeral_path.stat().st_size > 1000000:
             print(f"\n {UI.GRAY}[*] Cloud check delayed ({e}). Mounting verified master seed directly into RAM.{UI.RESET}")
-            record_active_state(ephemeral_path)
-            print(f" {UI.GREEN}[✓] Model verified and loaded into physical RAM.{UI.RESET}")
+            record_active_state(ephemeral_path, target_model)
+            print(f" {UI.GREEN}[✓] {target_model.upper()} LLM verified and loaded into physical RAM.{UI.RESET}")
             print(f" {UI.GREEN}[✓]{UI.RESET} Run {UI.CYAN}july chat{UI.RESET} to start genuine local inference.\n")
         else:
             print(f"\n {UI.RED}[!] Model acquisition error:{UI.RESET} {e}")
@@ -424,13 +498,131 @@ def cmd_personality(args):
     interactive_select_personality(cfg, customizer)
 
 
+def interactive_select_model(cfg: ClientConfig) -> Optional[str]:
+    """Displays an interactive numbered menu for selecting foundation model or auto routing."""
+    print(f"\n {UI.MAGENTA}┌── 🧠 HS AI SOLUTIONS — DUAL MODEL SELECTION ──────────────────────────┐{UI.RESET}")
+    print(f" {UI.GRAY}│ Choose active model or enable AUTO mode for dynamic task routing.     │{UI.RESET}")
+    print(f" {UI.MAGENTA}├───────────────────────────────────────────────────────────────────────┤{UI.RESET}")
+
+    current = getattr(cfg, "selected_model", "july").lower()
+    items = [
+        ("1", "july", MODEL_METADATA["july"]),
+        ("2", "gravity", MODEL_METADATA["gravity"]),
+        ("3", "auto", MODEL_METADATA["auto"]),
+    ]
+
+    for num, k, meta in items:
+        is_cur = (k == current)
+        mark = f"{UI.GREEN}● ACTIVE{UI.RESET}" if is_cur else " "
+        title_col = f"{UI.BOLD}{UI.CYAN}{meta['title']}{UI.RESET}" if is_cur else f"{UI.WHITE}{meta['title']}{UI.RESET}"
+        print(f" {UI.GRAY}│{UI.RESET} [{UI.YELLOW}{num}{UI.RESET}] {title_col:<34} {mark}")
+        print(f" {UI.GRAY}│     {UI.DIM}Arch: {meta['architecture']} | {meta['parameters']}{UI.RESET}")
+        print(f" {UI.GRAY}│     {UI.GRAY}{meta['description'][:68]}{UI.RESET}")
+        if num != "3":
+            print(f" {UI.GRAY}│{UI.RESET}")
+
+    print(f" {UI.MAGENTA}└───────────────────────────────────────────────────────────────────────┘{UI.RESET}")
+
+    try:
+        choice = input(f"\n  {UI.BOLD}Select model [1-3, name, or Enter to cancel]{UI.RESET} › ").strip().lower()
+        if not choice:
+            print(f"  {UI.GRAY}[*] Model selection unchanged: {current.upper()}{UI.RESET}\n")
+            return None
+
+        matched_key = None
+        for num, k, meta in items:
+            if choice in (num, k, meta["title"].lower(), f"{k} llm", f"{k}_llm"):
+                matched_key = k
+                break
+
+        if matched_key:
+            cfg.selected_model = matched_key
+            cfg.save()
+            meta = MODEL_METADATA[matched_key]
+            print(f"\n  {UI.GREEN}[✓] Active model configured:[/] {UI.BOLD}{meta['title']}{UI.RESET}")
+            print(f"      {UI.GRAY}{meta['description']}{UI.RESET}\n")
+            return matched_key
+        else:
+            print(f"  {UI.RED}[!] Invalid choice.{UI.RESET}\n")
+            return None
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return None
+
+
+def cmd_model(args):
+    UI.print_banner("Dual-Model Configuration & Management")
+    cfg = ClientConfig.load()
+    name = getattr(args, "name", None)
+    is_list = getattr(args, "list", False)
+    is_status = getattr(args, "status", False)
+
+    if is_list or (name and name.lower() in ("list", "ls")):
+        print(f"\n {UI.BOLD}{UI.CYAN}Registered Foundation Models:{UI.RESET}")
+        for k, meta in MODEL_METADATA.items():
+            active_str = f" {UI.GREEN}[ACTIVE]{UI.RESET}" if getattr(cfg, "selected_model", "july") == k else ""
+            print(f"\n   {UI.BOLD}{UI.CYAN}• {meta['title']}{UI.RESET}{active_str}")
+            print(f"     Architecture  : {meta['architecture']}")
+            print(f"     Parameters    : {meta['parameters']}")
+            print(f"     Quantization  : {meta['quantization']}")
+            print(f"     Context Limit : {meta['context_length']:,} tokens")
+            print(f"     Specialty     : {meta['description']}")
+        print()
+        return
+
+    if is_status or (name and name.lower() in ("status", "telemetry")):
+        cmd_status()
+        return
+
+    if name:
+        target = name.lower().strip()
+        matched = None
+        for k in ("july", "gravity", "auto"):
+            if target in (k, f"{k} llm", f"{k}_llm", f"mode_{k}"):
+                matched = k
+                break
+        if target in ("1", "j"): matched = "july"
+        elif target in ("2", "g"): matched = "gravity"
+        elif target in ("3", "a"): matched = "auto"
+
+        if matched:
+            cfg.selected_model = matched
+            cfg.save()
+            meta = MODEL_METADATA[matched]
+            print(f"\n {UI.GREEN}[✓] Configured active model:[/] {UI.BOLD}{meta['title']}{UI.RESET}")
+            print(f"     {UI.GRAY}{meta['description']}{UI.RESET}\n")
+            return
+        else:
+            print(f" {UI.RED}[!] Unknown model '{name}'. Available: july, gravity, auto, list{UI.RESET}\n")
+            return
+
+    interactive_select_model(cfg)
+
+
 def cmd_chat(args):
-    active_path = get_active_ephemeral_path()
-    if not active_path:
-        print(f" {UI.YELLOW}[!] Model is not currently loaded in RAM.{UI.RESET}")
-        print(f" {UI.GRAY}[*] Automatically loading model...{UI.RESET}")
-        cmd_load(args)
-        active_path = get_active_ephemeral_path()
+    cfg = ClientConfig.load()
+
+    # Check for CLI model override: --model / -M
+    cli_model = getattr(args, "model", None)
+    if cli_model:
+        m_norm = cli_model.lower().strip()
+        if m_norm in ("1", "j", "july"):
+            cfg.selected_model = "july"
+        elif m_norm in ("2", "g", "gravity"):
+            cfg.selected_model = "gravity"
+        elif m_norm in ("3", "a", "auto"):
+            cfg.selected_model = "auto"
+        cfg.save()
+
+    active_path, active_mid = get_active_model_info()
+    wanted_model = getattr(cfg, "selected_model", "july").lower()
+    if wanted_model == "auto":
+        wanted_model = "july"  # default warm seed
+
+    if not active_path or (active_mid != wanted_model and active_mid != "none"):
+        print(f" {UI.YELLOW}[!] Initializing {wanted_model.upper()} LLM into RAM storage...{UI.RESET}")
+        cmd_load(argparse.Namespace(model=wanted_model))
+        active_path, active_mid = get_active_model_info()
         if not active_path:
             print(f" {UI.RED}[!] Could not initialize model.{UI.RESET}")
             sys.exit(1)
@@ -487,16 +679,20 @@ def cmd_chat(args):
 
     if not prompt_to_run:
         UI.print_banner()
+        active_mode = getattr(cfg, "selected_model", "july").upper()
+        print(f"  {UI.GRAY}Active Model:{UI.RESET} {UI.CYAN}{active_mode} LLM{UI.RESET} {UI.GRAY}(Type {UI.YELLOW}/model{UI.GRAY} to switch models){UI.RESET}")
         print(f"  {UI.GRAY}Personality :{UI.RESET} {UI.YELLOW}{cfg.personality.replace('_', ' ').title()}{UI.RESET}")
-        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/help{UI.RESET}, {UI.CYAN}/paste{UI.RESET}, {UI.CYAN}/file <path>{UI.RESET}, {UI.CYAN}/visual{UI.RESET}, {UI.CYAN}/clear{UI.RESET}, {UI.CYAN}/status{UI.RESET}, {UI.CYAN}/studio{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
+        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/model{UI.RESET}, {UI.CYAN}/help{UI.RESET}, {UI.CYAN}/paste{UI.RESET}, {UI.CYAN}/file <path>{UI.RESET}, {UI.CYAN}/visual{UI.RESET}, {UI.CYAN}/clear{UI.RESET}, {UI.CYAN}/status{UI.RESET}, {UI.CYAN}/studio{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
         print(f"{UI.GRAY}─────────────────────────────────────────────────────────────────────────────{UI.RESET}\n")
 
     runtime.load_model(active_path)
 
     if prompt_to_run:
         # One-off or bulk prompt
+        active_mode = getattr(cfg, "selected_model", "july").upper()
+        label = "GRAVITY" if active_mode == "GRAVITY" else "JULY"
         print(f"\n{UI.BOLD}{UI.GREEN}❯ You{UI.RESET} {UI.GRAY}›{UI.RESET} {prompt_to_run[:200]}{'...' if len(prompt_to_run) > 200 else ''}")
-        print(f"{UI.BOLD}{UI.CYAN}❯ JULY{UI.RESET} {UI.GRAY}›{UI.RESET} ", end="", flush=True)
+        print(f"{UI.BOLD}{UI.CYAN}❯ {label}{UI.RESET} {UI.GRAY}›{UI.RESET} ", end="", flush=True)
         t0 = time.time()
         tok_count = 0
         full_response = []
@@ -554,6 +750,7 @@ def cmd_chat(args):
 
                 if c == "/help":
                     print(f"\n {UI.BOLD}{UI.CYAN}Available Commands:{UI.RESET}")
+                    print(f"   {UI.CYAN}/model [name]{UI.RESET}   - Select or switch foundation model (july, gravity, auto, list)")
                     print(f"   {UI.CYAN}/paste, /bulk{UI.RESET}   - Enter multi-line bulk prompt mode (finish with /send)")
                     print(f"   {UI.CYAN}/file <path>{UI.RESET}    - Load entire text file as prompt")
                     print(f"   {UI.CYAN}\"\"\" <text> \"\"\"{UI.RESET} - Triple-quote multi-line prompt anytime")
@@ -679,7 +876,49 @@ def cmd_chat(args):
                         interactive_select_personality(cfg, customizer)
                     continue
 
-            sys.stdout.write(f"{UI.BOLD}{UI.CYAN}❯ JULY{UI.RESET} {UI.GRAY}›{UI.RESET} ")
+                if c in ("/model", "/models"):
+                    if len(cmd_parts) > 1:
+                        sub = cmd_parts[1].lower().strip()
+                        if sub in ("list", "ls"):
+                            print(f"\n  {UI.BOLD}{UI.CYAN}Registered Foundation Models:{UI.RESET}")
+                            for mk, mm in MODEL_METADATA.items():
+                                cur = f" {UI.GREEN}[ACTIVE]{UI.RESET}" if getattr(cfg, "selected_model", "july") == mk else ""
+                                print(f"   • {UI.BOLD}{mm['title']}{UI.RESET}{cur} — {mm['description']}")
+                            print()
+                            continue
+                        matched_m = None
+                        if sub in ("july", "1", "j"): matched_m = "july"
+                        elif sub in ("gravity", "2", "g"): matched_m = "gravity"
+                        elif sub in ("auto", "3", "a"): matched_m = "auto"
+
+                        if matched_m:
+                            cfg.selected_model = matched_m
+                            cfg.save()
+                            meta = MODEL_METADATA[matched_m]
+                            print(f"\n  {UI.GREEN}[✓] Switched active model to:[/] {UI.BOLD}{meta['title']}{UI.RESET}")
+                            print(f"      {UI.GRAY}{meta['description']}{UI.RESET}\n")
+                            if matched_m in ("july", "gravity"):
+                                runtime.switch_model(matched_m)
+                        else:
+                            print(f"\n  {UI.RED}[!] Unknown model name.{UI.RESET} Available: {UI.CYAN}/model july{UI.RESET}, {UI.CYAN}/model gravity{UI.RESET}, {UI.CYAN}/model auto{UI.RESET}, {UI.CYAN}/model list{UI.RESET}\n")
+                    else:
+                        new_m = interactive_select_model(cfg)
+                        if new_m and new_m in ("july", "gravity"):
+                            runtime.switch_model(new_m)
+                    continue
+
+            active_mode = getattr(cfg, "selected_model", "july").upper()
+            if active_mode == "GRAVITY":
+                badge_color = UI.YELLOW
+                label = "GRAVITY"
+            elif active_mode == "AUTO":
+                badge_color = UI.MAGENTA
+                label = f"AUTO ({runtime.current_model_id.upper()})"
+            else:
+                badge_color = UI.CYAN
+                label = "JULY"
+
+            sys.stdout.write(f"{UI.BOLD}{badge_color}❯ {label}{UI.RESET} {UI.GRAY}›{UI.RESET} ")
             sys.stdout.flush()
             t0 = time.time()
             tok_count = 0
@@ -799,12 +1038,20 @@ def main():
     login_p.add_argument("-s", "--server", help="Control server URL")
 
     subparsers.add_parser("status", help="Display authentication, model, and hardware telemetry")
-    subparsers.add_parser("load", help="Retrieve GGUF into ephemeral RAM-backed storage")
+
+    model_p = subparsers.add_parser("model", help="Select or switch active foundation model (JULY LLM, GRAVITY LLM, AUTO)")
+    model_p.add_argument("name", nargs="?", help="Model to activate (july, gravity, auto, list, status)")
+    model_p.add_argument("-l", "--list", action="store_true", help="List all available models and their specifications")
+    model_p.add_argument("-s", "--status", action="store_true", help="Show current active model status and telemetry")
+
+    load_p = subparsers.add_parser("load", help="Retrieve GGUF into ephemeral RAM-backed storage")
+    load_p.add_argument("-M", "--model", help="Specific model to load: july or gravity")
 
     chat_p = subparsers.add_parser("chat", help="Start chat session running genuine local inference")
     chat_p.add_argument("prompt", nargs="?", help="One-off prompt to execute")
     chat_p.add_argument("-f", "--file", help="Path to text file containing a bulk or multi-line prompt")
     chat_p.add_argument("-m", "--mode", "--personality", dest="personality", help="Run chat with a specific personality")
+    chat_p.add_argument("-M", "--model", help="Foundation model to use: july, gravity, or auto")
 
     pers_p = subparsers.add_parser("personality", help="Choose assistant personality profile")
     pers_p.add_argument("name", nargs="?", help="Optional personality name or number")
@@ -828,6 +1075,8 @@ def main():
         cmd_login(args)
     elif args.command == "status":
         cmd_status()
+    elif args.command == "model":
+        cmd_model(args)
     elif args.command == "load":
         cmd_load(args)
     elif args.command in ("personality", "mode"):

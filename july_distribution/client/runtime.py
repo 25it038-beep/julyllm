@@ -46,7 +46,39 @@ class ClientInferenceRuntime:
         self.orchestrator = JulyReasoningOrchestrator()
         self.llm = None
         self.active_model_path: Optional[Path] = None
+        self.current_model_id: str = getattr(self.config, "selected_model", "july").lower()
+        if self.current_model_id == "auto":
+            self.current_model_id = "july"
         self._is_loaded = False
+
+    def switch_model(self, model_id: str, model_path: Optional[Path] = None):
+        """Switches active model cleanly between july and gravity."""
+        target = model_id.lower().strip()
+        if target not in ("july", "gravity"):
+            target = "july"
+
+        if self._is_loaded and self.current_model_id == target and self.llm is not None:
+            if model_path is None or self.active_model_path == model_path:
+                return
+
+        # Unload existing instance safely to prevent memory collision
+        if self.llm is not None:
+            try:
+                if hasattr(self.llm, "close"):
+                    self.llm.close()
+            except Exception:
+                pass
+            del self.llm
+            self.llm = None
+            self._is_loaded = False
+            gc.collect()
+
+        if model_path is None:
+            from .cli import resolve_model_seed
+            model_path = resolve_model_seed(target)
+
+        self.current_model_id = target
+        self.load_model(model_path)
 
     def load_model(self, model_path: Path):
         """Loads model into active memory via llama.cpp."""
@@ -114,7 +146,33 @@ class ClientInferenceRuntime:
         if not self._is_loaded or self.llm is None:
             raise RuntimeError("Model is not loaded. Please execute 'july load' first.")
 
-        sys_prompt = self.customizer.get_effective_system_prompt()
+        # In AUTO mode, dynamically evaluate and route task to July or Gravity
+        routing_note = ""
+        if getattr(self.config, "selected_model", "july").lower() == "auto":
+            try:
+                from hs_ecosystem.core.model_manager import UniversalModelManager
+                from hs_ecosystem.core.model_router import IntelligentModelRouter
+                dummy_mgr = UniversalModelManager()
+                dummy_mgr.active_model_id = self.current_model_id
+                router = IntelligentModelRouter(dummy_mgr)
+                decision = router.route_prompt(prompt, requested_mode="AUTO")
+                if decision.selected_model != self.current_model_id:
+                    self.switch_model(decision.selected_model)
+                routing_note = f"\n \033[93m⚡ [AUTO ROUTER]\033[0m Task routed to: \033[1m{decision.selected_model.upper()} LLM\033[0m ({decision.rationale})\n\n"
+            except Exception:
+                pass
+
+        if routing_note:
+            sys.stdout.write(routing_note)
+            sys.stdout.flush()
+
+        if self.current_model_id == "gravity":
+            sys_prompt = (
+                "You are GRAVITY LLM, an advanced mathematical and reasoning neural model created by Harshan Seliyan "
+                "and developed by HS AI Solutions. Deliver rigorous, exact, and mathematically verified answers."
+            )
+        else:
+            sys_prompt = self.customizer.get_effective_system_prompt()
         history = self.customizer.get_session_history(session_id, limit=4)
         custom_kn = self.customizer.retrieve_custom_knowledge(prompt)
 

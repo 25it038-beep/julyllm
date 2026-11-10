@@ -38,6 +38,7 @@ class ClientConfig:
     top_p: float = 0.9
     max_tokens: int = 0  # 0 indicates unlimited generation up to context length
     enable_web_search: bool = True
+    selected_model: str = "july"  # july, gravity, auto
     personality: str = "precision_engineer"
     system_prompt: str = (
         "You are JULY LLM, an advanced autonomous neural model created by Harshan Seliyan and developed by HS AI Solutions. "
