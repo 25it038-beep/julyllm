@@ -286,7 +286,7 @@ class RuntimeContextProvider:
             f"  - Timezone      : {loc['timezone']}",
             f"  - Device Host   : {loc['hostname']} ({loc['os']})",
             "================================================================================",
-            "DIRECTIVES FOR IDENTITY, GENDER-ADAPTIVE TONE, TEMPORAL & GEOGRAPHICAL AWARENESS:",
+            "DIRECTIVES FOR IDENTITY, TEMPORAL & GEOGRAPHICAL AWARENESS (INCLUDING GENDER-ADAPTIVE TONE):",
             f"1. Name Addressing: When addressing the user or greeting them, naturally use their name ('{user['preferred_name']}').",
             f"2. Tone Dynamic: Embody the opposite-gender conversational persona outlined above ({user['tone_summary']}).",
             "   Speak with warmth, refined charm, and natural elegance, tailored perfectly to the user.",

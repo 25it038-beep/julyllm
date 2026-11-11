@@ -111,8 +111,22 @@ class DualModelCoordinator:
 
             return operational_model
 
+    def cancel_download(self, model_id: str) -> bool:
+        """Cancels an active background download safely and preserves partial data."""
+        mid = model_id.lower().strip()
+        if mid in self._bg_cancel_flags:
+            self._bg_cancel_flags[mid].set()
+            self.state_mgr.set_model_state(mid, "CANCELLED")
+            return True
+        return False
+
+    def is_downloading(self, model_id: str) -> bool:
+        """Checks if a background download is currently executing."""
+        mid = model_id.lower().strip()
+        return mid in self._bg_threads and self._bg_threads[mid].is_alive()
+
     def _activate_local_model(self, model_id: str):
-        """Safely loads model into memory with single-model RAM protection (Requirement 4)."""
+        """Safely loads model into memory with single-model RAM protection and test inference."""
         with self._inference_lock:
             if self.runtime.is_loaded() and self.runtime.current_model_id == model_id:
                 self.state_mgr.set_model_state(model_id, ModelStatus.READY.value)
@@ -130,9 +144,28 @@ class DualModelCoordinator:
                 raise FileNotFoundError(f"Model file missing: {model_file}")
 
             self.state_mgr.set_model_state(model_id, ModelStatus.INITIALIZING.value)
-            self.runtime.switch_model(model_id, model_path=model_file)
-            self.state_mgr.set_model_state(model_id, ModelStatus.READY.value)
-            self.state_mgr.activeModel = model_id
+            try:
+                self.runtime.switch_model(model_id, model_path=model_file)
+                # Validation test inference before declaring READY
+                if self.runtime.llm is not None:
+                    try:
+                        _ = self.runtime.llm("System: ping", max_tokens=1)
+                    except Exception as inf_err:
+                        # Release allocated memory, keep July available, restore previous session, display exact error
+                        self.runtime.unload(wipe_storage=False)
+                        self.state_mgr.set_model_state(model_id, ModelStatus.ERROR.value, {"error": f"Test inference failed: {inf_err}"})
+                        if model_id != "july":
+                            july_file = self.storage.get_model_file("july")
+                            if july_file.exists():
+                                self.runtime.switch_model("july", model_path=july_file)
+                                self.state_mgr.activeModel = "july"
+                                self.state_mgr.set_model_state("july", ModelStatus.READY.value)
+                        raise RuntimeError(f"Model initialization validation failed: {inf_err}")
+                self.state_mgr.set_model_state(model_id, ModelStatus.READY.value)
+                self.state_mgr.activeModel = model_id
+            except Exception as e:
+                self.state_mgr.set_model_state(model_id, ModelStatus.ERROR.value, {"error": str(e)})
+                raise e
 
     def _ensure_operational_fallback(self, exclude_model: str) -> str:
         """Finds and ensures an operational fallback model is running so user isn't blocked."""
@@ -151,7 +184,7 @@ class DualModelCoordinator:
         auto_activate: bool = True,
         callback: Optional[Callable[[str], None]] = None
     ):
-        """Spawns background worker to download, verify, and auto-activate target model."""
+        """Spawns background worker to download, verify, inspect, and auto-activate target model."""
         if model_id in self._bg_threads and self._bg_threads[model_id].is_alive():
             return
 
@@ -204,6 +237,8 @@ class DualModelCoordinator:
                         ModelStatus.ERROR.value,
                         {"error": f"SHA-256 mismatch: expected {expected_sha}, got {actual_sha}"}
                     )
+                    # Reject corrupt or unverified downloaded file
+                    dest_path.unlink(missing_ok=True)
                     return
 
                 # Record manifest
@@ -215,9 +250,28 @@ class DualModelCoordinator:
                     "completed_at": time.time()
                 })
 
+                # GGUF Metadata Inspection
+                try:
+                    meta = GGUFInspector.inspect(dest_path)
+                except Exception as g_err:
+                    self.state_mgr.set_model_state(
+                        model_id,
+                        ModelStatus.ERROR.value,
+                        {"error": f"GGUF inspection failed: {g_err}"}
+                    )
+                    return
+
+                # Check available RAM and VRAM
+                budget = HardwareMemoryBudgeter.profile_and_budget(
+                    model_size_bytes=remote_size,
+                    total_layers=meta.block_count,
+                    target_context=getattr(self.config, "context_length", 4096) or 4096,
+                    force_cpu=False
+                )
+
                 self.state_mgr.set_model_state(model_id, ModelStatus.DOWNLOADED.value)
 
-                # Automatic activation if user still wants this model
+                # Automatic activation: wait for July inference to finish & safely switch
                 if auto_activate and self.state_mgr.selectedModel == model_id:
                     self._activate_local_model(model_id)
                     if callback:

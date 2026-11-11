@@ -32,12 +32,14 @@ from .auth import ClientAuthManager
 from .clerk_auth import ClerkAuthManager, STUDIO_AUTH_PORTAL
 from .rate_limiter import ClientRateLimiter, RateLimitExceededError
 from .security.credential_vault import SecureCredentialVault
-from .hardware import detect_client_hardware, get_device_identity
-from .storage import ClientEphemeralStorage
+from .hardware import detect_client_hardware, get_device_identity, get_detailed_hardware_telemetry
+from .storage import ClientEphemeralStorage, PermanentModelStorage
 from .downloader import ClientModelDownloader
 from .customization import UserCustomizationManager
 from .runtime import ClientInferenceRuntime
 from .visual_renderer import detect_visual_content, render_visual_html, open_visual_in_browser, render_mermaid_to_cli
+from .voice import CLIHardwareVoiceCoordinator, clean_text_for_speech
+from .ui_renderer import render_cli_status_box, render_hardware_card, render_memory_card, render_gpu_card
 
 # Enable Windows Virtual Terminal Processing for ANSI colors
 if os.name == "nt":
@@ -1315,12 +1317,19 @@ def cmd_model(args):
     name = getattr(args, "name", None)
     is_list = getattr(args, "list", False)
     is_status = getattr(args, "status", False)
+    target_arg = getattr(args, "target", None)
 
-    if is_list or (name and name.lower() in ("list", "ls")):
+    perm = PermanentModelStorage()
+    from .dual_engine import DualModelCoordinator
+    coordinator = DualModelCoordinator(config=cfg, storage=perm)
+
+    if is_list or (name and name.lower() in ("list", "ls", "models")):
         print(f"\n {UI.BOLD}{UI.CYAN}Registered Foundation Models:{UI.RESET}")
         for k, meta in MODEL_METADATA.items():
             active_str = f" {UI.GREEN}[ACTIVE]{UI.RESET}" if getattr(cfg, "selected_model", "july") == k else ""
-            print(f"\n   {UI.BOLD}{UI.CYAN}• {meta['title']}{UI.RESET}{active_str}")
+            is_down = perm.is_model_present(k)
+            down_str = f"{UI.GREEN}Downloaded{UI.RESET}" if is_down else f"{UI.YELLOW}Not Downloaded{UI.RESET}"
+            print(f"\n   {UI.BOLD}{UI.CYAN}• {meta['title']}{UI.RESET}{active_str} — [{down_str}]")
             print(f"     Architecture  : {meta['architecture']}")
             print(f"     Parameters    : {meta['parameters']}")
             print(f"     Quantization  : {meta['quantization']}")
@@ -1335,6 +1344,29 @@ def cmd_model(args):
 
     if name:
         target = name.lower().strip()
+
+        # Handle "download [gravity]"
+        if target in ("download", "get"):
+            model_target = (target_arg or "gravity").lower().strip()
+            if perm.is_model_present(model_target):
+                print(f"\n {UI.GREEN}[✓] {model_target.upper()} LLM is already downloaded and verified on disk.{UI.RESET}\n")
+            elif coordinator.is_downloading(model_target):
+                print(f"\n {UI.YELLOW}[*] {model_target.upper()} LLM is currently downloading in the background.{UI.RESET}\n")
+            else:
+                print(f"\n {UI.CYAN}[*] Starting background download of {model_target.upper()} LLM from Cloudflare R2...{UI.RESET}")
+                coordinator._launch_background_download(model_target, auto_activate=True)
+                print(f" {UI.GREEN}[✓] Background acquisition started. July LLM remains active for inference.{UI.RESET}\n")
+            return
+
+        # Handle "cancel [gravity]"
+        if target in ("cancel", "stop"):
+            model_target = (target_arg or "gravity").lower().strip()
+            if coordinator.cancel_download(model_target):
+                print(f"\n {UI.GREEN}[✓] Cancelled download for {model_target.upper()} LLM. Partial data preserved.{UI.RESET}\n")
+            else:
+                print(f"\n {UI.YELLOW}[*] No active download found for {model_target.upper()} LLM.{UI.RESET}\n")
+            return
+
         matched = None
         for k in ("july", "gravity", "auto"):
             if target in (k, f"{k} llm", f"{k}_llm", f"mode_{k}"):
@@ -1350,12 +1382,129 @@ def cmd_model(args):
             meta = MODEL_METADATA[matched]
             print(f"\n {UI.GREEN}[✓] Configured active model:[/] {UI.BOLD}{meta['title']}{UI.RESET}")
             print(f"     {UI.GRAY}{meta['description']}{UI.RESET}\n")
+
+            if matched == "gravity" and not perm.is_model_present("gravity"):
+                print(f" {UI.CYAN}[JULY ACTIVE] [GRAVITY DOWNLOADING: 0%]{UI.RESET}")
+                print(f" {UI.BOLD}{UI.CYAN}JULY LLM:{UI.RESET} I'm July. Gravity is downloading in the background. You can continue chatting with me while it prepares.\n")
+                coordinator._launch_background_download("gravity", auto_activate=True)
+            elif matched in ("july", "gravity"):
+                if perm.is_model_present(matched):
+                    record_active_state(perm.get_model_file(matched), matched)
+                    print(f" {UI.GREEN}[✓] {matched.upper()} LLM mounted into persistent active memory.{UI.RESET}\n")
             return
         else:
-            print(f" {UI.RED}[!] Unknown model '{name}'. Available: july, gravity, auto, list{UI.RESET}\n")
+            print(f" {UI.RED}[!] Unknown model '{name}'. Available: july, gravity, auto, list, status, download, cancel{UI.RESET}\n")
             return
 
     interactive_select_model(cfg)
+
+
+def cmd_hardware(args=None):
+    """Displays comprehensive hardware and resource telemetry."""
+    UI.print_banner("Hardware & System Telemetry")
+    cfg = ClientConfig.load()
+    mid = getattr(cfg, "selected_model", "july")
+    telem = get_detailed_hardware_telemetry(mid)
+    print("\n" + render_hardware_card(telem) + "\n")
+
+
+def cmd_memory_report(args=None):
+    """Displays detailed RAM, VRAM, and memory persistence profile."""
+    UI.print_banner("Memory & VRAM Telemetry")
+    cfg = ClientConfig.load()
+    mid = getattr(cfg, "selected_model", "july")
+    telem = get_detailed_hardware_telemetry(mid)
+    try:
+        from .memory_engine import HierarchicalMemoryEngine
+        mem_count = len(HierarchicalMemoryEngine().get_all_active_memories())
+    except Exception:
+        mem_count = 0
+    print("\n" + render_memory_card(telem, mem_count) + "\n")
+
+
+def cmd_gpu(args=None):
+    """Displays GPU acceleration, VRAM allocation, and layer offloading report."""
+    UI.print_banner("GPU & CUDA Telemetry")
+    cfg = ClientConfig.load()
+    mid = getattr(cfg, "selected_model", "july")
+    telem = get_detailed_hardware_telemetry(mid)
+    print("\n" + render_gpu_card(telem) + "\n")
+
+
+def cmd_models(args=None):
+    """Displays table of all registered foundation models."""
+    cmd_model(argparse.Namespace(name="list", list=True, status=False, target=None))
+
+
+def cmd_voice(args=None):
+    """Configures Whisper STT voice input and multilingual TTS voice output."""
+    v_coord = CLIHardwareVoiceCoordinator.get_instance()
+    action = getattr(args, "action", None)
+    value = getattr(args, "value", None)
+
+    if not action:
+        stt_stat = "ON" if v_coord.stt.is_enabled else "OFF"
+        tts_stat = "ON" if v_coord.tts.is_enabled else "OFF"
+        print(f"\n {UI.BOLD}{UI.CYAN}Voice Configuration:{UI.RESET}")
+        print(f"   Whisper STT Input : {UI.GREEN if v_coord.stt.is_enabled else UI.GRAY}{stt_stat}{UI.RESET} (Model: {v_coord.stt.model_name}, Lang: {v_coord.stt.language})")
+        print(f"   TTS Speech Output : {UI.GREEN if v_coord.tts.is_enabled else UI.GRAY}{tts_stat}{UI.RESET} (Backend: {v_coord.tts.backend}, Speed: {v_coord.tts.speed} wpm)\n")
+        print(f"   Commands: {UI.CYAN}/voice on{UI.RESET}, {UI.CYAN}/voice off{UI.RESET}, {UI.CYAN}/voice input{UI.RESET}, {UI.CYAN}/voice language <code>{UI.RESET}, {UI.CYAN}/voice model <size>{UI.RESET}")
+        print(f"             {UI.CYAN}/voice output on{UI.RESET}, {UI.CYAN}/voice output off{UI.RESET}, {UI.CYAN}/voice speed <wpm>{UI.RESET}, {UI.CYAN}/voice stop{UI.RESET}\n")
+        return
+
+    act = action.lower()
+    if act == "on":
+        v_coord.stt.is_enabled = True
+        print(f"\n {UI.GREEN}[✓] Whisper voice input enabled.{UI.RESET}\n")
+    elif act == "off":
+        v_coord.stt.is_enabled = False
+        print(f"\n {UI.YELLOW}[*] Whisper voice input disabled.{UI.RESET}\n")
+    elif act == "input":
+        print(f"\n {UI.MAGENTA}🎙️  [WHISPER VOICE INPUT]{UI.RESET} Listening for 5 seconds... Speak now!")
+        audio = v_coord.stt.record_audio(5.0)
+        if audio is not None:
+            txt, lang = v_coord.stt.transcribe_audio(audio)
+            print(f"\n {UI.GREEN}[Whisper STT ({lang})]:{UI.RESET} \"{txt}\"\n")
+    elif act in ("language", "lang"):
+        if value:
+            v_coord.stt.set_language(value)
+            print(f"\n {UI.GREEN}[✓] Whisper language set to: {value.upper()}{UI.RESET}\n")
+        else:
+            print(f"\n {UI.CYAN}Whisper language: {v_coord.stt.language.upper()}{UI.RESET}\n")
+    elif act in ("model", "size"):
+        if value:
+            try:
+                mod = v_coord.stt.set_model(value)
+                print(f"\n {UI.GREEN}[✓] Whisper model size set to: {mod}{UI.RESET}\n")
+            except Exception as e:
+                print(f"\n {UI.RED}[!] {e}{UI.RESET}\n")
+        else:
+            print(f"\n {UI.CYAN}Whisper model size: {v_coord.stt.model_name}{UI.RESET}\n")
+    elif act == "output":
+        sub_act = (value or "").lower()
+        if sub_act == "on":
+            v_coord.tts.is_enabled = True
+            print(f"\n {UI.GREEN}[✓] TTS Voice Output enabled.{UI.RESET} (Backend: {v_coord.tts.backend})\n")
+        elif sub_act == "off":
+            v_coord.tts.is_enabled = False
+            v_coord.tts.stop()
+            print(f"\n {UI.YELLOW}[*] TTS Voice Output disabled.{UI.RESET}\n")
+        else:
+            print(f"\n Usage: july voice output on | off\n")
+    elif act in ("speed", "rate"):
+        if value:
+            try:
+                spd = v_coord.tts.set_speed(int(value))
+                print(f"\n {UI.GREEN}[✓] TTS speed set to: {spd} wpm{UI.RESET}\n")
+            except ValueError:
+                print(f"\n {UI.RED}[!] Speed must be an integer (e.g. 180).{UI.RESET}\n")
+        else:
+            print(f"\n {UI.CYAN}TTS speed: {v_coord.tts.speed} wpm{UI.RESET}\n")
+    elif act in ("stop", "halt", "mute"):
+        v_coord.tts.stop()
+        print(f"\n {UI.GREEN}[✓] TTS speech stopped.{UI.RESET}\n")
+    else:
+        print(f"\n {UI.YELLOW}Unknown voice action '{action}'. Options: on, off, input, language, model, output on|off, speed, stop{UI.RESET}\n")
 
 
 def cmd_chat(args):
@@ -1453,8 +1602,27 @@ def cmd_chat(args):
         print(f"  {UI.GRAY}User Account:{UI.RESET} {UI.GREEN}{user_email}{UI.RESET} {UI.GRAY}[{UI.CYAN}{user_tier.upper()}{UI.GRAY} Plan • Model Access Granted]{UI.RESET}")
         print(f"  {UI.GRAY}Active Model:{UI.RESET} {UI.CYAN}{active_mode} LLM{UI.RESET} {UI.GRAY}(Type {UI.YELLOW}/model{UI.GRAY} to switch models){UI.RESET}")
         print(f"  {UI.GRAY}Personality :{UI.RESET} {UI.YELLOW}{cfg.personality.replace('_', ' ').title()}{UI.RESET}  {UI.GRAY}Thinking:{UI.RESET} {UI.GREEN}{getattr(cfg, 'thinking_mode', 'expanded').upper()}{UI.RESET}")
-        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/model{UI.RESET}, {UI.CYAN}/sandbox{UI.RESET}, {UI.CYAN}/think{UI.RESET}, {UI.CYAN}/help{UI.RESET}, {UI.CYAN}/paste{UI.RESET}, {UI.CYAN}/file <path>{UI.RESET}, {UI.CYAN}/visual{UI.RESET}, {UI.CYAN}/clear{UI.RESET}, {UI.CYAN}/status{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
+        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/model{UI.RESET}, {UI.CYAN}/hardware{UI.RESET}, {UI.CYAN}/memory{UI.RESET}, {UI.CYAN}/gpu{UI.RESET}, {UI.CYAN}/voice{UI.RESET}, {UI.CYAN}/think{UI.RESET}, {UI.CYAN}/help{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
         print(f"{UI.GRAY}─────────────────────────────────────────────────────────────────────────────{UI.RESET}\n")
+
+        # Premium Status Box (Requirement 7)
+        v_coord = CLIHardwareVoiceCoordinator.get_instance()
+        p_stor = PermanentModelStorage()
+        grav_stat = "Ready" if p_stor.is_model_present("gravity") else "Not Downloaded"
+        telem = get_detailed_hardware_telemetry(active_mode.lower(), runtime)
+        box = render_cli_status_box(
+            active_model=active_mode,
+            gravity_status=grav_stat,
+            download_pct=0.0,
+            speed_mb=0.0,
+            ram_used_gb=telem["ram_used_gb"],
+            ram_total_gb=telem["ram_total_gb"],
+            vram_used_gb=telem["vram_used_gb"],
+            vram_total_gb=telem["vram_total_gb"],
+            voice_stt=v_coord.stt.is_enabled,
+            voice_tts=v_coord.tts.is_enabled
+        )
+        print(box + "\n")
 
     runtime.load_model(active_path)
 
@@ -1529,10 +1697,21 @@ def cmd_chat(args):
     # Interactive REPL
     session_id = f"cli_{int(time.time())}"
     last_visual_file: Path | None = None
+    voice_coord = CLIHardwareVoiceCoordinator.get_instance()
+    perm_storage = PermanentModelStorage()
+    from .dual_engine import DualModelCoordinator
+    coordinator = DualModelCoordinator(config=cfg, runtime=runtime, storage=perm_storage)
 
     while True:
         try:
-            user_input = read_terminal_input(f"{UI.BOLD}{UI.GREEN}❯ You{UI.RESET} {UI.GRAY}›{UI.RESET} ").strip()
+            # Render background download status line if active (non-destructive)
+            if coordinator.is_downloading("gravity"):
+                d_stat = coordinator.state_mgr.modelInitializationStatus.get("gravity", {})
+                pct = d_stat.get("percent", 0.0)
+                print(f"  {UI.CYAN}[JULY ACTIVE] [GRAVITY DOWNLOADING: {pct:.0f}%]{UI.RESET}")
+
+            prompt_label = f"{UI.BOLD}{UI.GREEN}❯ You{UI.RESET} {UI.GRAY}(Voice/Text) ›{UI.RESET} " if voice_coord.stt.is_enabled else f"{UI.BOLD}{UI.GREEN}❯ You{UI.RESET} {UI.GRAY}›{UI.RESET} "
+            user_input = read_terminal_input(prompt_label).strip()
             if not user_input:
                 continue
 
@@ -1549,20 +1728,40 @@ def cmd_chat(args):
                     print(f"\n {UI.BOLD}{UI.CYAN}Available Commands:{UI.RESET}")
                     print(f"   {UI.CYAN}/whoami{UI.RESET}         - View active authenticated identity, tier & creator badge")
                     print(f"   {UI.CYAN}/context{UI.RESET}        - View live runtime context (Date, Time, Location & Host)")
-                    print(f"   {UI.CYAN}/model [name]{UI.RESET}   - Select or switch foundation model (july, gravity, auto, list)")
+                    print(f"   {UI.CYAN}/model <july|gravity|download|cancel|status>{UI.RESET} - Select or background-download model")
+                    print(f"   {UI.CYAN}/models{UI.RESET}                 - List all registered models and specifications")
+                    print(f"   {UI.CYAN}/hardware{UI.RESET}               - Real-time CPU, RAM, GPU, VRAM & utilization telemetry")
+                    print(f"   {UI.CYAN}/memory{UI.RESET}                 - Detailed RAM, VRAM, and model memory breakdown")
+                    print(f"   {UI.CYAN}/gpu{UI.RESET}                    - GPU acceleration, VRAM allocation, and layer offloading")
+                    print(f"   {UI.CYAN}/voice <on|off|input|lang|model>{UI.RESET} - Whisper STT microphone input & language")
+                    print(f"   {UI.CYAN}/voice output <on|off|speed|stop>{UI.RESET} - Multilingual TTS voice response synthesis")
                     print(f"   {UI.CYAN}/sandbox [act]{UI.RESET}   - Windows Sandbox status and isolation control (status, reset, run)")
                     print(f"   {UI.CYAN}/think [mode]{UI.RESET}   - Highlight model thinking (expanded, collapsed, hidden)")
                     print(f"   {UI.CYAN}/paste, /bulk{UI.RESET}   - Enter multi-line bulk prompt mode (finish with /send)")
                     print(f"   {UI.CYAN}/file <path>{UI.RESET}    - Load entire text file as prompt")
-                    print(f"   {UI.CYAN}\"\"\" <text> \"\"\"{UI.RESET} - Triple-quote multi-line prompt anytime")
                     print(f"   {UI.CYAN}/visual{UI.RESET}         - Show On-Demand Visual Response Engine status and visual capabilities")
                     print(f"   {UI.CYAN}/studio{UI.RESET}         - Open HS AI Studio Portal link")
                     print(f"   {UI.CYAN}/clear{UI.RESET}          - Clear terminal and reset chat history")
                     print(f"   {UI.CYAN}/status{UI.RESET}         - Show hardware, memory, and model telemetry")
-                    print(f"   {UI.CYAN}/memory{UI.RESET}         - View active long-term persistent memories")
                     print(f"   {UI.CYAN}/feedback{UI.RESET}       - Record feedback or failure report for continuous evolution")
-                    print(f"   {UI.CYAN}/mode <name>{UI.RESET}   - Switch personality (precision_engineer, research_scientist, software_architect, tutor)")
+                    print(f"   {UI.CYAN}/mode <name>{UI.RESET}   - Switch personality profile")
                     print(f"   {UI.CYAN}exit, quit{UI.RESET}      - Exit and safely reclaim RAM\n")
+                    continue
+
+                if c == "/hardware":
+                    cmd_hardware()
+                    continue
+
+                if c in ("/memory", "/mem"):
+                    cmd_memory_report()
+                    continue
+
+                if c == "/gpu":
+                    cmd_gpu()
+                    continue
+
+                if c == "/models":
+                    cmd_models()
                     continue
 
                 if c == "/sandbox":
@@ -1732,57 +1931,194 @@ def cmd_chat(args):
                     continue
 
                 if c in ("/model", "/models"):
+                    if c == "/models" or (len(cmd_parts) > 1 and cmd_parts[1].lower() in ("list", "ls")):
+                        cmd_models()
+                        continue
+
                     if len(cmd_parts) > 1:
                         sub = cmd_parts[1].lower().strip()
-                        if sub in ("list", "ls"):
-                            print(f"\n  {UI.BOLD}{UI.CYAN}Registered Foundation Models:{UI.RESET}")
-                            for mk, mm in MODEL_METADATA.items():
-                                cur = f" {UI.GREEN}[ACTIVE]{UI.RESET}" if getattr(cfg, "selected_model", "july") == mk else ""
-                                print(f"   • {UI.BOLD}{mm['title']}{UI.RESET}{cur} — {mm['description']}")
-                            print()
+                        if sub in ("status", "telemetry"):
+                            cmd_status()
                             continue
+
+                        if sub in ("download", "get"):
+                            target_dl = cmd_parts[2].lower().strip() if len(cmd_parts) > 2 else "gravity"
+                            if perm_storage.is_model_present(target_dl):
+                                print(f"\n  {UI.GREEN}[✓] {target_dl.upper()} LLM is already downloaded and verified on disk.{UI.RESET}\n")
+                            elif coordinator.is_downloading(target_dl):
+                                print(f"\n  {UI.YELLOW}[*] {target_dl.upper()} LLM is currently downloading in the background.{UI.RESET}\n")
+                            else:
+                                print(f"\n  {UI.CYAN}[*] Starting background download of {target_dl.upper()} LLM from Cloudflare R2...{UI.RESET}")
+                                coordinator._launch_background_download(target_dl, auto_activate=True)
+                                print(f"  {UI.GREEN}[✓] Background acquisition started. {runtime.current_model_id.upper()} LLM remains operational for chat.{UI.RESET}\n")
+                            continue
+
+                        if sub in ("cancel", "stop"):
+                            target_c = cmd_parts[2].lower().strip() if len(cmd_parts) > 2 else "gravity"
+                            if coordinator.cancel_download(target_c):
+                                print(f"\n  {UI.GREEN}[✓] Background download for {target_c.upper()} has been cancelled. Partial chunks preserved for safe resumption.{UI.RESET}\n")
+                            else:
+                                print(f"\n  {UI.YELLOW}[*] No active background download found for {target_c.upper()}.{UI.RESET}\n")
+                            continue
+
                         matched_m = None
                         if sub in ("july", "1", "j"): matched_m = "july"
                         elif sub in ("gravity", "2", "g"): matched_m = "gravity"
                         elif sub in ("auto", "3", "a"): matched_m = "auto"
 
-                        if matched_m:
-                            cfg.selected_model = matched_m
-                            cfg.save()
-                            meta = MODEL_METADATA[matched_m]
-                            print(f"\n  {UI.GREEN}[✓] Selected Model Preference:[/] {UI.BOLD}{meta['title']}{UI.RESET}")
-                            print(f"      {UI.GRAY}{meta['description']}{UI.RESET}\n")
-                            if matched_m in ("july", "gravity"):
-                                from .storage import PermanentModelStorage
-                                perm = PermanentModelStorage()
-                                if perm.is_model_present(matched_m):
-                                    runtime.switch_model(matched_m, model_path=perm.get_model_file(matched_m))
-                                    record_active_state(perm.get_model_file(matched_m), matched_m)
-                                    print(f"  {UI.GREEN}[✓] {matched_m.upper()} LLM mounted into memory and active.{UI.RESET}\n")
+                        if matched_m == "july":
+                            if runtime.current_model_id == "july" and runtime.is_loaded():
+                                print(f"\n  {UI.CYAN}[i] July LLM is already active.{UI.RESET}\n")
+                            else:
+                                print(f"\n  {UI.YELLOW}[*] Switching active inference engine to JULY LLM...{UI.RESET}")
+                                coordinator._activate_local_model("july")
+                                cfg.selected_model = "july"
+                                cfg.save()
+                                print(f"  {UI.GREEN}[✓] JULY LLM mounted into memory and active.{UI.RESET}\n")
+                            continue
+
+                        elif matched_m == "gravity":
+                            if perm_storage.is_model_present("gravity"):
+                                if runtime.current_model_id == "gravity" and runtime.is_loaded():
+                                    print(f"\n  {UI.CYAN}[i] Gravity LLM is already active.{UI.RESET}\n")
                                 else:
-                                    print(f"  {UI.YELLOW}[*] {matched_m.upper()} LLM is not downloaded on this machine.{UI.RESET}")
-                                    print(f"  {UI.CYAN}[*] Starting background download. You can continue chatting with {runtime.current_model_id.upper()}!{UI.RESET}\n")
-                                    from .dual_engine import DualModelCoordinator
-                                    coord = DualModelCoordinator(config=cfg, runtime=runtime)
-                                    coord.select_model(matched_m)
+                                    print(f"\n  {UI.YELLOW}[*] Switching active inference engine to GRAVITY LLM...{UI.RESET}")
+                                    try:
+                                        coordinator._activate_local_model("gravity")
+                                        cfg.selected_model = "gravity"
+                                        cfg.save()
+                                        print(f"  {UI.GREEN}[✓] GRAVITY LLM mounted into memory and active.{UI.RESET}\n")
+                                    except Exception as e:
+                                        print(f"  {UI.RED}[!] Could not activate Gravity: {e}{UI.RESET}\n")
+                            else:
+                                # Gravity is NOT downloaded!
+                                # 1. Keep July running as active inference engine
+                                if not runtime.is_loaded() or runtime.current_model_id != "july":
+                                    coordinator._activate_local_model("july")
+                                # 2. Start Gravity downloading asynchronously in background
+                                coordinator._launch_background_download("gravity", auto_activate=True)
+                                # 3. Display download progress status line
+                                print(f"\n  {UI.CYAN}[JULY ACTIVE] [GRAVITY DOWNLOADING: 0%]{UI.RESET}")
+                                # 4. July responds
+                                jul_greeting = "I'm July. Gravity is downloading in the background. You can continue chatting with me while it prepares."
+                                print(f"  {UI.BOLD}{UI.CYAN}JULY LLM:{UI.RESET} {jul_greeting}\n")
+                                if voice_coord.tts.is_enabled:
+                                    voice_coord.tts.speak(jul_greeting, non_blocking=True)
+                            continue
+
+                        elif matched_m == "auto":
+                            cfg.selected_model = "auto"
+                            cfg.save()
+                            print(f"\n  {UI.GREEN}[✓] Selected Model Preference:[/] {UI.BOLD}AUTO DUAL ROUTER{UI.RESET}\n")
+                            continue
                         else:
-                            print(f"\n  {UI.RED}[!] Unknown model name.{UI.RESET} Available: {UI.CYAN}/model july{UI.RESET}, {UI.CYAN}/model gravity{UI.RESET}, {UI.CYAN}/model auto{UI.RESET}, {UI.CYAN}/model list{UI.RESET}\n")
+                            print(f"\n  {UI.RED}[!] Unknown model name '{sub}'.{UI.RESET} Available: {UI.CYAN}/model july{UI.RESET}, {UI.CYAN}/model gravity{UI.RESET}, {UI.CYAN}/model auto{UI.RESET}, {UI.CYAN}/model list{UI.RESET}, {UI.CYAN}/model download gravity{UI.RESET}, {UI.CYAN}/model cancel gravity{UI.RESET}\n")
+                            continue
                     else:
                         new_m = interactive_select_model(cfg)
                         if new_m and new_m in ("july", "gravity"):
-                            from .storage import PermanentModelStorage
-                            perm = PermanentModelStorage()
-                            if perm.is_model_present(new_m):
-                                runtime.switch_model(new_m, model_path=perm.get_model_file(new_m))
-                                record_active_state(perm.get_model_file(new_m), new_m)
+                            if perm_storage.is_model_present(new_m):
+                                coordinator._activate_local_model(new_m)
                                 print(f"  {UI.GREEN}[✓] {new_m.upper()} LLM mounted into memory and active.{UI.RESET}\n")
                             else:
-                                print(f"  {UI.YELLOW}[*] {new_m.upper()} LLM is not downloaded on this machine.{UI.RESET}")
-                                print(f"  {UI.CYAN}[*] Starting background download. You can continue chatting with {runtime.current_model_id.upper()}!{UI.RESET}\n")
-                                from .dual_engine import DualModelCoordinator
-                                coord = DualModelCoordinator(config=cfg, runtime=runtime)
-                                coord.select_model(new_m)
-                    continue
+                                print(f"\n  {UI.CYAN}[JULY ACTIVE] [GRAVITY DOWNLOADING: 0%]{UI.RESET}")
+                                jul_greeting = "I'm July. Gravity is downloading in the background. You can continue chatting with me while it prepares."
+                                print(f"  {UI.BOLD}{UI.CYAN}JULY LLM:{UI.RESET} {jul_greeting}\n")
+                                coordinator._launch_background_download(new_m, auto_activate=True)
+                        continue
+
+                if c == "/voice":
+                    if len(cmd_parts) > 1:
+                        v_sub = cmd_parts[1].lower().strip()
+                        if v_sub == "on":
+                            voice_coord.stt.is_enabled = True
+                            print(f"\n  {UI.GREEN}[✓] Whisper voice input enabled.{UI.RESET} Type {UI.CYAN}/voice input{UI.RESET} to speak.\n")
+                            continue
+                        elif v_sub == "off":
+                            voice_coord.stt.is_enabled = False
+                            print(f"\n  {UI.YELLOW}[*] Whisper voice input disabled.{UI.RESET}\n")
+                            continue
+                        elif v_sub == "input":
+                            print(f"\n  {UI.MAGENTA}🎙️  [WHISPER VOICE INPUT]{UI.RESET} Listening for 5 seconds... Speak now!")
+                            try:
+                                audio_rec = voice_coord.stt.record_audio(duration_seconds=5.0)
+                                if audio_rec is not None:
+                                    print(f"  {UI.CYAN}⏳ Transcribing audio with Whisper ({voice_coord.stt.model_name})...{UI.RESET}")
+                                    trans_text, det_lang = voice_coord.stt.transcribe_audio(audio_rec)
+                                    if trans_text:
+                                        print(f"\n  {UI.GREEN}[Whisper STT ({det_lang})]:{UI.RESET} \"{trans_text}\"")
+                                        try:
+                                            edit_prompt = input(f"  {UI.GRAY}Press Enter to submit or type correction: {UI.RESET}").strip()
+                                            final_prompt = edit_prompt if edit_prompt else trans_text
+                                        except (EOFError, KeyboardInterrupt):
+                                            final_prompt = trans_text
+                                        user_input = final_prompt
+                                    else:
+                                        print(f"  {UI.YELLOW}[*] No speech detected in audio.{UI.RESET}\n")
+                                        continue
+                                else:
+                                    print(f"  {UI.RED}[!] Could not capture audio from microphone.{UI.RESET}\n")
+                                    continue
+                            except Exception as v_err:
+                                print(f"  {UI.RED}[!] Voice input error:{UI.RESET} {v_err}. Falling back to keyboard.\n")
+                                continue
+                        elif v_sub in ("language", "lang"):
+                            if len(cmd_parts) > 2:
+                                new_lang = voice_coord.stt.set_language(cmd_parts[2])
+                                print(f"\n  {UI.GREEN}[✓] Whisper recognition language set to:[/] {UI.BOLD}{new_lang.upper()}{UI.RESET}\n")
+                            else:
+                                print(f"\n  {UI.CYAN}Whisper current language:[/] {UI.BOLD}{voice_coord.stt.language.upper()}{UI.RESET}\n")
+                            continue
+                        elif v_sub in ("model", "size"):
+                            if len(cmd_parts) > 2:
+                                try:
+                                    new_mod = voice_coord.stt.set_model(cmd_parts[2])
+                                    print(f"\n  {UI.GREEN}[✓] Whisper model size set to:[/] {UI.BOLD}{new_mod}{UI.RESET}\n")
+                                except Exception as m_err:
+                                    print(f"\n  {UI.RED}[!] {m_err}{UI.RESET}\n")
+                            else:
+                                print(f"\n  {UI.CYAN}Whisper current model:[/] {UI.BOLD}{voice_coord.stt.model_name}{UI.RESET}\n")
+                            continue
+                        elif v_sub == "output":
+                            if len(cmd_parts) > 2:
+                                out_act = cmd_parts[2].lower().strip()
+                                if out_act == "on":
+                                    voice_coord.tts.is_enabled = True
+                                    print(f"\n  {UI.GREEN}[✓] TTS Voice Output enabled.{UI.RESET} Responses will be spoken aloud ({voice_coord.tts.backend}).\n")
+                                elif out_act == "off":
+                                    voice_coord.tts.is_enabled = False
+                                    voice_coord.tts.stop()
+                                    print(f"\n  {UI.YELLOW}[*] TTS Voice Output disabled.{UI.RESET}\n")
+                                else:
+                                    print(f"\n  {UI.YELLOW}Usage:{UI.RESET} /voice output on | /voice output off\n")
+                            else:
+                                cur_stat = "ON" if voice_coord.tts.is_enabled else "OFF"
+                                print(f"\n  {UI.CYAN}TTS Voice Output:[/] {UI.BOLD}{cur_stat}{UI.RESET} (Backend: {voice_coord.tts.backend})\n")
+                            continue
+                        elif v_sub in ("speed", "rate"):
+                            if len(cmd_parts) > 2:
+                                try:
+                                    new_spd = voice_coord.tts.set_speed(int(cmd_parts[2]))
+                                    print(f"\n  {UI.GREEN}[✓] TTS speech speed set to:[/] {UI.BOLD}{new_spd} wpm{UI.RESET}\n")
+                                except ValueError:
+                                    print(f"\n  {UI.RED}[!] Speed must be an integer (e.g. 180).{UI.RESET}\n")
+                            else:
+                                print(f"\n  {UI.CYAN}TTS speed:[/] {UI.BOLD}{voice_coord.tts.speed} wpm{UI.RESET}\n")
+                            continue
+                        elif v_sub in ("stop", "halt", "mute"):
+                            voice_coord.tts.stop()
+                            print(f"\n  {UI.GREEN}[✓] TTS audio playback stopped.{UI.RESET}\n")
+                            continue
+                        else:
+                            print(f"\n  {UI.YELLOW}Unknown /voice command.{UI.RESET} Options: on, off, input, language, model, output on|off, speed, stop\n")
+                            continue
+                    else:
+                        stt_stat = "ON" if voice_coord.stt.is_enabled else "OFF"
+                        tts_stat = "ON" if voice_coord.tts.is_enabled else "OFF"
+                        print(f"\n  {UI.BOLD}{UI.CYAN}Voice Configuration:{UI.RESET}")
+                        print(f"   Whisper STT Input : {UI.GREEN if voice_coord.stt.is_enabled else UI.GRAY}{stt_stat}{UI.RESET} (Model: {voice_coord.stt.model_name}, Lang: {voice_coord.stt.language})")
+                        print(f"   TTS Speech Output : {UI.GREEN if voice_coord.tts.is_enabled else UI.GRAY}{tts_stat}{UI.RESET} (Backend: {voice_coord.tts.backend}, Speed: {voice_coord.tts.speed} wpm)\n")
+                        continue
 
             # Render background download status if any active
             from .state_manager import DualModelStateManager
@@ -1844,6 +2180,10 @@ def cmd_chat(args):
                 ClerkAuthManager().record_usage(active_mid, len(user_input.split()), tok_count)
             except Exception:
                 pass
+
+            # Multilingual TTS Speech Synthesis
+            if voice_coord.tts.is_enabled:
+                voice_coord.tts.speak(full_text, non_blocking=True)
 
             # Autonomous Visual Representation Rendering
             full_text = "".join(full_response)
@@ -2047,9 +2387,19 @@ def main():
     subparsers.add_parser("status", help="Display authentication, model, and hardware telemetry")
 
     model_p = subparsers.add_parser("model", help="Select or switch active foundation model (JULY LLM, GRAVITY LLM, AUTO)")
-    model_p.add_argument("name", nargs="?", help="Model to activate (july, gravity, auto, list, status)")
+    model_p.add_argument("name", nargs="?", help="Model to activate (july, gravity, auto, list, status, download, cancel)")
+    model_p.add_argument("target", nargs="?", help="Target model for download or cancel commands (e.g. gravity)")
     model_p.add_argument("-l", "--list", action="store_true", help="List all available models and their specifications")
     model_p.add_argument("-s", "--status", action="store_true", help="Show current active model status and telemetry")
+
+    subparsers.add_parser("models", help="List all registered models and their specifications")
+    subparsers.add_parser("hardware", help="Display real-time CPU, RAM, GPU, and VRAM telemetry")
+    subparsers.add_parser("memory", help="Display RAM and VRAM memory consumption report")
+    subparsers.add_parser("gpu", help="Display GPU acceleration, VRAM allocation, and layer offloading report")
+
+    voice_p = subparsers.add_parser("voice", help="Whisper voice input and multilingual TTS voice output controls")
+    voice_p.add_argument("action", nargs="?", help="Action: on, off, input, language, model, output, speed, stop")
+    voice_p.add_argument("value", nargs="?", help="Parameter value for language, model, output, or speed")
 
     load_p = subparsers.add_parser("load", help="Retrieve GGUF into ephemeral RAM-backed storage")
     load_p.add_argument("-M", "--model", help="Specific model to load: july or gravity")
@@ -2105,6 +2455,16 @@ def main():
         cmd_status()
     elif args.command == "model":
         cmd_model(args)
+    elif args.command == "models":
+        cmd_models(args)
+    elif args.command == "hardware":
+        cmd_hardware(args)
+    elif args.command == "memory":
+        cmd_memory_report(args)
+    elif args.command == "gpu":
+        cmd_gpu(args)
+    elif args.command == "voice":
+        cmd_voice(args)
     elif args.command == "load":
         cmd_load(args)
     elif args.command in ("personality", "mode"):

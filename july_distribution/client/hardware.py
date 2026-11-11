@@ -66,6 +66,118 @@ def detect_client_hardware() -> Dict[str, Any]:
     }
 
 
+def get_detailed_hardware_telemetry(active_model_id: str = "july", runtime: Any = None) -> Dict[str, Any]:
+    """
+    Produces complete live hardware and resource consumption metrics:
+    - Total, Available, and Used System RAM.
+    - Total, Available, and Used VRAM.
+    - GPU utilization percentage.
+    - CPU utilization percentage.
+    - Active Model identification and RAM/VRAM consumption.
+    - Dynamic offload strategy and context length.
+    """
+    import subprocess
+    ram = psutil.virtual_memory()
+    total_ram_gb = round(ram.total / (1024**3), 2)
+    avail_ram_gb = round(ram.available / (1024**3), 2)
+    used_ram_gb = round((ram.total - ram.available) / (1024**3), 2)
+    cpu_percent = psutil.cpu_percent(interval=0.05)
+    cpu_threads = os.cpu_count() or 4
+
+    gpu_name = "CPU Only"
+    gpu_available = False
+    vram_total_gb = 0.0
+    vram_used_gb = 0.0
+    vram_avail_gb = 0.0
+    gpu_util_percent = 0.0
+
+    # Query nvidia-smi for real-time telemetry if available
+    try:
+        res = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,utilization.gpu,memory.total,memory.used,memory.free", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            parts = [p.strip() for p in res.stdout.strip().split("\n")[0].split(",")]
+            if len(parts) >= 5:
+                gpu_name = parts[0]
+                gpu_util_percent = float(parts[1])
+                vram_total_gb = round(float(parts[2]) / 1024, 2)
+                vram_used_gb = round(float(parts[3]) / 1024, 2)
+                vram_avail_gb = round(float(parts[4]) / 1024, 2)
+                gpu_available = True
+    except Exception:
+        pass
+
+    # Fallback to PyTorch CUDA telemetry
+    if not gpu_available:
+        try:
+            import torch
+            if torch.cuda.is_available():
+                gpu_available = True
+                gpu_name = torch.cuda.get_device_name(0)
+                free_b, total_b = torch.cuda.mem_get_info(0)
+                vram_total_gb = round(total_b / (1024**3), 2)
+                vram_avail_gb = round(free_b / (1024**3), 2)
+                vram_used_gb = round((total_b - free_b) / (1024**3), 2)
+                gpu_util_percent = 0.0
+        except Exception:
+            pass
+
+    # Model process memory consumption
+    process_mem_gb = 0.0
+    try:
+        proc = psutil.Process()
+        process_mem_gb = round(proc.memory_info().rss / (1024**3), 2)
+    except Exception:
+        pass
+
+    # Model parameters & offload strategy
+    model_norm = (active_model_id or "july").lower()
+    if model_norm == "gravity":
+        model_title = "GRAVITY (Heavyweight 7B+ Reasoning Model)"
+        model_size_bytes = 5629108096
+        total_layers = 32
+        context_len = 4096
+    else:
+        model_title = "JULY (Lightweight 3B Fast AI)"
+        model_size_bytes = 2019377888
+        total_layers = 28
+        context_len = 4096
+
+    from .lifecycle import HardwareMemoryBudgeter
+    budget = HardwareMemoryBudgeter.profile_and_budget(
+        model_size_bytes=model_size_bytes,
+        total_layers=total_layers,
+        target_context=context_len,
+        force_cpu=(not gpu_available)
+    )
+
+    return {
+        "ram_total_gb": total_ram_gb,
+        "ram_available_gb": avail_ram_gb,
+        "ram_used_gb": used_ram_gb,
+        "cpu_util_percent": cpu_percent,
+        "cpu_threads": cpu_threads,
+        "gpu_available": gpu_available,
+        "gpu_name": gpu_name,
+        "gpu_util_percent": gpu_util_percent,
+        "vram_total_gb": vram_total_gb,
+        "vram_used_gb": vram_used_gb,
+        "vram_available_gb": vram_avail_gb,
+        "active_model": active_model_id.upper(),
+        "active_model_title": model_title,
+        "model_memory_gb": process_mem_gb,
+        "offload_strategy": budget["offload_strategy"],
+        "recommended_gpu_layers": budget["recommended_gpu_layers"],
+        "total_layers": total_layers,
+        "context_length": context_len,
+        "recommended_threads": budget["recommended_threads"]
+    }
+
+
 def get_device_identity() -> Dict[str, str]:
     """Generates a stable hardware device identifier on Windows."""
     import platform
