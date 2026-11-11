@@ -131,14 +131,31 @@ Register-EngineEvent -SourceIdentifier 'PowerShell.Exiting' -Action {
     & $p -m july_distribution.client.cli unload | Out-Null
 } -ErrorAction SilentlyContinue | Out-Null
 
-# [5] Load Model into RAM and Run Chat with Guaranteed Clean-up
-Write-Host ""
-Write-Host " [⚡] [3/4] Initializing Ephemeral RAM Model..." -ForegroundColor Green
-if ($Model) {
-    Invoke-JulyCli load --model $Model
-} else {
-    Invoke-JulyCli load
+# [5] Foundation Model Selection & Ephemeral RAM Initialization
+if (-not $Model) {
+    if ($env:JULY_MODEL) {
+        $Model = $env:JULY_MODEL
+    } else {
+        Write-Host ""
+        Write-Host " ┌──────────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
+        Write-Host " │                    FOUNDATION MODEL SELECTION                    │" -ForegroundColor White
+        Write-Host " │  [1]  🌟  July LLM (General Intelligence & Agentic Reasoning)     │" -ForegroundColor Cyan
+        Write-Host " │  [2]  🌌  Gravity LLM (Deep Multi-Model Reasoning Engine)        │" -ForegroundColor Yellow
+        Write-Host " └──────────────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
+        $mChoice = Read-Host " Select Foundation Model [1 or 2] (Default: 2 - Gravity)"
+        if ($mChoice -eq '1') {
+            $Model = "july"
+        } else {
+            $Model = "gravity"
+        }
+    }
 }
+
+Invoke-JulyCli config --set selected_model $Model | Out-Null
+
+Write-Host ""
+Write-Host " [⚡] [3/4] Initializing Ephemeral RAM Model ($($Model.ToUpper()) LLM)..." -ForegroundColor Green
+Invoke-JulyCli load --model $Model
 if ($LASTEXITCODE -ne 0) {
     Write-Host " [!] Could not initialize model." -ForegroundColor Red
     return

@@ -360,7 +360,8 @@ class DirectR2ParallelDownloader:
             while not stop_reporter.is_set():
                 now = time.time()
                 done_count = len(state.completed_chunks)
-                done_bytes = sum(c.length for c in chunks if c.index in state.completed_chunks)
+                initial_bytes = sum(c.length for c in chunks if c.index in state.completed_chunks)
+                done_bytes = min(total_size, initial_bytes + self.bytes_transferred_this_session)
                 pct = (done_bytes / max(1, total_size)) * 100
                 speed = self.get_current_speed_mbps()
                 rem_bytes = max(0, total_size - done_bytes)
