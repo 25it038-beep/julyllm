@@ -712,14 +712,6 @@ def cmd_chat(args):
 
     runtime = ClientInferenceRuntime(cfg, storage, customizer)
 
-    # Check for piped input or file parameter
-    piped_prompt = None
-    if not sys.stdin.isatty():
-        try:
-            piped_prompt = sys.stdin.read().strip()
-        except Exception:
-            pass
-
     prompt_to_run = getattr(args, "prompt", None)
     file_arg = getattr(args, "file", None)
     if file_arg:
@@ -734,8 +726,16 @@ def cmd_chat(args):
         else:
             print(f" {UI.RED}[!] File not found:{UI.RESET} {file_arg}")
             sys.exit(1)
-    elif piped_prompt:
-        prompt_to_run = piped_prompt
+    elif not prompt_to_run and not sys.stdin.isatty():
+        try:
+            # Only read piped stdin if no direct prompt provided
+            import select
+            if hasattr(select, "select"):
+                r, _, _ = select.select([sys.stdin], [], [], 0.0)
+                if r:
+                    prompt_to_run = sys.stdin.read().strip()
+        except Exception:
+            pass
 
     if not prompt_to_run:
         UI.print_banner()

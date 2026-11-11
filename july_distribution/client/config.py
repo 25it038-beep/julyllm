@@ -40,6 +40,7 @@ class ClientConfig:
     enable_web_search: bool = True
     selected_model: str = "july"  # july, gravity, auto
     personality: str = "precision_engineer"
+    thinking_mode: str = "expanded"  # expanded, collapsed, hidden
     system_prompt: str = (
         "You are JULY LLM, an advanced autonomous neural model created by Harshan Seliyan and developed by HS AI Solutions. "
         "Deliver accurate, rigorous, and helpful answers."
