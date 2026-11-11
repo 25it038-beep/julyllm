@@ -182,11 +182,58 @@ class TTSVoiceOutput:
     def __init__(self):
         self.is_enabled: bool = False
         self.speed: int = 180  # words per minute
-        self.voice_name: Optional[str] = None
+        self.voice_gender: str = "Female"
+        self.voice_name: Optional[str] = self._detect_female_voice()
         self._stop_event = threading.Event()
         self._active_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self.backend = self._detect_backend()
+
+    def _detect_female_voice(self) -> Optional[str]:
+        """Detects and returns the best available female TTS voice ID."""
+        try:
+            import pyttsx3
+            engine = pyttsx3.init()
+            voices = engine.getProperty("voices")
+            # 1. Search for known female voice names (Zira, Hazel, Catherine, etc.)
+            for v in voices:
+                name = (v.name or "").lower()
+                if any(k in name for k in ("zira", "hazel", "catherine", "susan", "eva", "female")):
+                    return v.id
+            # 2. Check gender property if present
+            for v in voices:
+                g = str(getattr(v, "gender", "")).lower()
+                if "female" in g or g == "2":
+                    return v.id
+            # 3. Second voice on Windows is typically Microsoft Zira Desktop
+            if len(voices) > 1:
+                return voices[1].id
+            elif voices:
+                return voices[0].id
+        except Exception:
+            pass
+        return None
+
+    def set_gender(self, gender: str) -> str:
+        """Sets voice gender to Female or Male."""
+        norm = gender.lower().strip()
+        if norm in ("female", "f", "woman", "girl"):
+            self.voice_gender = "Female"
+            self.voice_name = self._detect_female_voice()
+        elif norm in ("male", "m", "man", "boy"):
+            self.voice_gender = "Male"
+            try:
+                import pyttsx3
+                engine = pyttsx3.init()
+                voices = engine.getProperty("voices")
+                for v in voices:
+                    name = (v.name or "").lower()
+                    if any(k in name for k in ("david", "george", "male")):
+                        self.voice_name = v.id
+                        break
+            except Exception:
+                pass
+        return self.voice_gender
 
     def _detect_backend(self) -> str:
         """Selects highest-priority available TTS engine."""
@@ -291,9 +338,11 @@ class TTSVoiceOutput:
         # Convert WPM to SAPI5 Rate (-10 to +10)
         # default 180 wpm ~ Rate 1
         rate = max(-10, min(10, int((self.speed - 180) / 15)))
+        voice_hint = "try { $s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Female) } catch { try { $s.SelectVoice('Microsoft Zira Desktop') } catch {} }; " if self.voice_gender.lower() == "female" else ""
         ps_cmd = (
             f"Add-Type -AssemblyName System.Speech; "
             f"$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+            f"{voice_hint}"
             f"$s.Rate = {rate}; "
             f"$s.Speak('{clean}'); "
             f"$s.Dispose()"

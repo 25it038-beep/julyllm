@@ -28,6 +28,7 @@ def render_cli_status_box(
     vram_total_gb: float = 6.0,
     voice_stt: bool = False,
     voice_tts: bool = False,
+    voice_gender: str = "Female",
     width: int = 48
 ) -> str:
     """
@@ -41,7 +42,7 @@ def render_cli_status_box(
     │ Speed: 3.2 MB/s                              │
     │ RAM: 5.4 / 16 GB                             │
     │ VRAM: 2.1 / 6 GB                             │
-    │ Voice: Whisper + TTS                         │
+    │ Voice: Whisper + TTS (Female)                │
     ╰──────────────────────────────────────────────╯
     """
     inner_width = width - 2
@@ -77,14 +78,15 @@ def render_cli_status_box(
     # Voice status
     voice_parts = []
     if voice_stt:
-        voice_parts.append("Whisper [ON]")
+        voice_parts.append("Whisper")
     else:
         voice_parts.append("Whisper [OFF]")
 
+    tts_label = f"TTS ({voice_gender})" if voice_gender else "TTS"
     if voice_tts:
-        voice_parts.append("TTS [ON]")
+        voice_parts.append(tts_label)
     else:
-        voice_parts.append("TTS [OFF]")
+        voice_parts.append(f"{tts_label} [OFF]")
 
     voice_summary = " + ".join(voice_parts)
     lines.append(format_row(f"Voice: {voice_summary}"))

@@ -222,9 +222,17 @@ class TestJulyGravityFullAcceptance(unittest.TestCase):
         print(f"\n[TEST 10/12 PASSED] Whisper STT pipeline verified (Model: {voice_in.model_name}, Lang: {detected_lang}).")
 
     def test_11_generate_speech_using_tts(self):
-        """11. Generate speech using TTS with non-blocking execution and interruption."""
+        """11. Generate speech using TTS with non-blocking execution, female voice, and interruption."""
         voice_out = TTSVoiceOutput()
         self.assertIn(voice_out.backend, ("chatterbox", "piper", "pyttsx3", "windows_sapi5"))
+
+        # Verify Female Voice configuration
+        self.assertEqual(voice_out.voice_gender, "Female")
+        if voice_out.backend == "pyttsx3" and voice_out.voice_name:
+            self.assertTrue(any(k in voice_out.voice_name.lower() for k in ("zira", "female", "11.0")))
+
+        # Test gender switching
+        self.assertEqual(voice_out.set_gender("female"), "Female")
 
         # Test speed control
         spd = voice_out.set_speed(195)
@@ -240,7 +248,7 @@ class TestJulyGravityFullAcceptance(unittest.TestCase):
         time.sleep(0.05)
         voice_out.stop()
         self.assertTrue(voice_out._stop_event.is_set())
-        print(f"\n[TEST 11/12 PASSED] TTS Voice output verified (Backend: {voice_out.backend}, Speed: {voice_out.speed} wpm).")
+        print(f"\n[TEST 11/12 PASSED] TTS Voice output verified (Backend: {voice_out.backend}, Gender: {voice_out.voice_gender}, Speed: {voice_out.speed} wpm).")
 
     def test_12_run_voice_input_output_with_both_models(self):
         """12. Run voice input/output interaction with both July and Gravity."""

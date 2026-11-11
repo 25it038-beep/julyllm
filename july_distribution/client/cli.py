@@ -1447,9 +1447,10 @@ def cmd_voice(args=None):
         tts_stat = "ON" if v_coord.tts.is_enabled else "OFF"
         print(f"\n {UI.BOLD}{UI.CYAN}Voice Configuration:{UI.RESET}")
         print(f"   Whisper STT Input : {UI.GREEN if v_coord.stt.is_enabled else UI.GRAY}{stt_stat}{UI.RESET} (Model: {v_coord.stt.model_name}, Lang: {v_coord.stt.language})")
-        print(f"   TTS Speech Output : {UI.GREEN if v_coord.tts.is_enabled else UI.GRAY}{tts_stat}{UI.RESET} (Backend: {v_coord.tts.backend}, Speed: {v_coord.tts.speed} wpm)\n")
+        print(f"   TTS Speech Output : {UI.GREEN if v_coord.tts.is_enabled else UI.GRAY}{tts_stat}{UI.RESET} (Backend: {v_coord.tts.backend}, Gender: {v_coord.tts.voice_gender}, Speed: {v_coord.tts.speed} wpm)\n")
         print(f"   Commands: {UI.CYAN}/voice on{UI.RESET}, {UI.CYAN}/voice off{UI.RESET}, {UI.CYAN}/voice input{UI.RESET}, {UI.CYAN}/voice language <code>{UI.RESET}, {UI.CYAN}/voice model <size>{UI.RESET}")
-        print(f"             {UI.CYAN}/voice output on{UI.RESET}, {UI.CYAN}/voice output off{UI.RESET}, {UI.CYAN}/voice speed <wpm>{UI.RESET}, {UI.CYAN}/voice stop{UI.RESET}\n")
+        print(f"             {UI.CYAN}/voice output on{UI.RESET}, {UI.CYAN}/voice output off{UI.RESET}, {UI.CYAN}/voice female{UI.RESET}, {UI.CYAN}/voice gender <female|male>{UI.RESET}")
+        print(f"             {UI.CYAN}/voice speed <wpm>{UI.RESET}, {UI.CYAN}/voice stop{UI.RESET}\n")
         return
 
     act = action.lower()
@@ -1500,11 +1501,23 @@ def cmd_voice(args=None):
                 print(f"\n {UI.RED}[!] Speed must be an integer (e.g. 180).{UI.RESET}\n")
         else:
             print(f"\n {UI.CYAN}TTS speed: {v_coord.tts.speed} wpm{UI.RESET}\n")
+    elif act in ("gender", "voice"):
+        if value:
+            g = v_coord.tts.set_gender(value)
+            print(f"\n {UI.GREEN}[✓] TTS voice gender set to: {g}{UI.RESET}\n")
+        else:
+            print(f"\n {UI.CYAN}TTS voice gender: {v_coord.tts.voice_gender}{UI.RESET}\n")
+    elif act == "female":
+        v_coord.tts.set_gender("female")
+        print(f"\n {UI.GREEN}[✓] TTS voice set to Female (Microsoft Zira / Female Voice).{UI.RESET}\n")
+    elif act == "male":
+        v_coord.tts.set_gender("male")
+        print(f"\n {UI.GREEN}[✓] TTS voice set to Male.{UI.RESET}\n")
     elif act in ("stop", "halt", "mute"):
         v_coord.tts.stop()
         print(f"\n {UI.GREEN}[✓] TTS speech stopped.{UI.RESET}\n")
     else:
-        print(f"\n {UI.YELLOW}Unknown voice action '{action}'. Options: on, off, input, language, model, output on|off, speed, stop{UI.RESET}\n")
+        print(f"\n {UI.YELLOW}Unknown voice action '{action}'. Options: on, off, input, language, model, output on|off, female, gender <female|male>, speed, stop{UI.RESET}\n")
 
 
 def cmd_chat(args):
@@ -1620,7 +1633,8 @@ def cmd_chat(args):
             vram_used_gb=telem["vram_used_gb"],
             vram_total_gb=telem["vram_total_gb"],
             voice_stt=v_coord.stt.is_enabled,
-            voice_tts=v_coord.tts.is_enabled
+            voice_tts=v_coord.tts.is_enabled,
+            voice_gender=v_coord.tts.voice_gender
         )
         print(box + "\n")
 
@@ -2105,19 +2119,34 @@ def cmd_chat(args):
                             else:
                                 print(f"\n  {UI.CYAN}TTS speed:[/] {UI.BOLD}{voice_coord.tts.speed} wpm{UI.RESET}\n")
                             continue
+                        elif v_sub in ("gender", "voice"):
+                            if len(cmd_parts) > 2:
+                                new_g = voice_coord.tts.set_gender(cmd_parts[2])
+                                print(f"\n  {UI.GREEN}[✓] TTS Voice Gender set to:[/] {UI.BOLD}{new_g}{UI.RESET}\n")
+                            else:
+                                print(f"\n  {UI.CYAN}TTS current gender:[/] {UI.BOLD}{voice_coord.tts.voice_gender}{UI.RESET}\n")
+                            continue
+                        elif v_sub == "female":
+                            voice_coord.tts.set_gender("female")
+                            print(f"\n  {UI.GREEN}[✓] TTS voice set to Female (Microsoft Zira / Female Voice).{UI.RESET}\n")
+                            continue
+                        elif v_sub == "male":
+                            voice_coord.tts.set_gender("male")
+                            print(f"\n  {UI.GREEN}[✓] TTS voice set to Male.{UI.RESET}\n")
+                            continue
                         elif v_sub in ("stop", "halt", "mute"):
                             voice_coord.tts.stop()
                             print(f"\n  {UI.GREEN}[✓] TTS audio playback stopped.{UI.RESET}\n")
                             continue
                         else:
-                            print(f"\n  {UI.YELLOW}Unknown /voice command.{UI.RESET} Options: on, off, input, language, model, output on|off, speed, stop\n")
+                            print(f"\n  {UI.YELLOW}Unknown /voice command.{UI.RESET} Options: on, off, input, language, model, output on|off, female, gender <female|male>, speed, stop\n")
                             continue
                     else:
                         stt_stat = "ON" if voice_coord.stt.is_enabled else "OFF"
                         tts_stat = "ON" if voice_coord.tts.is_enabled else "OFF"
                         print(f"\n  {UI.BOLD}{UI.CYAN}Voice Configuration:{UI.RESET}")
                         print(f"   Whisper STT Input : {UI.GREEN if voice_coord.stt.is_enabled else UI.GRAY}{stt_stat}{UI.RESET} (Model: {voice_coord.stt.model_name}, Lang: {voice_coord.stt.language})")
-                        print(f"   TTS Speech Output : {UI.GREEN if voice_coord.tts.is_enabled else UI.GRAY}{tts_stat}{UI.RESET} (Backend: {voice_coord.tts.backend}, Speed: {voice_coord.tts.speed} wpm)\n")
+                        print(f"   TTS Speech Output : {UI.GREEN if voice_coord.tts.is_enabled else UI.GRAY}{tts_stat}{UI.RESET} (Backend: {voice_coord.tts.backend}, Gender: {voice_coord.tts.voice_gender}, Speed: {voice_coord.tts.speed} wpm)\n")
                         continue
 
             # Render background download status if any active
