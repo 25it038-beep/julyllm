@@ -114,26 +114,20 @@ if ($isAuth -and (-not $SwitchUser)) {
     Write-Host " └──────────────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
     Write-Host ""
     Write-Host " Select Authentication Method:" -ForegroundColor White
-    Write-Host "   [1]  🔑  Sign In with Email & Password (In-CLI Terminal)" -ForegroundColor Green
-    Write-Host "   [2]  🎟️  Sign In with Clerk Token / API Key (In-CLI Terminal)" -ForegroundColor Green
-    Write-Host "   [3]  ✨  Create New HS AI Account / Sign Up (In-CLI Terminal)" -ForegroundColor Yellow
-    Write-Host "   [4]  🌐  Browser Single Sign-On (Google, GitHub, Clerk Web)" -ForegroundColor Cyan
+    Write-Host "   [1]  🌐  Browser Single Sign-On (Google, GitHub, Clerk Web) [Recommended]" -ForegroundColor Cyan
+    Write-Host "   [2]  🎟️  Sign In with Clerk Token / API Key (Headless / CI)" -ForegroundColor Green
     Write-Host "   [q]  ❌  Cancel & Exit" -ForegroundColor DarkGray
     Write-Host ""
-    $choice = Read-Host " Selection [1-4]"
+    $choice = Read-Host " Selection [1-2, default: 1]"
+    if ([string]::IsNullOrWhiteSpace($choice)) { $choice = '1' }
 
     if ($choice -eq '1') {
         Write-Host ""
-        Write-Host " ─── IN-CLI EMAIL & PASSWORD SIGN IN ───" -ForegroundColor Green
-        $ident = Read-Host "  Email or Username"
-        $secPwd = Read-Host "  Password" -AsSecureString
-        $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPwd)
-        $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-
-        Invoke-JulyCli login -u $ident -p $pwd
+        Write-Host " ─── HS AI SOLUTIONS CLERK AUTHENTICATION ───" -ForegroundColor Cyan
+        Invoke-JulyCli login
     } elseif ($choice -eq '2') {
         Write-Host ""
-        Write-Host " ─── IN-CLI TOKEN / API KEY SIGN IN ───" -ForegroundColor Green
+        Write-Host " ─── CLERK TOKEN / API KEY SIGN IN ───" -ForegroundColor Green
         $secToken = Read-Host "  Clerk Token or API Key" -AsSecureString
         $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secToken)
         $token = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
@@ -144,20 +138,6 @@ if ($isAuth -and (-not $SwitchUser)) {
         } else {
             Invoke-JulyCli login --token $token
         }
-    } elseif ($choice -eq '3') {
-        Write-Host ""
-        Write-Host " ─── NEW DEVELOPER REGISTRATION (IN-CLI) ───" -ForegroundColor Yellow
-        $email = Read-Host "  Email Address"
-        $uname = Read-Host "  Choose Username"
-        $secPwd = Read-Host "  Choose Password (min 6 chars)" -AsSecureString
-        $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPwd)
-        $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-
-        Invoke-JulyCli signup -u $uname -e $email -p $pwd
-    } elseif ($choice -eq '4') {
-        Write-Host ""
-        Write-Host " ─── BROWSER CLERK AUTHENTICATION ───" -ForegroundColor Cyan
-        Invoke-JulyCli login -b
     } else {
         Write-Host ""
         Write-Host " [!] Authentication cancelled. Access to July & Gravity models is locked." -ForegroundColor Red
