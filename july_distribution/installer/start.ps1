@@ -1,4 +1,4 @@
-# ================================================================================
+﻿# ================================================================================
 # HS AI SOLUTIONS — JULY LLM ALL-IN-ONE AUTONOMOUS RUNTIME
 # Founder & Chief Architect: Harshan Seliyan | Organization: HS AI Solutions
 # Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
@@ -14,7 +14,9 @@ param(
     [Parameter(ValueFromPipeline = $false)]
     [switch]$SwitchUser,
     [Parameter(ValueFromPipeline = $false)]
-    [string]$Model = ""
+    [string]$Model = "",
+    [Parameter(ValueFromPipeline = $false)]
+    [switch]$Voice
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,10 +45,12 @@ $InstallRoot = Join-Path "$env:LOCALAPPDATA" 'Programs\JulyRuntime'
 $BinDir = Join-Path $InstallRoot 'bin'
 $JulyCmd = Join-Path $BinDir 'july.ps1'
 $RateLimiterFile = Join-Path $InstallRoot 'july_distribution\client\rate_limiter.py'
+$VoiceFile = Join-Path $InstallRoot 'july_distribution\client\voice.py'
+$UiRendererFile = Join-Path $InstallRoot 'july_distribution\client\ui_renderer.py'
 
-$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or $Update)
+$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or $Update)
 if ($NeedsUpdate) {
-    Write-Host " [⚡] [1/4] Synchronizing latest July runtime from repository..." -ForegroundColor Yellow
+    Write-Host " [⚡] [1/4] Synchronizing latest July & Gravity runtime & voice subsystems..." -ForegroundColor Yellow
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     try {
         irm $GitHubRawInstall | iex
@@ -61,7 +65,7 @@ $machPath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $env:Path = $machPath + ';' + $userPath + ';' + $BinDir
 
-# [2] Ensure Dependencies (Python & llama-cpp-python)
+# [2] Ensure Dependencies (Python, llama-cpp-python, Whisper STT & Female TTS)
 Write-Host " [⚡] [1/4] Verifying hardware acceleration & Python environment..." -ForegroundColor Green
 $PythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
 if (-not $PythonExe) {
@@ -76,7 +80,14 @@ if (-not $LlamaOk) {
     & $PythonExe -m pip install --upgrade pip -q
     & $PythonExe -m pip install llama-cpp-python -q
 }
-Write-Host "      [✓] Compute dependencies and hardware bindings active." -ForegroundColor Gray
+
+# Auto-install voice packages if missing (Whisper STT, sounddevice, pyttsx3)
+$hasVoice = & $PythonExe -c "import whisper, sounddevice, pyttsx3" 2>$null; $VoiceOk = ($LASTEXITCODE -eq 0)
+if (-not $VoiceOk) {
+    Write-Host "      [+] Installing voice intelligence dependencies (Whisper STT, sounddevice, pyttsx3)..." -ForegroundColor Yellow
+    & $PythonExe -m pip install sounddevice pyttsx3 openai-whisper numpy -q
+}
+Write-Host "      [✓] Compute dependencies and voice intelligence active." -ForegroundColor Gray
 
 # Define internal CLI dispatcher to bypass PowerShell parameter binding
 function Invoke-JulyCli {
@@ -260,8 +271,16 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 Write-Host " 🛡️  Model loaded in RAM. Entering interactive session with active rate limit protection." -ForegroundColor Green
+Write-Host " 🎙️  Voice System Active: Type /voice on (Whisper STT), /voice output on (Female TTS), /voice input" -ForegroundColor Cyan
 Write-Host " 🔒  Ephemeral Privacy: Model weights and context are completely wiped from RAM on exit." -ForegroundColor DarkYellow
 Write-Host ""
+
+if ($Voice) {
+    Invoke-JulyCli voice output on | Out-Null
+    Invoke-JulyCli voice female | Out-Null
+    Invoke-JulyCli voice on | Out-Null
+    Write-Host " [✓] Voice Input & Female Speech Output automatically activated." -ForegroundColor Green
+}
 
 try {
     Invoke-JulyCli chat --model $Model

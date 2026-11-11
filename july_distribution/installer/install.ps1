@@ -1,4 +1,4 @@
-# ================================================================================
+﻿# ================================================================================
 # HS AI SOLUTIONS — JULY LLM WINDOWS INSTALLER
 # Organization: HS AI Solutions
 # Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
@@ -37,7 +37,9 @@ $LocalSourceFound = $false
 if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
     $PotentialSource = Split-Path -Parent $PSScriptRoot -ErrorAction SilentlyContinue
     if ($PotentialSource -and (Test-Path (Join-Path $PotentialSource "client"))) {
-        Copy-Item -Path $PotentialSource -Destination $InstallRoot -Recurse -Force
+        $TargetDist = Join-Path $InstallRoot "july_distribution"
+        New-Item -ItemType Directory -Path $TargetDist -Force | Out-Null
+        Copy-Item -Path "$PotentialSource\*" -Destination $TargetDist -Recurse -Force
         $LocalSourceFound = $true
     }
 }
@@ -56,7 +58,9 @@ if (-not $LocalSourceFound) {
 
         $SourceDist = Join-Path $ExtractDir "julyllm-main\july_distribution"
         if (Test-Path $SourceDist) {
-            Copy-Item -Path $SourceDist -Destination $InstallRoot -Recurse -Force
+            $TargetDist = Join-Path $InstallRoot "july_distribution"
+            New-Item -ItemType Directory -Path $TargetDist -Force | Out-Null
+            Copy-Item -Path "$SourceDist\*" -Destination $TargetDist -Recurse -Force
         } else {
             throw "Failed to locate july_distribution in downloaded archive."
         }
@@ -128,7 +132,7 @@ $ConfigObj | ConvertTo-Json -Depth 4 | Set-Content -Path $ConfigFile -Encoding U
 Write-Host "      Configured backend server: https://julyllm.onrender.com" -ForegroundColor Gray
 
 # Step 4: Validate local Python & dependencies
-Write-Host "[4/4] Verifying Python and llama.cpp runtime..." -ForegroundColor Green
+Write-Host "[4/4] Verifying Python, llama.cpp and Voice runtime..." -ForegroundColor Green
 $PythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
 if (-not $PythonExe) {
     Write-Host "      Warning: python.exe not found on PATH. Please install Python 3.10+ from python.org." -ForegroundColor Yellow
@@ -139,10 +143,24 @@ if (-not $PythonExe) {
         if ($hasLlama) {
             Write-Host "      llama-cpp-python engine: INSTALLED ($hasLlama)" -ForegroundColor Gray
         } else {
-            Write-Host "      llama-cpp-python: NOT DETECTED. Run: pip install llama-cpp-python" -ForegroundColor Yellow
+            Write-Host "      llama-cpp-python: Installing..." -ForegroundColor Yellow
+            & $PythonExe -m pip install llama-cpp-python -q
         }
     } catch {
         Write-Host "      llama-cpp-python: Run 'pip install llama-cpp-python' for local inference." -ForegroundColor Yellow
+    }
+
+    try {
+        $hasVoice = & $PythonExe -c "import whisper, sounddevice, pyttsx3; print('Ready')" 2>$null
+        if ($hasVoice) {
+            Write-Host "      Voice STT & Female TTS engines: INSTALLED" -ForegroundColor Gray
+        } else {
+            Write-Host "      Voice STT & Female TTS: Installing dependencies..." -ForegroundColor Yellow
+            & $PythonExe -m pip install sounddevice pyttsx3 openai-whisper numpy -q
+            Write-Host "      Voice STT & Female TTS engines: INSTALLED" -ForegroundColor Gray
+        }
+    } catch {
+        Write-Host "      Voice dependencies: Run 'pip install sounddevice pyttsx3 openai-whisper' to enable voice." -ForegroundColor Yellow
     }
 }
 
@@ -157,6 +175,7 @@ Write-Host "  july login     - Authenticate with HS AI Solutions: july login -u 
 Write-Host "  july status    - Display authentication, model state, and hardware telemetry" -ForegroundColor Gray
 Write-Host "  july load      - Retrieve GGUF model into temporary RAM-backed storage" -ForegroundColor Gray
 Write-Host "  july chat      - Start interactive chat running genuine local inference" -ForegroundColor Gray
+Write-Host "  july voice     - Configure Whisper speech-to-text and female TTS audio synthesis" -ForegroundColor Gray
 Write-Host "  july config    - View and customize system instructions & persona" -ForegroundColor Gray
 Write-Host "  july unload    - Safely unload model and wipe RAM storage" -ForegroundColor Gray
 Write-Host "  july update    - Check for updated model versions on server" -ForegroundColor Gray

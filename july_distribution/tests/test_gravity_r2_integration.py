@@ -143,7 +143,7 @@ def run_tests():
     try:
         t0 = time.time()
         load_ok = manager.load_model("gravity", context_length=512)
-        assert load_ok is True
+        assert load_ok is True, f"Load failed: {manager.states['gravity'].error_message}"
         assert manager.states["gravity"].status == "active"
         print(f"[{GREEN}PASS{RESET}] TEST 7: Local llama.cpp loaded Gravity GGUF into memory ({time.time()-t0:.4f}s)")
         passed += 1
