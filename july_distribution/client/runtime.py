@@ -81,7 +81,7 @@ class ClientInferenceRuntime:
         self.load_model(model_path)
 
     def load_model(self, model_path: Path):
-        """Loads model into active memory via llama.cpp."""
+        """Loads model into active memory via llama.cpp with memory-aware dynamic layer budget."""
         if self._is_loaded and self.llm is not None:
             return
 
@@ -93,46 +93,59 @@ class ClientInferenceRuntime:
         except ImportError:
             raise ImportError("llama-cpp-python is required on client. Run: pip install llama-cpp-python")
 
-        hw = detect_client_hardware()
-        mode = self.config.hardware_mode.lower()
+        from .lifecycle import GGUFInspector, HardwareMemoryBudgeter
+        try:
+            meta = GGUFInspector.inspect(model_path)
+            total_layers = meta.block_count
+        except Exception:
+            total_layers = 32
 
-        if mode == "cuda" or (mode == "auto" and hw["gpu_available"]):
-            n_gpu = hw["recommended_gpu_layers"]
-            device_desc = f"CUDA GPU ({hw['gpu_name']}, {n_gpu} layers offloaded)"
+        mode = self.config.hardware_mode.lower()
+        force_cpu = (mode == "cpu")
+
+        budget = HardwareMemoryBudgeter.profile_and_budget(
+            model_size_bytes=model_path.stat().st_size,
+            total_layers=total_layers,
+            target_context=getattr(self.config, "context_length", 4096) or 4096,
+            force_cpu=force_cpu
+        )
+
+        n_gpu = budget["recommended_gpu_layers"]
+        if n_gpu > 0:
+            device_desc = f"CUDA GPU ({budget['gpu_name']}, {n_gpu}/{budget['total_layers']} layers offloaded, {budget['offload_strategy']})"
         else:
-            n_gpu = 0
-            device_desc = f"CPU Execution ({hw['recommended_threads']} threads)"
+            device_desc = f"CPU Execution ({budget['recommended_threads']} threads, AVX2 RAM mode)"
 
         print(f"[JULY RUNTIME] Initializing llama.cpp engine on: {device_desc}...")
 
         try:
             self.llm = llama_cpp.Llama(
                 model_path=str(model_path),
-                n_ctx=self.config.context_length,
+                n_ctx=4096,
                 n_gpu_layers=n_gpu,
-                n_threads=hw["recommended_threads"],
-                n_batch=self.config.n_batch,
+                n_threads=budget["recommended_threads"],
+                n_batch=512,
                 logits_all=False,
                 verbose=False
             )
             self._is_loaded = True
             self.active_model_path = model_path
-            print(f"[JULY RUNTIME] Model successfully initialized in RAM!")
+            print(f"[JULY RUNTIME] Model successfully initialized in active memory!")
         except Exception as e:
             if n_gpu > 0:
-                print(f"[JULY RUNTIME] GPU load encountered ({e}). Falling back to pure CPU...")
+                print(f"[JULY RUNTIME] GPU offload encountered issue ({e}). Falling back to pure CPU...")
                 self.llm = llama_cpp.Llama(
                     model_path=str(model_path),
-                    n_ctx=self.config.context_length,
+                    n_ctx=4096,
                     n_gpu_layers=0,
-                    n_threads=hw["recommended_threads"],
-                    n_batch=self.config.n_batch,
+                    n_threads=budget["recommended_threads"],
+                    n_batch=512,
                     logits_all=False,
                     verbose=False
                 )
                 self._is_loaded = True
                 self.active_model_path = model_path
-                print(f"[JULY RUNTIME] Model loaded successfully on CPU fallback.")
+                print(f"[JULY RUNTIME] Model loaded successfully on pure CPU fallback.")
             else:
                 raise RuntimeError(f"Failed to load model: {e}")
 

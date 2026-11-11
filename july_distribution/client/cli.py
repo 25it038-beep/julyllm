@@ -287,47 +287,37 @@ def cmd_status():
 
 
 def cmd_load(args):
-    UI.print_card("HS AI SOLUTIONS — EPHEMERAL MODEL ACQUISITION")
     auth = ClientAuthManager()
     if not auth.is_authenticated():
         print(f" {UI.RED}[!] Not authenticated. Please run 'july login' first.{UI.RESET}")
         sys.exit(1)
 
     cfg = ClientConfig.load()
-    storage = ClientEphemeralStorage()
-    downloader = ClientModelDownloader(cfg, auth)
-
     target_model = getattr(args, "model", None) or getattr(cfg, "selected_model", "july") or "july"
     if target_model.lower() == "auto":
         target_model = "july"
     target_model = target_model.lower().strip()
 
+    storage = ClientEphemeralStorage()
     ephemeral_path = storage.allocate_path(prefix=f"{target_model}_ram_model")
-    print(f" {UI.CYAN}[⚡]{UI.RESET} Target Model: {UI.BOLD}{target_model.upper()} LLM{UI.RESET}")
-    print(f" {UI.CYAN}[⚡]{UI.RESET} Ephemeral RAM Path: {ephemeral_path}")
-    print(f" {UI.CYAN}[⚡]{UI.RESET} Windows FILE_ATTRIBUTE_TEMPORARY active (Zero-persistence RAM caching)...")
 
     # Fast seed check (if existing master seed present on workstation)
     root_seed = resolve_model_seed(target_model)
-
     if root_seed and root_seed.exists() and (not ephemeral_path.exists() or ephemeral_path.stat().st_size == 0):
         print(f" {UI.GRAY}[*] Priming ephemeral storage from verified local master seed ({root_seed.name})...{UI.RESET}")
         import shutil
         shutil.copyfile(root_seed, ephemeral_path)
 
-    def progress(received, total, speed, eta=0.0):
-        pct = (received / max(1, total)) * 100
-        mb_r = received / (1024 * 1024)
-        mb_t = total / (1024 * 1024)
-        eta_m = int(eta // 60)
-        eta_s = int(eta % 60)
-        sys.stdout.write(f"\r  Retrieving Cloudflare R2: [{pct:5.1f}%] {mb_r:7.1f} / {mb_t:7.1f} MB ({speed:5.1f} MB/s | ETA: {eta_m:02d}m{eta_s:02d}s)")
-        sys.stdout.flush()
+    from .lifecycle import ModelLifecyclePipeline
+    pipeline = ModelLifecyclePipeline(config=cfg, auth=auth)
 
     try:
-        downloader.download_to_ephemeral_storage(ephemeral_path, progress_callback=progress, model_id=target_model)
+        llm, meta, budget = pipeline.execute_pipeline(
+            model_id=target_model,
+            dest_path=ephemeral_path,
+            force_cpu=(cfg.hardware_mode.lower() == "cpu")
+        )
         record_active_state(ephemeral_path, target_model)
-        print(f"\n {UI.GREEN}[✓] {target_model.upper()} LLM verified and loaded into physical RAM.{UI.RESET}")
         print(f" {UI.GREEN}[✓]{UI.RESET} Run {UI.CYAN}july chat{UI.RESET} to start genuine local inference.\n")
     except Exception as e:
         if root_seed and root_seed.exists() and ephemeral_path.exists() and ephemeral_path.stat().st_size > 1000000:
@@ -336,7 +326,7 @@ def cmd_load(args):
             print(f" {UI.GREEN}[✓] {target_model.upper()} LLM verified and loaded into physical RAM.{UI.RESET}")
             print(f" {UI.GREEN}[✓]{UI.RESET} Run {UI.CYAN}july chat{UI.RESET} to start genuine local inference.\n")
         else:
-            print(f"\n {UI.RED}[!] Model acquisition error:{UI.RESET} {e}")
+            print(f"\n {UI.RED}[!] Model acquisition & initialization error:{UI.RESET} {e}")
             storage.wipe_and_unlink(ephemeral_path)
             sys.exit(1)
 
