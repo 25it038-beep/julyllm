@@ -230,6 +230,12 @@ def cmd_install():
     print(f"     Execute {UI.CYAN}july login{UI.RESET} to connect your account.\n")
 
 
+def _fmt_quota(val: Any) -> str:
+    if isinstance(val, (int, float)):
+        return f"{int(val):,}"
+    return str(val)
+
+
 def _print_auth_success(sess: dict, is_signup: bool = False):
     name = sess.get("name") or "Harshan"
     email = sess.get("email") or "user@example.com"
@@ -387,11 +393,15 @@ def cmd_whoami(args=None):
     dev_info = get_device_identity()
     is_expired = clerk.vault.is_session_expired(session)
 
+    is_creator = (session.get("email", "").lower().strip() == "harshanseliyan28@gmail.com" or session.get("role") == "creator" or session.get("tier") == "creator")
+    sub_title = f"{UI.BOLD}{UI.YELLOW}CREATOR & FOUNDER (UNLIMITED ACCESS){UI.RESET}" if is_creator else f"{UI.BOLD}{UI.GREEN}{session.get('tier', 'pro').upper()}{UI.RESET}"
+    role_title = f"{UI.BOLD}{UI.YELLOW}Creator & Ecosystem Owner{UI.RESET}" if is_creator else session.get('role', 'standard')
+
     print(f"   Name             : {UI.BOLD}{session.get('name', 'Developer')}{UI.RESET}")
     print(f"   Email            : {session.get('email')}")
     print(f"   Clerk User ID    : {UI.CYAN}{session.get('clerk_user_id')}{UI.RESET}")
-    print(f"   Subscription     : {UI.BOLD}{UI.GREEN}{session.get('tier', 'pro').upper()}{UI.RESET}")
-    print(f"   Role             : {session.get('role', 'standard')}")
+    print(f"   Subscription     : {sub_title}")
+    print(f"   Role             : {role_title}")
     print(f"   Current Device   : {dev_info['device_name']} ({dev_info['device_id'][:12]}...)")
     print(f"   Session Status   : {UI.RED + 'EXPIRED' if is_expired else UI.GREEN + 'ACTIVE / VALID'}{UI.RESET}")
     print(f"   Credential Vault : {UI.GREEN}Windows DPAPI (Hardware Bound){UI.RESET}\n")
@@ -479,9 +489,9 @@ def cmd_auth_status(clerk: ClerkAuthManager):
 
     print(f" {UI.BOLD}{UI.CYAN}── RATE LIMITING & MODEL ACCESS QUOTAS ──────────────────{UI.RESET}")
     print(f"   Tier Policy      : {UI.BOLD}{rl_metrics['tier_title']}{UI.RESET}")
-    print(f"   Request Rate     : {rl_metrics['rpm_used']}/{rl_metrics['rpm_max']} requests/min ({UI.GREEN}{rl_metrics['rpm_remaining']}{UI.RESET} remaining)")
-    print(f"   Token Throughput : {rl_metrics['tpm_used']:,}/{rl_metrics['tpm_max']:,} tokens/min ({UI.GREEN}{rl_metrics['tpm_remaining']:,}{UI.RESET} remaining)")
-    print(f"   Daily Allotment  : {rl_metrics['daily_used']}/{rl_metrics['daily_max']} requests today ({UI.GREEN}{rl_metrics['daily_remaining']}{UI.RESET} remaining)")
+    print(f"   Request Rate     : {_fmt_quota(rl_metrics['rpm_used'])}/{_fmt_quota(rl_metrics['rpm_max'])} requests/min ({UI.GREEN}{_fmt_quota(rl_metrics['rpm_remaining'])}{UI.RESET} remaining)")
+    print(f"   Token Throughput : {_fmt_quota(rl_metrics['tpm_used'])}/{_fmt_quota(rl_metrics['tpm_max'])} tokens/min ({UI.GREEN}{_fmt_quota(rl_metrics['tpm_remaining'])}{UI.RESET} remaining)")
+    print(f"   Daily Allotment  : {_fmt_quota(rl_metrics['daily_used'])}/{_fmt_quota(rl_metrics['daily_max'])} requests today ({UI.GREEN}{_fmt_quota(rl_metrics['daily_remaining'])}{UI.RESET} remaining)")
     print(f"   Window Duration  : {int(rl_metrics['window_seconds'])}s sliding window\n")
 
 
@@ -562,14 +572,18 @@ def cmd_account(args=None):
     limiter = ClientRateLimiter.get_instance()
     rl_metrics = limiter.get_metrics(tier=session.get("tier", "pro"))
 
+    is_creator = (email.lower().strip() == "harshanseliyan28@gmail.com" or session.get("role") == "creator" or session.get("tier") == "creator")
+    sub_title = f"{UI.BOLD}{UI.YELLOW}CREATOR & FOUNDER (UNLIMITED ACCELERATION){UI.RESET}" if is_creator else f"{UI.BOLD}{UI.GREEN}{tier} PLAN{UI.RESET}"
+    verif_title = f"{UI.GREEN}Verified Founder & Ecosystem Creator (Clerk IAM){UI.RESET}" if is_creator else f"{UI.GREEN}Verified (Clerk Identity & Access Management){UI.RESET}"
+
     print(f" {UI.BOLD}{UI.CYAN}── USER IDENTITY & PROFILE ──────────────────────────────{UI.RESET}")
     print(f"   Profile Picture  : {avatar}")
     print(f"   Name             : {UI.BOLD}{name}{UI.RESET}")
     print(f"   Email            : {email}")
-    print(f"   Verification     : {UI.GREEN}Verified (Clerk Identity & Access Management){UI.RESET}")
+    print(f"   Verification     : {verif_title}")
     print(f"   Account Created  : {created_date}")
     print(f"   Clerk User ID    : {UI.CYAN}{clerk_id}{UI.RESET}")
-    print(f"   Subscription     : {UI.BOLD}{UI.GREEN}{tier} PLAN{UI.RESET}")
+    print(f"   Subscription     : {sub_title}")
 
     print(f"\n {UI.BOLD}{UI.CYAN}── CURRENT AUTHENTICATION SESSION ───────────────────────{UI.RESET}")
     print(f"   Session State    : {UI.GREEN if not is_expired else UI.RED}{session_status}{UI.RESET}")
@@ -588,9 +602,9 @@ def cmd_account(args=None):
 
     print(f"\n {UI.BOLD}{UI.CYAN}── RATE LIMITS & QUOTAS ─────────────────────────────────{UI.RESET}")
     print(f"   Policy Tier      : {UI.BOLD}{rl_metrics['tier_title']}{UI.RESET}")
-    print(f"   Request Limit    : {rl_metrics['rpm_used']}/{rl_metrics['rpm_max']} req/min ({UI.GREEN}{rl_metrics['rpm_remaining']}{UI.RESET} remaining)")
-    print(f"   Throughput (TPM) : {rl_metrics['tpm_used']:,}/{rl_metrics['tpm_max']:,} tok/min ({UI.GREEN}{rl_metrics['tpm_remaining']:,}{UI.RESET} remaining)")
-    print(f"   Daily Limit      : {rl_metrics['daily_used']}/{rl_metrics['daily_max']} req/day ({UI.GREEN}{rl_metrics['daily_remaining']}{UI.RESET} remaining)")
+    print(f"   Request Limit    : {_fmt_quota(rl_metrics['rpm_used'])}/{_fmt_quota(rl_metrics['rpm_max'])} req/min ({UI.GREEN}{_fmt_quota(rl_metrics['rpm_remaining'])}{UI.RESET} remaining)")
+    print(f"   Throughput (TPM) : {_fmt_quota(rl_metrics['tpm_used'])}/{_fmt_quota(rl_metrics['tpm_max'])} tok/min ({UI.GREEN}{_fmt_quota(rl_metrics['tpm_remaining'])}{UI.RESET} remaining)")
+    print(f"   Daily Limit      : {_fmt_quota(rl_metrics['daily_used'])}/{_fmt_quota(rl_metrics['daily_max'])} req/day ({UI.GREEN}{_fmt_quota(rl_metrics['daily_remaining'])}{UI.RESET} remaining)")
     print(f"   Window Duration  : {int(rl_metrics['window_seconds'])}s sliding window")
 
     print(f"\n {UI.BOLD}{UI.CYAN}── AVAILABLE FOUNDATION MODELS ──────────────────────────{UI.RESET}")
@@ -620,9 +634,9 @@ def cmd_usage(args=None):
     print(f"   Total Requests   : {UI.BOLD}{req_count:,}{UI.RESET}")
     print(f"   Total Tokens     : {UI.BOLD}{total_tokens:,}{UI.RESET}")
     print(f"   Active Tier      : {UI.CYAN}{user_tier.upper()}{UI.RESET} ({rl_metrics['tier_title']})")
-    print(f"   Rate Limit (RPM) : {rl_metrics['rpm_used']}/{rl_metrics['rpm_max']} req/min ({UI.GREEN}{rl_metrics['rpm_remaining']}{UI.RESET} remaining)")
-    print(f"   Throughput (TPM) : {rl_metrics['tpm_used']:,}/{rl_metrics['tpm_max']:,} tok/min ({UI.GREEN}{rl_metrics['tpm_remaining']:,}{UI.RESET} remaining)")
-    print(f"   Daily Limit      : {rl_metrics['daily_used']}/{rl_metrics['daily_max']} requests today ({UI.GREEN}{rl_metrics['daily_remaining']}{UI.RESET} remaining)")
+    print(f"   Rate Limit (RPM) : {_fmt_quota(rl_metrics['rpm_used'])}/{_fmt_quota(rl_metrics['rpm_max'])} req/min ({UI.GREEN}{_fmt_quota(rl_metrics['rpm_remaining'])}{UI.RESET} remaining)")
+    print(f"   Throughput (TPM) : {_fmt_quota(rl_metrics['tpm_used'])}/{_fmt_quota(rl_metrics['tpm_max'])} tok/min ({UI.GREEN}{_fmt_quota(rl_metrics['tpm_remaining'])}{UI.RESET} remaining)")
+    print(f"   Daily Limit      : {_fmt_quota(rl_metrics['daily_used'])}/{_fmt_quota(rl_metrics['daily_max'])} requests today ({UI.GREEN}{_fmt_quota(rl_metrics['daily_remaining'])}{UI.RESET} remaining)")
     print(f"\n {UI.BOLD}{UI.CYAN}── MODEL BREAKDOWN ───────────────────────────────────────{UI.RESET}")
     print(f" {'ENGINE / MODEL':<28} {'CALLS':<10} {'TOKENS'}")
     print(f" {'─'*28} {'─'*10} {'─'*15}")

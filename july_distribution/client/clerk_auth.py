@@ -226,7 +226,23 @@ class ClerkAuthManager:
 
     def get_session(self) -> Optional[Dict[str, Any]]:
         """Returns active decrypted session or None if unauthenticated."""
-        return self.vault.retrieve_session()
+        sess = self.vault.retrieve_session()
+        if sess:
+            email = (sess.get("email") or "").lower().strip()
+            if email == "harshanseliyan28@gmail.com":
+                modified = False
+                if sess.get("tier") != "creator":
+                    sess["tier"] = "creator"
+                    modified = True
+                if sess.get("role") != "creator":
+                    sess["role"] = "creator"
+                    modified = True
+                if sess.get("name") in (None, "", "Developer", "CI/Headless User", "July Developer"):
+                    sess["name"] = "Harshan Seliyan (Founder & Creator)"
+                    modified = True
+                if modified:
+                    self.vault.store_session(sess)
+        return sess
 
     def get_token(self) -> Optional[str]:
         sess = self.get_session()
@@ -632,12 +648,22 @@ class ClerkAuthManager:
         # 30 days session expiry with refresh support
         expires_at = now + (30 * 86400)
 
+        # Creator / Founder account privilege escalation for harshanseliyan28@gmail.com
+        is_creator = (email.lower().strip() == "harshanseliyan28@gmail.com" or tier == "creator")
+        if is_creator:
+            tier = "creator"
+            role = "creator"
+            if not name or name in ("Developer", "July Developer", "CI/Headless User"):
+                name = "Harshan Seliyan (Founder & Creator)"
+        else:
+            role = "developer" if tier in ("pro", "enterprise") else "standard"
+
         session_record = {
             "token": token,
             "clerk_user_id": clerk_user_id,
             "email": email,
             "name": name,
-            "role": "developer" if tier in ("pro", "enterprise") else "standard",
+            "role": role,
             "tier": tier,
             "auth_provider": provider,
             "created_at": now,

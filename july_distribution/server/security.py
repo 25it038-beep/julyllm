@@ -375,12 +375,18 @@ def sync_clerk_user(
     user = db.query(User).filter(User.clerk_user_id == clerk_user_id).first()
     now = time.time()
 
+    is_creator = (email and email.lower().strip() == "harshanseliyan28@gmail.com") or tier == "creator"
+    effective_tier = "creator" if is_creator else tier
+    effective_role = "creator" if is_creator else ("developer" if tier in ("pro", "enterprise") else "standard")
+
     if not user:
         # Check by email
         user = db.query(User).filter(User.email == email).first()
         if user:
             user.clerk_user_id = clerk_user_id
-            user.tier = tier
+            user.tier = effective_tier
+            user.role = effective_role
+            user.model_access_granted = True
         else:
             # Provision new user
             username = email.split("@")[0] + "_" + clerk_user_id[-4:]
@@ -389,11 +395,11 @@ def sync_clerk_user(
                 username=username,
                 email=email,
                 clerk_user_id=clerk_user_id,
-                tier=tier,
+                tier=effective_tier,
                 auth_provider="clerk",
                 password_hash=pwd_hash,
                 salt=salt,
-                role="developer" if tier in ("pro", "enterprise") else "standard",
+                role=effective_role,
                 model_access_granted=True,
                 is_active=True,
                 created_at=now
@@ -401,6 +407,13 @@ def sync_clerk_user(
             db.add(user)
         db.commit()
         db.refresh(user)
+    else:
+        if is_creator and (user.tier != "creator" or user.role != "creator"):
+            user.tier = "creator"
+            user.role = "creator"
+            user.model_access_granted = True
+            db.commit()
+            db.refresh(user)
 
     return user
 
@@ -470,12 +483,18 @@ def get_user_usage_stats(db: Session, user_id: int) -> Dict[str, Any]:
 
 def enforce_user_rate_limit(db: Session, user: User) -> Tuple[bool, str]:
     """Applies per-tier rate limiting."""
+    if (getattr(user, "role", "") == "creator" or 
+        (getattr(user, "tier", "") or "").lower() == "creator" or 
+        (user.email and user.email.lower().strip() == "harshanseliyan28@gmail.com")):
+        return True, "Creator / Founder Account authorized - Unlimited model quota"
+
     tier = (getattr(user, "tier", None) or "free").lower()
     quota_limits = {
         "free": 500,        # 500 requests/day
         "pro": 10000,       # 10,000 requests/day
         "developer": 10000,
-        "enterprise": 100000
+        "enterprise": 100000,
+        "creator": 10000000
     }
     limit = quota_limits.get(tier, 500)
     # Check if download or request count exceeded

@@ -105,9 +105,15 @@ try {
 $isAuth = [bool]($authInfo.authenticated)
 
 if ($isAuth -and (-not $SwitchUser)) {
-    Write-Host "      [✓] Clerk Identity Verified: $($authInfo.name) ($($authInfo.email))" -ForegroundColor Green
-    Write-Host "      [✓] Active Subscription    : $($authInfo.tier.ToUpper()) Plan" -ForegroundColor Cyan
-    Write-Host "      [✓] Credential Vault       : Windows DPAPI (Hardware Bound)" -ForegroundColor Gray
+    if ($authInfo.email -eq 'harshanseliyan28@gmail.com' -or $authInfo.tier -eq 'creator') {
+        Write-Host "      [✓] Clerk Identity Verified: $($authInfo.name) ($($authInfo.email)) [CREATOR]" -ForegroundColor Green
+        Write-Host "      [✓] Creator Account Tier   : CREATOR & FOUNDER (Unlimited Access & Quotas)" -ForegroundColor Yellow
+        Write-Host "      [✓] Credential Vault       : Windows DPAPI (Hardware Bound)" -ForegroundColor Gray
+    } else {
+        Write-Host "      [✓] Clerk Identity Verified: $($authInfo.name) ($($authInfo.email))" -ForegroundColor Green
+        Write-Host "      [✓] Active Subscription    : $($authInfo.tier.ToUpper()) Plan" -ForegroundColor Cyan
+        Write-Host "      [✓] Credential Vault       : Windows DPAPI (Hardware Bound)" -ForegroundColor Gray
+    }
 } else {
     Write-Host ""
     Write-Host " ┌──────────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan

@@ -52,6 +52,14 @@ TIER_LIMITS: Dict[str, Dict[str, Any]] = {
         "tpm": 100000,          # 100,000 tokens per minute
         "daily_requests": 50000,# 50,000 requests per day
         "burst_allowance": 30,
+    },
+    "creator": {
+        "title": "Creator & Founder Account (HS AI Solutions)",
+        "rpm": 100000,          # Unlimited
+        "tpm": 100000000,       # Unlimited
+        "daily_requests": 10000000, # Unlimited
+        "burst_allowance": 10000,
+        "unlimited": True,
     }
 }
 
@@ -146,6 +154,23 @@ class ClientRateLimiter:
             state = self._load_state()
             valid_requests = self._clean_window(state, now)
             cfg = self.get_tier_config(tier)
+
+            # Bypass limits completely for Creator / Founder accounts
+            if cfg.get("unlimited") or (tier and tier.lower() == "creator"):
+                current_rpm = len(valid_requests)
+                current_tpm = sum(int(r[1]) for r in valid_requests)
+                today_count = state.get("daily_requests", 0)
+                metrics = {
+                    "tier": "creator",
+                    "rpm_used": current_rpm,
+                    "rpm_max": "Unlimited",
+                    "tpm_used": current_tpm,
+                    "tpm_max": "Unlimited",
+                    "daily_used": today_count,
+                    "daily_max": "Unlimited",
+                    "retry_after": 0.0
+                }
+                return True, 0.0, "", metrics
 
             # 1. Daily Quota Check
             today_count = state.get("daily_requests", 0)
@@ -253,6 +278,22 @@ class ClientRateLimiter:
             rpm_used = len(valid)
             tpm_used = sum(int(r[1]) for r in valid)
             daily_used = state.get("daily_requests", 0)
+
+            if cfg.get("unlimited") or (tier and tier.lower() == "creator"):
+                return {
+                    "tier": "creator",
+                    "tier_title": cfg["title"],
+                    "rpm_used": rpm_used,
+                    "rpm_max": "Unlimited",
+                    "rpm_remaining": "Unlimited",
+                    "tpm_used": tpm_used,
+                    "tpm_max": "Unlimited",
+                    "tpm_remaining": "Unlimited",
+                    "daily_used": daily_used,
+                    "daily_max": "Unlimited",
+                    "daily_remaining": "Unlimited",
+                    "window_seconds": self.window_seconds,
+                }
 
             return {
                 "tier": tier,
