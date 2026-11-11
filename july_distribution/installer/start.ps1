@@ -76,7 +76,7 @@ Invoke-JulyCli config --set server_url $ServerUrl | Out-Null
 Write-Host "      [✓] Connected to HS AI Cloud Control: $ServerUrl" -ForegroundColor Gray
 
 # [3] Check Existing Session or Prompt Interactive Authentication
-$authOutput = & $PythonExe -c "from july_distribution.client.auth import ClientAuthManager; a = ClientAuthManager(); print(f'{a.is_authenticated()}|{a.get_session().get(\"username\", \"\") if a.is_authenticated() else \"\"}')" 2>$null
+$authOutput = & $PythonExe -c "from july_distribution.client.auth import ClientAuthManager as A; a=A(); u=a.get_session().get('username','') if a.is_authenticated() else ''; print(f'{a.is_authenticated()}|{u}')" 2>$null
 $authParts = ($authOutput -split '\|')
 $isAuth = ($authParts[0] -eq 'True')
 
