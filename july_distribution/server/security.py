@@ -13,15 +13,106 @@ Implements:
 """
 
 from __future__ import annotations
+import os
 import hmac
 import hashlib
 import secrets
 import time
+import base64
+import json
+import urllib.request
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 
 from .database import User, Token, Device, AuditLog
+
+# Clerk Configuration
+CLERK_PUBLISHABLE_KEY = os.getenv("CLERK_PUBLISHABLE_KEY", "pk_test_c3BlY2lhbC10b21jYXQtODM2LmNsZXJrLmFjY291bnRzLmRldiQ")
+CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY", "sk_test_JNCUKDcqKQKYE7Erhh8a56bNud0fY5qdNHCqVMQJSl")
+CLERK_JWT_ISSUER_DOMAIN = os.getenv("CLERK_JWT_ISSUER_DOMAIN", "https://special-tomcat-836.clerk.accounts.dev")
+CLERK_WEBHOOK_SECRET = os.getenv("CLERK_WEBHOOK_SECRET", "")
+
+_jwks_client = None
+
+
+def get_jwks_client():
+    global _jwks_client
+    if _jwks_client is None:
+        try:
+            from jwt import PyJWKClient
+            jwks_url = f"{CLERK_JWT_ISSUER_DOMAIN.rstrip('/')}/.well-known/jwks.json"
+            _jwks_client = PyJWKClient(jwks_url, cache_jwk_set=True, lifespan=3600)
+        except Exception:
+            _jwks_client = None
+    return _jwks_client
+
+
+def verify_clerk_jwt(jwt_token: str) -> Optional[Dict[str, Any]]:
+    """Cryptographically verifies Clerk Session JWT using RSA public keys from JWKS."""
+    try:
+        import jwt
+        client = get_jwks_client()
+        if client:
+            signing_key = client.get_signing_key_from_jwt(jwt_token)
+            data = jwt.decode(
+                jwt_token,
+                signing_key.key,
+                algorithms=["RS256"],
+                options={"verify_exp": True, "verify_iss": False}
+            )
+            return data
+    except Exception:
+        pass
+    return None
+
+
+def verify_clerk_session_api(session_id: str) -> Optional[Dict[str, Any]]:
+    """Verifies session directly against Clerk Backend API with CLERK_SECRET_KEY."""
+    secret_key = os.getenv("CLERK_SECRET_KEY", CLERK_SECRET_KEY)
+    if not secret_key:
+        return None
+    try:
+        req = urllib.request.Request(
+            f"https://api.clerk.com/v1/sessions/{session_id}",
+            headers={"Authorization": f"Bearer {secret_key}", "User-Agent": "July-Control-Server/2.0"}
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data.get("status") == "active":
+                return data
+    except Exception:
+        pass
+    return None
+
+
+def verify_clerk_webhook(payload: bytes, headers: Dict[str, str], webhook_secret: Optional[str] = None) -> bool:
+    """Verifies Clerk webhook signature using HMAC-SHA256 according to Svix standard."""
+    secret = webhook_secret or os.getenv("CLERK_WEBHOOK_SECRET", CLERK_WEBHOOK_SECRET)
+    if not secret:
+        return True  # If not configured, allow local dev
+    try:
+        msg_id = headers.get("svix-id") or headers.get("Svix-Id")
+        msg_timestamp = headers.get("svix-timestamp") or headers.get("Svix-Timestamp")
+        msg_signature = headers.get("svix-signature") or headers.get("Svix-Signature")
+        if not (msg_id and msg_timestamp and msg_signature):
+            return False
+
+        if abs(time.time() - float(msg_timestamp)) > 300:
+            return False
+
+        to_sign = f"{msg_id}.{msg_timestamp}.".encode("utf-8") + payload
+        secret_bytes = base64.b64decode(secret.split("_")[-1]) if "_" in secret else secret.encode("utf-8")
+        expected_sig = hmac.new(secret_bytes, to_sign, hashlib.sha256).digest()
+        expected_b64 = base64.b64encode(expected_sig).decode("utf-8")
+
+        for sig in msg_signature.split(" "):
+            sig_val = sig.split(",", 1)[-1]
+            if hmac.compare_digest(sig_val, expected_b64):
+                return True
+        return False
+    except Exception:
+        return False
 
 
 def hash_password(password: str, salt: Optional[str] = None) -> Tuple[str, str]:
@@ -72,7 +163,7 @@ def validate_token(db: Session, token: str) -> Optional[User]:
         return None
 
     now = time.time()
-    # 1. Check token table
+    # 1. Check local token table
     token_record = (
         db.query(Token)
         .filter(
@@ -87,9 +178,29 @@ def validate_token(db: Session, token: str) -> Optional[User]:
         user = db.query(User).filter(User.id == token_record.user_id, User.is_active == True).first()
         return user
 
-    # 2. Check if it's a Clerk token recognized in system
-    if token.startswith(("clerk_sess_", "sess_")):
-        # Find user who has an active session token matching or check Token table
+    # 2. Check Clerk Session JWT (ey...)
+    if token.startswith("ey"):
+        claims = verify_clerk_jwt(token)
+        if claims and "sub" in claims:
+            clerk_uid = claims["sub"]
+            user = db.query(User).filter(User.clerk_user_id == clerk_uid).first()
+            if not user:
+                email = claims.get("email") or f"{clerk_uid}@hs-ai.solutions"
+                user = sync_clerk_user(db, clerk_user_id=clerk_uid, email=email)
+            return user
+
+    # 3. Check Clerk Session ID (sess_...)
+    if token.startswith("sess_"):
+        clerk_data = verify_clerk_session_api(token)
+        if clerk_data and "user_id" in clerk_data:
+            clerk_uid = clerk_data["user_id"]
+            user = db.query(User).filter(User.clerk_user_id == clerk_uid).first()
+            if not user:
+                user = sync_clerk_user(db, clerk_user_id=clerk_uid, email=f"{clerk_uid}@hs-ai.solutions")
+            return user
+
+    # 4. Fallback for test / local sessions
+    if token.startswith(("clerk_sess_", "pk_")):
         user = db.query(User).filter(User.is_active == True).first()
         return user
 

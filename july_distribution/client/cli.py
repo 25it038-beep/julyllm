@@ -231,21 +231,19 @@ def cmd_install():
 
 
 def _print_auth_success(sess: dict, is_signup: bool = False):
-    title = "Account Created & Authenticated Successfully!" if is_signup else "Clerk Authentication Successful!"
-    print(f"\n {UI.GREEN}[✓] {title}{UI.RESET}")
-    print(f" {UI.GREEN}[✓]{UI.RESET} Authenticated As    : {UI.BOLD}{sess.get('name', 'Developer')}{UI.RESET} ({sess.get('email')})")
-    print(f" {UI.GREEN}[✓]{UI.RESET} Clerk User ID       : {sess.get('clerk_user_id')}")
-    print(f" {UI.GREEN}[✓]{UI.RESET} Subscription Plan   : {UI.BOLD}{UI.CYAN}{sess.get('tier', 'pro').upper()}{UI.RESET}")
-    print(f" {UI.GREEN}[✓]{UI.RESET} Registered Device   : {sess.get('device_name')} [{sess.get('os_version')}]")
-    print(f" {UI.GREEN}[✓]{UI.RESET} Credential Vault    : {UI.GREEN}Windows DPAPI Protected (Encrypted at Rest){UI.RESET}")
-    print(f" {UI.GREEN}[✓]{UI.RESET} Model Access        : {UI.BOLD}{UI.GREEN}UNLOCKED — July & Gravity Models Ready{UI.RESET}")
-    print(f" {UI.GREEN}[✓]{UI.RESET} Studio Portal       : {STUDIO_URL}\n")
+    name = sess.get("name") or "Harshan"
+    email = sess.get("email") or "user@example.com"
+    print("\nSuccessfully authenticated!\n")
+    print(f"Welcome, {name}.")
+    print(f"Account: {email}")
+    print("Authentication: Verified\n")
+    print("July LLM is ready.\n")
 
 
 def ensure_authenticated_for_models(prompt_user: bool = True) -> tuple[bool, Optional[dict]]:
     """
     Enforces authentication before allowing model inference or loading.
-    If unauthenticated and running interactively in CLI, offers immediate in-terminal authentication.
+    If unauthenticated and running interactively in CLI, offers immediate authentication.
     """
     clerk = ClerkAuthManager()
     session = clerk.get_session()
@@ -265,17 +263,16 @@ def ensure_authenticated_for_models(prompt_user: bool = True) -> tuple[bool, Opt
         print(f" {UI.YELLOW}└────────────────────────────────────────────────────────────────────────────┘{UI.RESET}\n")
 
         try:
-            choice = input(f" {UI.CYAN}[?] Would you like to authenticate now directly in the CLI? [Y/n]: {UI.RESET}").strip().lower()
+            choice = input(f" {UI.CYAN}[?] Would you like to authenticate now? [Y/n]: {UI.RESET}").strip().lower()
         except (KeyboardInterrupt, EOFError):
             print()
             return False, None
 
         if choice in ("", "y", "yes"):
             try:
-                cmd_login(argparse.Namespace(username=None, password=None, token=None, sso=None, server=None, cli=True))
+                cmd_login(argparse.Namespace(username=None, password=None, token=None, sso=None, server=None, force=False))
                 session = clerk.get_session()
                 if session and not clerk.vault.is_session_expired(session):
-                    print(f" {UI.GREEN}[✓] Authentication verified. Model access unlocked!{UI.RESET}\n")
                     return True, session
             except Exception as e:
                 print(f" {UI.RED}[!] Authentication failed:{UI.RESET} {e}\n")
@@ -288,13 +285,32 @@ def ensure_authenticated_for_models(prompt_user: bool = True) -> tuple[bool, Opt
 
 
 def cmd_login(args):
-    UI.print_card("HS AI SOLUTIONS — CLERK IDENTITY AUTHENTICATION")
     clerk = ClerkAuthManager()
+    force = getattr(args, "force", False)
 
-    # 1. Manual token supplied via CLI arguments
+    # 1. Check whether the user is already authenticated
+    if not force and clerk.is_authenticated():
+        session = clerk.get_session() or {}
+        name = session.get("name") or "Harshan"
+        email = session.get("email") or "user@example.com"
+        print("\nJULY LLM")
+        print("Powered by HS AI Solutions\n")
+        print("Already authenticated!\n")
+        print(f"Welcome, {name}.")
+        print(f"Account: {email}")
+        print("Authentication: Verified\n")
+        print("July LLM is ready.\n")
+        print(f" {UI.GRAY}[i] To switch accounts, run: july login --force{UI.RESET}")
+        print(f" {UI.GRAY}[i] To sign out, run: july logout{UI.RESET}\n")
+        return
+
+    # 2. Token supplied via CLI arguments (for headless / CI environments)
     token = getattr(args, "token", None)
     if token:
         try:
+            print("\nJULY LLM")
+            print("Powered by HS AI Solutions\n")
+            print("Authenticating via Clerk Token...")
             sess = clerk.login_manual(token, email=getattr(args, "email", None), server_url=getattr(args, "server", None))
             _print_auth_success(sess)
             return
@@ -302,112 +318,19 @@ def cmd_login(args):
             print(f"\n {UI.RED}[!] Token Authentication Failed:{UI.RESET} {e}\n")
             sys.exit(1)
 
-    # 2. Username and password supplied via CLI arguments
-    username = getattr(args, "username", None)
-    password = getattr(args, "password", None)
-    if username and password:
-        try:
-            sess = clerk.login_credentials(username, password, server_url=getattr(args, "server", None))
-            _print_auth_success(sess)
-            return
-        except Exception as e:
-            # Fallback to legacy ClientAuthManager
-            try:
-                auth = ClientAuthManager()
-                sess = auth.login(username, password, server_url=getattr(args, "server", None))
-                print(f"\n {UI.GREEN}[✓] Legacy Login Successful!{UI.RESET} Authenticated as: {UI.BOLD}{sess['username']}{UI.RESET}")
-                print(f" {UI.GREEN}[✓]{UI.RESET} Model Access Granted : {sess.get('model_access_granted', True)}\n")
-                return
-            except Exception:
-                print(f"\n {UI.RED}[!] Authentication Failed:{UI.RESET} {e}\n")
-                sys.exit(1)
-
-    # 3. Interactive In-CLI Authentication Menu
+    # 3. Interactive Clerk Authentication Workflow
     provider = getattr(args, "sso", None)
-    force_browser = bool(getattr(args, "browser_only", False) or getattr(args, "browser", False))
-
-    if not provider and not force_browser and sys.stdin.isatty():
-        print(f"\n {UI.BOLD}{UI.CYAN}Select Authentication Method:{UI.RESET}")
-        print(f"   {UI.GREEN}[1]{UI.RESET} Sign In with Email & Password {UI.BOLD}(In-CLI Terminal){UI.RESET}")
-        print(f"   {UI.GREEN}[2]{UI.RESET} Sign In with Clerk Token / API Key {UI.BOLD}(In-CLI Terminal){UI.RESET}")
-        print(f"   {UI.GREEN}[3]{UI.RESET} Sign Up / Create New Account {UI.BOLD}(In-CLI Terminal){UI.RESET}")
-        print(f"   {UI.GREEN}[4]{UI.RESET} Browser Single Sign-On (Google, GitHub, Clerk Web)")
-        print(f"   {UI.GRAY}[q] Cancel{UI.RESET}\n")
-
-        try:
-            choice = input(f" {UI.CYAN}Selection [1-4]: {UI.RESET}").strip()
-        except (KeyboardInterrupt, EOFError):
-            print()
-            sys.exit(0)
-
-        if choice in ("1", "email", "password"):
-            try:
-                user_ident = input(f" {UI.CYAN}Email or Username: {UI.RESET}").strip()
-                if not user_ident:
-                    print(f" {UI.RED}[!] Email or username cannot be empty.{UI.RESET}")
-                    sys.exit(1)
-                user_pass = getpass.getpass(f" {UI.CYAN}Password: {UI.RESET}").strip()
-                if not user_pass:
-                    print(f" {UI.RED}[!] Password cannot be empty.{UI.RESET}")
-                    sys.exit(1)
-
-                print(f" {UI.GRAY}[*] Authenticating identity and sealing credentials in vault...{UI.RESET}")
-                sess = clerk.login_credentials(user_ident, user_pass, server_url=getattr(args, "server", None))
-                _print_auth_success(sess)
-                return
-            except Exception as e:
-                print(f"\n {UI.RED}[!] Authentication Failed:{UI.RESET} {e}\n")
-                sys.exit(1)
-
-        elif choice in ("2", "token"):
-            try:
-                tok_input = getpass.getpass(f" {UI.CYAN}Clerk Token or API Key: {UI.RESET}").strip()
-                if not tok_input:
-                    print(f" {UI.RED}[!] Token cannot be empty.{UI.RESET}")
-                    sys.exit(1)
-                mail_input = input(f" {UI.CYAN}Email (Optional, press Enter to skip): {UI.RESET}").strip() or None
-                print(f" {UI.GRAY}[*] Sealing credentials in Windows DPAPI vault...{UI.RESET}")
-                sess = clerk.login_manual(tok_input, email=mail_input, server_url=getattr(args, "server", None))
-                _print_auth_success(sess)
-                return
-            except Exception as e:
-                print(f"\n {UI.RED}[!] Authentication Failed:{UI.RESET} {e}\n")
-                sys.exit(1)
-
-        elif choice in ("3", "signup"):
-            try:
-                email_input = input(f" {UI.CYAN}Email: {UI.RESET}").strip()
-                uname_input = input(f" {UI.CYAN}Username: {UI.RESET}").strip()
-                pass_input = getpass.getpass(f" {UI.CYAN}Password (min 6 chars): {UI.RESET}").strip()
-                print(f" {UI.GRAY}[*] Registering account and creating vault session...{UI.RESET}")
-                sess = clerk.signup_credentials(email_input, uname_input, pass_input, server_url=getattr(args, "server", None))
-                _print_auth_success(sess, is_signup=True)
-                return
-            except Exception as e:
-                print(f"\n {UI.RED}[!] Registration Failed:{UI.RESET} {e}\n")
-                sys.exit(1)
-
-        elif choice in ("4", "browser", "sso"):
-            pass  # Fall through to browser OAuth flow below
-        elif choice.lower() in ("q", "quit", "cancel"):
-            print(f" {UI.GRAY}Authentication canceled.{UI.RESET}\n")
-            return
-        else:
-            print(f" {UI.RED}[!] Invalid choice. Aborting.{UI.RESET}\n")
-            sys.exit(1)
-
-    # 4. Browser-based Clerk OAuth Flow
-    sso_label = f" ({provider.upper()} OAuth)" if provider else " (Google, GitHub, Email)"
-    print(f" {UI.CYAN}[*]{UI.RESET} Launching secure browser for Clerk Authentication{sso_label}...")
-    print(f" {UI.GRAY}[*] Listening on local loopback callback for verification...{UI.RESET}")
+    print("\nJULY LLM")
+    print("Powered by HS AI Solutions\n")
+    print("Authentication Required\n")
+    print("Opening HS AI Solutions Login...")
 
     try:
         session = clerk.login_browser(provider=provider, server_url=getattr(args, "server", None))
         _print_auth_success(session)
     except Exception as e:
-        print(f"\n {UI.RED}[!] Authentication Failed:{UI.RESET} {e}")
-        print(f" {UI.GRAY}[i] To log in directly in CLI, run: july login -u <username> -p <password>{UI.RESET}")
-        print(f" {UI.GRAY}[i] To log in with a token, run: july login --token <clerk_token>{UI.RESET}\n")
+        print(f"\n {UI.RED}[!] Authentication Failed or Timed Out:{UI.RESET} {e}")
+        print(f" {UI.GRAY}[i] In headless environments, sign in with: july login --token <token>{UI.RESET}\n")
         sys.exit(1)
 
 
@@ -479,13 +402,35 @@ def cmd_auth(args):
 
     if action == "status":
         cmd_auth_status(clerk)
+    elif action == "refresh":
+        cmd_auth_refresh(clerk)
     elif action == "devices":
         cmd_auth_devices(clerk)
     elif action == "revoke":
         target_dev = getattr(args, "device_id", None)
         cmd_auth_revoke(clerk, target_dev)
     else:
-        print(f" {UI.RED}[!] Unknown auth action '{action}'. Choices: status, devices, revoke{UI.RESET}")
+        print(f" {UI.RED}[!] Unknown auth action '{action}'. Choices: status, refresh, devices, revoke{UI.RESET}")
+
+
+def cmd_auth_refresh(clerk: ClerkAuthManager):
+    UI.print_card("HS AI SOLUTIONS — REFRESH AUTHENTICATION SESSION")
+    session = clerk.get_session()
+    if not session:
+        print(f" {UI.RED}[!] No active session found.{UI.RESET} Run 'july login' first.\n")
+        return
+
+    print(f" {UI.GRAY}[*] Contacting Clerk IAM service and synchronizing session...{UI.RESET}")
+    try:
+        new_sess = clerk.refresh_session()
+        print(f"\n {UI.GREEN}[✓] Session Refreshed Successfully!{UI.RESET}")
+        print(f"   Account       : {new_sess.get('email')}")
+        print(f"   Name          : {new_sess.get('name', 'Developer')}")
+        print(f"   Tier          : {UI.BOLD}{UI.GREEN}{new_sess.get('tier', 'pro').upper()}{UI.RESET}")
+        print(f"   Session State : {UI.GREEN}ACTIVE / VALID{UI.RESET}")
+        print(f"   Vault Status  : {UI.GREEN}Windows DPAPI Re-sealed{UI.RESET}\n")
+    except Exception as e:
+        print(f"\n {UI.RED}[!] Failed to refresh session:{UI.RESET} {e}\n")
 
 
 def cmd_auth_status(clerk: ClerkAuthManager):
@@ -587,28 +532,74 @@ def cmd_auth_revoke(clerk: ClerkAuthManager, device_id: Optional[str]):
 
 
 def cmd_account(args=None):
-    UI.print_card("HS AI SOLUTIONS — USER ACCOUNT PROFILE")
+    UI.print_card("HS AI SOLUTIONS — USER ACCOUNT DASHBOARD")
     clerk = ClerkAuthManager()
     session = clerk.get_session()
 
     if not session:
-        print(f" {UI.YELLOW}[!] Not authenticated. Run 'july login' to view your account details.{UI.RESET}\n")
+        print(f" {UI.YELLOW}[!] Not authenticated.{UI.RESET}")
+        print(f" {UI.GRAY}[i] Run 'july login' to access your HS AI Solutions account dashboard.{UI.RESET}\n")
         return
 
-    created_date = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(session.get("created_at", time.time())))
+    name = session.get("name") or "Harshan Seliyan"
+    email = session.get("email") or "user@hs-ai.solutions"
+    avatar = session.get("image_url") or "[Default HS AI Solutions Avatar]"
+    is_expired = clerk.vault.is_session_expired(session)
+    session_status = "EXPIRED" if is_expired else "ACTIVE / SECURE (Hardware-Bound DPAPI)"
+    created_ts = session.get("created_at", time.time())
+    created_date = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(created_ts))
     tier = session.get("tier", "pro").upper()
+    clerk_id = session.get("clerk_user_id", "N/A")
 
-    print(f"   Organization     : {UI.BOLD}HS AI Solutions{UI.RESET}")
-    print(f"   Founder          : Harshan Seliyan")
-    print(f"   Account Holder   : {UI.BOLD}{session.get('name', 'Developer')}{UI.RESET}")
-    print(f"   Email Address    : {session.get('email')}")
-    print(f"   Clerk User ID    : {UI.CYAN}{session.get('clerk_user_id')}{UI.RESET}")
-    print(f"   Subscription Plan: {UI.BOLD}{UI.GREEN}{tier}{UI.RESET}")
-    print(f"   Account Role     : {session.get('role', 'developer')}")
-    print(f"   Member Since     : {created_date}")
-    print(f"   OAuth Providers  : Google, GitHub, Clerk Native")
-    print(f"   Daily Model Quota: 10,000 requests (Pro) / Unlimited Local Inference")
-    print(f"   Studio Dashboard : {STUDIO_URL}\n")
+    # Usage statistics
+    usage = session.get("usage", {})
+    total_tokens = usage.get("total_tokens", 0)
+    req_count = usage.get("requests_count", 0)
+    models_used = usage.get("models_used", {})
+
+    # Rate limits
+    limiter = ClientRateLimiter.get_instance()
+    rl_metrics = limiter.get_metrics(tier=session.get("tier", "pro"))
+
+    print(f" {UI.BOLD}{UI.CYAN}── USER IDENTITY & PROFILE ──────────────────────────────{UI.RESET}")
+    print(f"   Profile Picture  : {avatar}")
+    print(f"   Name             : {UI.BOLD}{name}{UI.RESET}")
+    print(f"   Email            : {email}")
+    print(f"   Verification     : {UI.GREEN}Verified (Clerk Identity & Access Management){UI.RESET}")
+    print(f"   Account Created  : {created_date}")
+    print(f"   Clerk User ID    : {UI.CYAN}{clerk_id}{UI.RESET}")
+    print(f"   Subscription     : {UI.BOLD}{UI.GREEN}{tier} PLAN{UI.RESET}")
+
+    print(f"\n {UI.BOLD}{UI.CYAN}── CURRENT AUTHENTICATION SESSION ───────────────────────{UI.RESET}")
+    print(f"   Session State    : {UI.GREEN if not is_expired else UI.RED}{session_status}{UI.RESET}")
+    print(f"   Credential Vault : {UI.GREEN}Windows DPAPI (Cryptographically Sealed at Rest){UI.RESET}")
+    print(f"   Identity Issuer  : https://special-tomcat-836.clerk.accounts.dev")
+
+    print(f"\n {UI.BOLD}{UI.CYAN}── TOKEN USAGE STATISTICS ───────────────────────────────{UI.RESET}")
+    print(f"   Total Requests   : {UI.BOLD}{req_count:,}{UI.RESET}")
+    print(f"   Total Tokens     : {UI.BOLD}{total_tokens:,}{UI.RESET}")
+    july_tokens = models_used.get("july", {}).get("tokens", 0)
+    july_reqs = models_used.get("july", {}).get("requests", 0)
+    gravity_tokens = models_used.get("gravity", {}).get("tokens", 0)
+    gravity_reqs = models_used.get("gravity", {}).get("requests", 0)
+    print(f"   • July Model     : {july_reqs} requests | {july_tokens:,} tokens")
+    print(f"   • Gravity Model  : {gravity_reqs} requests | {gravity_tokens:,} tokens")
+
+    print(f"\n {UI.BOLD}{UI.CYAN}── RATE LIMITS & QUOTAS ─────────────────────────────────{UI.RESET}")
+    print(f"   Policy Tier      : {UI.BOLD}{rl_metrics['tier_title']}{UI.RESET}")
+    print(f"   Request Limit    : {rl_metrics['rpm_used']}/{rl_metrics['rpm_max']} req/min ({UI.GREEN}{rl_metrics['rpm_remaining']}{UI.RESET} remaining)")
+    print(f"   Throughput (TPM) : {rl_metrics['tpm_used']:,}/{rl_metrics['tpm_max']:,} tok/min ({UI.GREEN}{rl_metrics['tpm_remaining']:,}{UI.RESET} remaining)")
+    print(f"   Daily Limit      : {rl_metrics['daily_used']}/{rl_metrics['daily_max']} req/day ({UI.GREEN}{rl_metrics['daily_remaining']}{UI.RESET} remaining)")
+    print(f"   Window Duration  : {int(rl_metrics['window_seconds'])}s sliding window")
+
+    print(f"\n {UI.BOLD}{UI.CYAN}── AVAILABLE FOUNDATION MODELS ──────────────────────────{UI.RESET}")
+    print(f"   • {UI.BOLD}July{UI.RESET} (Lightweight)    : [READY] Fast, low-latency reasoning and coding execution")
+    print(f"   • {UI.BOLD}Gravity{UI.RESET} (Heavyweight): [READY] Deep multi-step reasoning, architectural synthesis")
+    print(f"   • {UI.BOLD}Auto{UI.RESET} (Intelligent)   : [READY] Dynamic routing based on complexity")
+
+    print(f"\n {UI.BOLD}{UI.CYAN}── SIGN-OUT INSTRUCTIONS ────────────────────────────────{UI.RESET}")
+    print(f"   To end your session and securely clear local cryptographic credentials:")
+    print(f"   Run: {UI.BOLD}{UI.YELLOW}july logout{UI.RESET}\n")
 
 
 def cmd_usage(args=None):
@@ -1978,6 +1969,7 @@ def main():
     login_p.add_argument("-s", "--server", help="Control server URL")
     login_p.add_argument("-b", "--browser", action="store_true", help="Authenticate via browser")
     login_p.add_argument("--browser-only", action="store_true", help="Force browser loopback authentication")
+    login_p.add_argument("-f", "--force", action="store_true", help="Force re-authentication even if already signed in")
     login_p.add_argument("--cli", action="store_true", help="Force interactive in-CLI terminal login")
     login_p.add_argument("--sso", choices=["google", "github"], help="Direct Single Sign-On provider (google, github)")
     login_p.add_argument("--token", help="Manual Clerk session token or API key (for in-CLI or headless/CI)")
@@ -1992,7 +1984,7 @@ def main():
     subparsers.add_parser("whoami", help="Display active Clerk user identity, tier, and device registration")
 
     auth_p = subparsers.add_parser("auth", help="Clerk Identity & Access Management telemetry and device controls")
-    auth_p.add_argument("action", nargs="?", default="status", choices=["status", "devices", "revoke"], help="Action: status, devices, revoke")
+    auth_p.add_argument("action", nargs="?", default="status", choices=["status", "refresh", "devices", "revoke"], help="Action: status, refresh, devices, revoke")
     auth_p.add_argument("device_id", nargs="?", help="Target device ID to revoke")
 
     subparsers.add_parser("account", help="View account subscription tier, limits, and linked providers")

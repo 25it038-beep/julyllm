@@ -107,64 +107,105 @@ class LocalCallbackHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
 
-        color = "#10b981" if success else "#ef4444"
+        color = "#d4af37" if success else "#ef4444"
         icon = "&#10004;" if success else "&#10008;"
 
         html = f"""<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>{title} — July LLM</title>
+  <title>{title} — HS AI Solutions</title>
   <style>
+    @keyframes fadeIn {{
+      from {{ opacity: 0; transform: translateY(14px) scale(0.98); }}
+      to {{ opacity: 1; transform: translateY(0) scale(1); }}
+    }}
+    @keyframes goldPulse {{
+      0%, 100% {{ box-shadow: 0 0 25px rgba(212, 175, 55, 0.15), 0 25px 50px rgba(0,0,0,0.85); }}
+      50% {{ box-shadow: 0 0 45px rgba(212, 175, 55, 0.3), 0 25px 50px rgba(0,0,0,0.85); }}
+    }}
     body {{
-      background: #090a0f;
+      background: radial-gradient(circle at 50% 25%, #141824 0%, #090a0f 70%, #050608 100%);
       color: #e2e8f0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
       display: flex;
       align-items: center;
       justify-content: center;
-      height: 100vh;
+      min-height: 100vh;
       margin: 0;
+      overflow: hidden;
     }}
     .card {{
-      background: #11131a;
-      border: 1px solid #232734;
-      border-radius: 12px;
-      padding: 3rem;
+      background: linear-gradient(180deg, #10131c 0%, #0b0d14 100%);
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      border-radius: 16px;
+      padding: 3.5rem 3rem;
       text-align: center;
-      max-width: 440px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+      max-width: 460px;
+      animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1), goldPulse 4s ease-in-out infinite;
+      backdrop-filter: blur(12px);
+    }}
+    .badge {{
+      display: inline-block;
+      padding: 0.35rem 1.1rem;
+      border-radius: 9999px;
+      background: rgba(212, 175, 55, 0.12);
+      border: 1px solid rgba(212, 175, 55, 0.45);
+      color: #f3e5ab;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
     }}
     .icon {{
-      font-size: 3rem;
+      font-size: 3.2rem;
       color: {color};
       margin-bottom: 1rem;
+      text-shadow: 0 0 25px {color}66;
     }}
     h1 {{
-      margin: 0 0 1rem;
-      font-size: 1.5rem;
+      margin: 0 0 0.8rem;
+      font-size: 1.6rem;
+      font-weight: 700;
       color: #f8fafc;
+      letter-spacing: -0.02em;
     }}
     p {{
       color: #94a3b8;
       font-size: 0.95rem;
-      line-height: 1.5;
+      line-height: 1.6;
+      margin: 0 0 1.8rem;
     }}
-    .brand {{
-      margin-top: 2rem;
-      font-size: 0.8rem;
+    .divider {{
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.35), transparent);
+      margin: 1.5rem 0;
+    }}
+    .brand-title {{
+      font-size: 0.85rem;
+      font-weight: 700;
       color: #d4af37;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
+    }}
+    .brand-sub {{
+      font-size: 0.72rem;
+      color: #64748b;
+      margin-top: 0.35rem;
+      letter-spacing: 0.05em;
     }}
   </style>
 </head>
 <body>
   <div class="card">
+    <div class="badge">HS AI Solutions • Clerk IAM</div>
     <div class="icon">{icon}</div>
     <h1>{title}</h1>
     <p>{message}</p>
-    <div class="brand">HS AI Solutions — July Platform</div>
+    <div class="divider"></div>
+    <div class="brand-title">HS AI Solutions • July LLM</div>
+    <div class="brand-sub">Intelligent Systems. Autonomous Execution.</div>
   </div>
 </body>
 </html>"""
@@ -225,6 +266,7 @@ class ClerkAuthManager:
 
         redirect_uri = f"http://127.0.0.1:{port}/callback"
         dev_info = get_device_identity()
+        target_server = (server_url or (self.config.server_url if self.config else "http://localhost:8000")).rstrip("/")
 
         # Build Clerk Auth Portal URL
         frontend_api = os.getenv("CLERK_FRONTEND_API", DEFAULT_CLERK_FRONTEND_API)
@@ -238,6 +280,8 @@ class ClerkAuthManager:
 
         query_string = urllib.parse.urlencode(auth_params)
         auth_url = f"{clerk_sign_in_url}?{query_string}"
+
+        print(f"\n Secure Authentication URL:\n   {auth_url}\n")
 
         httpd = HTTPServer(("127.0.0.1", port), LocalCallbackHandler)
         httpd.timeout = 2.0
@@ -268,6 +312,16 @@ class ClerkAuthManager:
         name = res_data.get("name") or "July Developer"
         tier = res_data.get("tier") or "pro"
 
+        # If Clerk secret key is present in environment, query authentic Clerk profile
+        clerk_sk = os.getenv("CLERK_SECRET_KEY")
+        if clerk_sk:
+            user_info = self._fetch_clerk_user_info(token, clerk_sk)
+            if user_info:
+                clerk_user_id = user_info.get("clerk_user_id", clerk_user_id)
+                email = user_info.get("email", email)
+                name = user_info.get("name", name)
+                tier = user_info.get("tier", tier)
+
         session_record = self._build_and_save_session(
             token=token,
             clerk_user_id=clerk_user_id,
@@ -286,6 +340,97 @@ class ClerkAuthManager:
             pass
 
         return session_record
+
+    def _fetch_clerk_user_info(self, token_or_session_id: str, secret_key: str) -> Optional[Dict[str, Any]]:
+        """Queries Clerk Backend API using CLERK_SECRET_KEY to fetch authentic user profile."""
+        try:
+            user_id = None
+            if token_or_session_id.startswith("sess_"):
+                url = f"https://api.clerk.com/v1/sessions/{token_or_session_id}"
+                req = urllib.request.Request(
+                    url,
+                    headers={"Authorization": f"Bearer {secret_key}", "User-Agent": "July-CLI/2.0"}
+                )
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    sess_data = json.loads(resp.read().decode("utf-8"))
+                    user_id = sess_data.get("user_id")
+
+            if not user_id and token_or_session_id.startswith("user_"):
+                user_id = token_or_session_id
+
+            if not user_id:
+                # Query users list to find first active user
+                url = "https://api.clerk.com/v1/users?limit=1"
+                req = urllib.request.Request(
+                    url,
+                    headers={"Authorization": f"Bearer {secret_key}", "User-Agent": "July-CLI/2.0"}
+                )
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    users_list = json.loads(resp.read().decode("utf-8"))
+                    if users_list:
+                        u_data = users_list[0]
+                        user_id = u_data.get("id")
+
+            if user_id:
+                user_url = f"https://api.clerk.com/v1/users/{user_id}"
+                u_req = urllib.request.Request(
+                    user_url,
+                    headers={"Authorization": f"Bearer {secret_key}", "User-Agent": "July-CLI/2.0"}
+                )
+                with urllib.request.urlopen(u_req, timeout=8) as resp:
+                    u_data = json.loads(resp.read().decode("utf-8"))
+                    emails = u_data.get("email_addresses", [])
+                    primary_id = u_data.get("primary_email_address_id")
+                    primary_email = ""
+                    for em in emails:
+                        if em.get("id") == primary_id:
+                            primary_email = em.get("email_address", "")
+                            break
+                    if not primary_email and emails:
+                        primary_email = emails[0].get("email_address", "")
+
+                    first_name = u_data.get("first_name") or ""
+                    last_name = u_data.get("last_name") or ""
+                    name = f"{first_name} {last_name}".strip() or primary_email.split("@")[0].title()
+                    meta = u_data.get("public_metadata", {})
+                    tier = meta.get("tier", "pro")
+
+                    return {
+                        "clerk_user_id": user_id,
+                        "email": primary_email,
+                        "name": name,
+                        "image_url": u_data.get("image_url", ""),
+                        "tier": tier,
+                        "role": "developer" if tier in ("pro", "enterprise") else "standard"
+                    }
+        except Exception:
+            return None
+        return None
+
+    def refresh_session(self) -> Dict[str, Any]:
+        """
+        Refreshes active Clerk session, re-synchronizes with backend or Clerk API,
+        and re-seals credentials in Windows DPAPI vault.
+        """
+        session = self.get_session()
+        if not session:
+            raise ConnectionError("No active session found to refresh. Run 'july login'.")
+
+        token = session.get("token", "")
+        clerk_sk = os.getenv("CLERK_SECRET_KEY")
+        if clerk_sk:
+            user_info = self._fetch_clerk_user_info(token, clerk_sk)
+            if user_info:
+                session.update(user_info)
+
+        try:
+            self._sync_with_backend(session)
+        except Exception:
+            pass
+
+        session["last_refreshed_at"] = time.time()
+        self.vault.store_session(session)
+        return session
 
     def login_manual(
         self,
