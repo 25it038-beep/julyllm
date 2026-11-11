@@ -26,6 +26,17 @@ class ClientAuthManager:
         self.session_file = get_default_july_dir() / "session.json"
 
     def get_session(self) -> Optional[Dict[str, Any]]:
+        # 1. Check Clerk secure credential vault
+        try:
+            from .clerk_auth import ClerkAuthManager
+            clerk_mgr = ClerkAuthManager()
+            clerk_sess = clerk_mgr.get_session()
+            if clerk_sess:
+                return clerk_sess
+        except Exception:
+            pass
+
+        # 2. Check legacy session file
         if not self.session_file.exists():
             return None
         try:
@@ -41,6 +52,13 @@ class ClientAuthManager:
         return None
 
     def is_authenticated(self) -> bool:
+        try:
+            from .clerk_auth import ClerkAuthManager
+            clerk_mgr = ClerkAuthManager()
+            if clerk_mgr.is_authenticated():
+                return True
+        except Exception:
+            pass
         return bool(self.get_token())
 
     def login(self, username: str, password: str, server_url: Optional[str] = None) -> Dict[str, Any]:
@@ -126,6 +144,12 @@ class ClientAuthManager:
         return session_data
 
     def logout(self) -> bool:
+        try:
+            from .clerk_auth import ClerkAuthManager
+            ClerkAuthManager().logout()
+        except Exception:
+            pass
+
         token = self.get_token()
         session = self.get_session()
         server_url = (session.get("server_url") if session else self.config.server_url).rstrip("/")

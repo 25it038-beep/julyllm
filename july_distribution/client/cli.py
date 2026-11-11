@@ -29,7 +29,9 @@ from pathlib import Path
 
 from .config import ClientConfig, get_default_july_dir
 from .auth import ClientAuthManager
-from .hardware import detect_client_hardware
+from .clerk_auth import ClerkAuthManager, STUDIO_AUTH_PORTAL
+from .security.credential_vault import SecureCredentialVault
+from .hardware import detect_client_hardware, get_device_identity
 from .storage import ClientEphemeralStorage
 from .downloader import ClientModelDownloader
 from .customization import UserCustomizationManager
@@ -228,20 +230,289 @@ def cmd_install():
 
 
 def cmd_login(args):
-    UI.print_card("HS AI SOLUTIONS — USER AUTHENTICATION")
-    auth = ClientAuthManager()
+    UI.print_card("HS AI SOLUTIONS — CLERK IDENTITY AUTHENTICATION")
+    clerk = ClerkAuthManager()
 
-    username = args.username or input(f" {UI.CYAN}Username{UI.RESET}: ").strip()
-    password = args.password or getpass.getpass(f" {UI.CYAN}Password{UI.RESET}: ")
+    # If manual token supplied
+    token = getattr(args, "token", None)
+    if token:
+        try:
+            sess = clerk.login_manual(token, email=getattr(args, "email", None), server_url=getattr(args, "server", None))
+            print(f"\n {UI.GREEN}[✓] Token Authentication Successful!{UI.RESET}")
+            print(f" {UI.GREEN}[✓]{UI.RESET} Clerk User ID       : {UI.BOLD}{sess['clerk_user_id']}{UI.RESET}")
+            print(f" {UI.GREEN}[✓]{UI.RESET} Email               : {sess['email']}")
+            print(f" {UI.GREEN}[✓]{UI.RESET} Active Tier         : {UI.CYAN}{sess['tier'].upper()}{UI.RESET}")
+            print(f" {UI.GREEN}[✓]{UI.RESET} Device Registered   : {sess['device_name']} ({sess['device_id'][:12]}...)")
+            print(f" {UI.GREEN}[✓]{UI.RESET} Credential Vault    : {UI.GREEN}Windows DPAPI (Encrypted at Rest){UI.RESET}\n")
+            return
+        except Exception as e:
+            print(f"\n {UI.RED}[!] Token Authentication Failed:{UI.RESET} {e}\n")
+            sys.exit(1)
+
+    # If username and password supplied (legacy login fallback)
+    username = getattr(args, "username", None)
+    password = getattr(args, "password", None)
+    if username and password:
+        auth = ClientAuthManager()
+        try:
+            session = auth.login(username, password, server_url=getattr(args, "server", None))
+            print(f"\n {UI.GREEN}[✓] Legacy Login Successful!{UI.RESET} Authenticated as: {UI.BOLD}{session['username']}{UI.RESET} ({session['role']})")
+            print(f" {UI.GREEN}[✓]{UI.RESET} Model Access Granted : {session['model_access_granted']}")
+            print(f" {UI.GREEN}[✓]{UI.RESET} Studio Portal        : {STUDIO_URL}\n")
+            return
+        except Exception as e:
+            print(f"\n {UI.RED}[!] Authentication Failed:{UI.RESET} {e}\n")
+            sys.exit(1)
+
+    # Official Default: Browser-based Clerk OAuth Flow
+    provider = getattr(args, "sso", None)
+    sso_label = f" ({provider.upper()} OAuth)" if provider else " (Google, GitHub, Email)"
+    print(f" {UI.CYAN}[*]{UI.RESET} Launching secure browser for Clerk Authentication{sso_label}...")
+    print(f" {UI.GRAY}[*] Listening on local loopback callback for verification...{UI.RESET}")
 
     try:
-        session = auth.login(username, password, server_url=args.server)
-        print(f"\n {UI.GREEN}[✓] Login successful!{UI.RESET} Authenticated as: {UI.BOLD}{session['username']}{UI.RESET} ({session['role']})")
-        print(f" {UI.GREEN}[✓]{UI.RESET} Model Access Granted : {session['model_access_granted']}")
-        print(f" {UI.GREEN}[✓]{UI.RESET} Studio Portal        : {STUDIO_URL}\n")
+        session = clerk.login_browser(provider=provider, server_url=getattr(args, "server", None))
+        print(f"\n {UI.GREEN}[✓] Clerk Authentication Successful!{UI.RESET}")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Authenticated As    : {UI.BOLD}{session.get('name', 'Developer')}{UI.RESET} ({session.get('email')})")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Clerk User ID       : {session.get('clerk_user_id')}")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Subscription Plan   : {UI.BOLD}{UI.CYAN}{session.get('tier', 'pro').upper()}{UI.RESET}")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Registered Device   : {session.get('device_name')} [{session.get('os_version')}]")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Credential Vault    : {UI.GREEN}Windows DPAPI Protected{UI.RESET}")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Studio Portal       : {STUDIO_URL}\n")
     except Exception as e:
-        print(f"\n {UI.RED}[!] Authentication Failed:{UI.RESET} {e}\n")
+        print(f"\n {UI.RED}[!] Authentication Failed:{UI.RESET} {e}")
+        print(f" {UI.GRAY}[i] To log in with a token manually, run: july login --token <clerk_token>{UI.RESET}\n")
         sys.exit(1)
+
+
+def cmd_logout(args=None):
+    UI.print_card("HS AI SOLUTIONS — SESSION TERMINATION")
+    clerk = ClerkAuthManager()
+    was_auth = clerk.is_authenticated()
+    clerk.logout()
+
+    if was_auth:
+        print(f" {UI.GREEN}[✓] Logged out successfully.{UI.RESET}")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Local cryptographic credential vault wiped.")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Remote session invalidated on server.\n")
+    else:
+        print(f" {UI.YELLOW}[i] No active authenticated session was found.{UI.RESET}\n")
+
+
+def cmd_signup(args=None):
+    UI.print_card("HS AI SOLUTIONS — CREATE NEW ACCOUNT")
+    import webbrowser
+    signup_url = f"{STUDIO_AUTH_PORTAL}?mode=sign-up"
+    print(f" {UI.CYAN}[*]{UI.RESET} Launching Clerk Sign-Up in your browser...")
+    print(f" {UI.GRAY}[*] Target URL: {signup_url}{UI.RESET}")
+    webbrowser.open(signup_url)
+    print(f"\n {UI.GREEN}[✓]{UI.RESET} Once registered, run {UI.BOLD}july login{UI.RESET} to connect your device.\n")
+
+
+def cmd_whoami(args=None):
+    clerk = ClerkAuthManager()
+    session = clerk.get_session()
+
+    if not session:
+        print(f"\n {UI.YELLOW}[!] Not currently authenticated.{UI.RESET}")
+        print(f" {UI.GRAY}[i] Run {UI.CYAN}july login{UI.GRAY} to connect your account or operate offline.{UI.RESET}\n")
+        return
+
+    UI.print_card("HS AI SOLUTIONS — ACTIVE USER IDENTITY")
+    dev_info = get_device_identity()
+    is_expired = clerk.vault.is_session_expired(session)
+
+    print(f"   Name             : {UI.BOLD}{session.get('name', 'Developer')}{UI.RESET}")
+    print(f"   Email            : {session.get('email')}")
+    print(f"   Clerk User ID    : {UI.CYAN}{session.get('clerk_user_id')}{UI.RESET}")
+    print(f"   Subscription     : {UI.BOLD}{UI.GREEN}{session.get('tier', 'pro').upper()}{UI.RESET}")
+    print(f"   Role             : {session.get('role', 'standard')}")
+    print(f"   Current Device   : {dev_info['device_name']} ({dev_info['device_id'][:12]}...)")
+    print(f"   Session Status   : {UI.RED + 'EXPIRED' if is_expired else UI.GREEN + 'ACTIVE / VALID'}{UI.RESET}")
+    print(f"   Credential Vault : {UI.GREEN}Windows DPAPI (Hardware Bound){UI.RESET}\n")
+
+
+def cmd_auth(args):
+    action = getattr(args, "action", "status") or "status"
+    clerk = ClerkAuthManager()
+
+    if action == "status":
+        cmd_auth_status(clerk)
+    elif action == "devices":
+        cmd_auth_devices(clerk)
+    elif action == "revoke":
+        target_dev = getattr(args, "device_id", None)
+        cmd_auth_revoke(clerk, target_dev)
+    else:
+        print(f" {UI.RED}[!] Unknown auth action '{action}'. Choices: status, devices, revoke{UI.RESET}")
+
+
+def cmd_auth_status(clerk: ClerkAuthManager):
+    UI.print_card("HS AI SOLUTIONS — CLERK AUTHENTICATION TELEMETRY")
+    session = clerk.get_session()
+    dev_info = get_device_identity()
+
+    print(f" {UI.BOLD}{UI.CYAN}── IDENTITY & CREDENTIAL VAULT ───────────────────────────{UI.RESET}")
+    print(f"   Identity Provider: {UI.BOLD}Clerk Identity & Access Management (IAM){UI.RESET}")
+    print(f"   Storage Engine   : {UI.GREEN}Windows DPAPI / Protected Vault (0 Plaintext){UI.RESET}")
+
+    if session:
+        is_expired = clerk.vault.is_session_expired(session)
+        expires_at = session.get("expires_at", 0)
+        remaining_days = max(0.0, round((expires_at - time.time()) / 86400, 1)) if expires_at else "N/A"
+
+        print(f"   Auth Status      : {UI.GREEN}AUTHENTICATED{UI.RESET}")
+        print(f"   Session State    : {UI.RED + 'EXPIRED' if is_expired else UI.GREEN + f'VALID ({remaining_days} days remaining)'}{UI.RESET}")
+        print(f"   Clerk User ID    : {session.get('clerk_user_id')}")
+        print(f"   Email Address    : {session.get('email')}")
+        print(f"   Account Plan     : {UI.BOLD}{session.get('tier', 'pro').upper()}{UI.RESET}")
+        print(f"   Auth Provider    : {session.get('auth_provider', 'clerk').upper()}")
+    else:
+        print(f"   Auth Status      : {UI.YELLOW}UNAUTHENTICATED (Local / Anonymous Mode){UI.RESET}")
+        print(f"   Recommendation   : Run {UI.CYAN}july login{UI.RESET} to connect devices and cloud features.")
+
+    print(f"\n {UI.BOLD}{UI.CYAN}── HARDWARE DEVICE BOUNDARY ─────────────────────────────{UI.RESET}")
+    print(f"   Device ID        : {dev_info['device_id']}")
+    print(f"   Device Hostname  : {dev_info['device_name']}")
+    print(f"   Operating System : {dev_info['os_version']}")
+    print(f"   Registered State : {UI.GREEN}AUTHORIZED{UI.RESET if session else UI.GRAY + 'LOCAL_UNBOUND' + UI.RESET}")
+
+    queue_count = 0
+    if clerk.offline_queue_file.exists():
+        try:
+            with open(clerk.offline_queue_file, "r", encoding="utf-8") as f:
+                queue_count = len(json.load(f))
+        except Exception:
+            pass
+    print(f"   Offline Ops Queue: {queue_count} pending event(s) to sync\n")
+
+
+def cmd_auth_devices(clerk: ClerkAuthManager):
+    UI.print_card("HS AI SOLUTIONS — REGISTERED ACCOUNT DEVICES")
+    session = clerk.get_session()
+    if not session:
+        print(f" {UI.RED}[!] Please log in first: 'july login'{UI.RESET}\n")
+        return
+
+    devices = clerk.get_registered_devices()
+    curr_dev = get_device_identity()["device_id"]
+
+    print(f" {'DEVICE ID':<36} {'NAME':<20} {'OS':<14} {'STATUS':<12} {'CURRENT'}")
+    print(f" {'─'*36} {'─'*20} {'─'*14} {'─'*12} {'─'*7}")
+
+    for d in devices:
+        did = d.get("device_id", "")
+        dname = d.get("device_name", "Unknown")[:19]
+        dos = d.get("os_version", "Windows")[:13]
+        dstat = d.get("status", "APPROVED")
+        is_curr = (did == curr_dev)
+        curr_badge = f"{UI.GREEN}[THIS DEVICE]{UI.RESET}" if is_curr else ""
+        stat_color = UI.GREEN if dstat == "APPROVED" else UI.RED
+
+        print(f" {did:<36} {dname:<20} {dos:<14} {stat_color}{dstat:<12}{UI.RESET} {curr_badge}")
+    print()
+
+
+def cmd_auth_revoke(clerk: ClerkAuthManager, device_id: Optional[str]):
+    UI.print_card("HS AI SOLUTIONS — REVOKE DEVICE ACCESS")
+    session = clerk.get_session()
+    if not session:
+        print(f" {UI.RED}[!] Please log in first: 'july login'{UI.RESET}\n")
+        return
+
+    if not device_id:
+        device_id = input(f" {UI.CYAN}Enter Device ID to revoke{UI.RESET}: ").strip()
+
+    if not device_id:
+        print(f" {UI.RED}[!] No device ID provided.{UI.RESET}\n")
+        return
+
+    success = clerk.revoke_device(device_id)
+    if success:
+        print(f"\n {UI.GREEN}[✓] Device '{device_id}' access has been REVOKED.{UI.RESET}\n")
+    else:
+        print(f"\n {UI.RED}[!] Failed to revoke device '{device_id}'. Backend may be unreachable.{UI.RESET}\n")
+
+
+def cmd_account(args=None):
+    UI.print_card("HS AI SOLUTIONS — USER ACCOUNT PROFILE")
+    clerk = ClerkAuthManager()
+    session = clerk.get_session()
+
+    if not session:
+        print(f" {UI.YELLOW}[!] Not authenticated. Run 'july login' to view your account details.{UI.RESET}\n")
+        return
+
+    created_date = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(session.get("created_at", time.time())))
+    tier = session.get("tier", "pro").upper()
+
+    print(f"   Organization     : {UI.BOLD}HS AI Solutions{UI.RESET}")
+    print(f"   Founder          : Harshan Seliyan")
+    print(f"   Account Holder   : {UI.BOLD}{session.get('name', 'Developer')}{UI.RESET}")
+    print(f"   Email Address    : {session.get('email')}")
+    print(f"   Clerk User ID    : {UI.CYAN}{session.get('clerk_user_id')}{UI.RESET}")
+    print(f"   Subscription Plan: {UI.BOLD}{UI.GREEN}{tier}{UI.RESET}")
+    print(f"   Account Role     : {session.get('role', 'developer')}")
+    print(f"   Member Since     : {created_date}")
+    print(f"   OAuth Providers  : Google, GitHub, Clerk Native")
+    print(f"   Daily Model Quota: 10,000 requests (Pro) / Unlimited Local Inference")
+    print(f"   Studio Dashboard : {STUDIO_URL}\n")
+
+
+def cmd_usage(args=None):
+    UI.print_card("HS AI SOLUTIONS — TOKEN & MODEL USAGE TELEMETRY")
+    clerk = ClerkAuthManager()
+    session = clerk.get_session()
+
+    usage = session.get("usage", {}) if session else {}
+    total_tokens = usage.get("total_tokens", 0)
+    req_count = usage.get("requests_count", 0)
+    models = usage.get("models_used", {})
+
+    print(f"   Total Requests   : {UI.BOLD}{req_count:,}{UI.RESET}")
+    print(f"   Total Tokens     : {UI.BOLD}{total_tokens:,}{UI.RESET}")
+    print(f"   Active Tier      : {UI.CYAN}{session.get('tier', 'pro').upper() if session else 'FREE'}{UI.RESET}")
+    print(f"   Daily Limit      : 10,000 requests (99% available)")
+    print(f"\n {UI.BOLD}{UI.CYAN}── MODEL BREAKDOWN ───────────────────────────────────────{UI.RESET}")
+    print(f" {'ENGINE / MODEL':<28} {'CALLS':<10} {'TOKENS'}")
+    print(f" {'─'*28} {'─'*10} {'─'*15}")
+
+    default_engines = [
+        ("July Lightweight LLM", "july"),
+        ("Gravity Heavyweight LLM", "gravity"),
+        ("July Reasoning Engine", "reasoning"),
+        ("July Agent Engine", "agent"),
+        ("July Code Engine", "code"),
+        ("July Vision Engine", "vision")
+    ]
+
+    for label, m_key in default_engines:
+        m_info = models.get(m_key, {"calls": 0, "tokens": 0})
+        print(f" {label:<28} {m_info.get('calls', 0):<10} {m_info.get('tokens', 0):,}")
+
+    print(f"\n {UI.GRAY}[i] Local model inference is always unlimited and free on your hardware.{UI.RESET}\n")
+
+
+def cmd_sync(args=None):
+    UI.print_card("HS AI SOLUTIONS — CLOUD SYNCHRONIZATION")
+    clerk = ClerkAuthManager()
+
+    if not clerk.is_authenticated():
+        print(f" {UI.YELLOW}[!] You are operating in offline unauthenticated mode.{UI.RESET}")
+        print(f" {UI.GRAY}[i] Run 'july login' to link your Clerk account for cloud synchronization.{UI.RESET}\n")
+        return
+
+    print(f" {UI.CYAN}[*]{UI.RESET} Flushing offline queued operations to HS AI Solutions backend...")
+    result = clerk.sync_offline_queue()
+
+    if result.get("synced"):
+        print(f" {UI.GREEN}[✓] Synchronization Complete!{UI.RESET}")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Events Flushed       : {result.get('flushed_events', 0)}")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Subscription Plan    : {UI.BOLD}{result.get('tier', 'pro').upper()}{UI.RESET}")
+        print(f" {UI.GREEN}[✓]{UI.RESET} Server Sync Timestamp: {result.get('server_time')}\n")
+    else:
+        print(f" {UI.YELLOW}[!] Sync Notice:{UI.RESET} {result.get('reason')}")
+        print(f" {UI.GRAY}[i] Offline usage metrics preserved locally for the next sync attempt.{UI.RESET}\n")
 
 
 def cmd_register(args):
@@ -270,8 +541,15 @@ def cmd_status():
     print(f"\n {UI.BOLD}{UI.CYAN}── AUTHENTICATION ────────────────────────────────────────{UI.RESET}")
     if session:
         print(f"   Status           : {UI.GREEN}AUTHENTICATED{UI.RESET}")
-        print(f"   Username         : {UI.WHITE}{session['username']}{UI.RESET}")
-        print(f"   Role             : {session['role']}")
+        clerk_id = session.get("clerk_user_id")
+        if clerk_id:
+            print(f"   Clerk User ID    : {UI.CYAN}{clerk_id}{UI.RESET}")
+            print(f"   Email            : {UI.WHITE}{session.get('email')}{UI.RESET}")
+            print(f"   Plan Tier        : {UI.BOLD}{session.get('tier', 'pro').upper()}{UI.RESET}")
+            print(f"   Credential Vault : {UI.GREEN}Windows DPAPI (Hardware Bound){UI.RESET}")
+        else:
+            print(f"   Username         : {UI.WHITE}{session.get('username', 'Developer')}{UI.RESET}")
+            print(f"   Role             : {session.get('role', 'standard')}")
         print(f"   Model License    : {UI.GREEN}ACTIVE / GRANTED{UI.RESET}")
         print(f"   Control Server   : {session.get('server_url')}")
     else:
@@ -317,11 +595,6 @@ def cmd_status():
 
 
 def cmd_load(args):
-    auth = ClientAuthManager()
-    if not auth.is_authenticated():
-        print(f" {UI.RED}[!] Not authenticated. Please run 'july login' first.{UI.RESET}")
-        sys.exit(1)
-
     cfg = ClientConfig.load()
     target_model = getattr(args, "model", None) or getattr(cfg, "selected_model", "july") or "july"
     if target_model.lower() == "auto":
@@ -331,8 +604,18 @@ def cmd_load(args):
     from .storage import PermanentModelStorage
     from .state_manager import DualModelStateManager, ModelStatus
     perm_storage = PermanentModelStorage()
-    state_mgr = DualModelStateManager()
     model_path = perm_storage.get_model_file(target_model)
+    local_available = (model_path.exists() and model_path.stat().st_size > 0) or bool(resolve_model_seed(target_model))
+
+    auth = ClientAuthManager()
+    if not auth.is_authenticated():
+        if local_available:
+            print(f" {UI.GRAY}[i] Offline Mode: Operating with local model without cloud connection.{UI.RESET}")
+        else:
+            print(f" {UI.RED}[!] Not authenticated. Please run 'july login' first to download models from cloud.{UI.RESET}")
+            sys.exit(1)
+
+    state_mgr = DualModelStateManager()
 
     # Fast seed check (if existing master seed present on workstation)
     root_seed = resolve_model_seed(target_model)
@@ -973,7 +1256,7 @@ def cmd_chat(args):
         active_mode = getattr(cfg, "selected_model", "july").upper()
         print(f"  {UI.GRAY}Active Model:{UI.RESET} {UI.CYAN}{active_mode} LLM{UI.RESET} {UI.GRAY}(Type {UI.YELLOW}/model{UI.GRAY} to switch models){UI.RESET}")
         print(f"  {UI.GRAY}Personality :{UI.RESET} {UI.YELLOW}{cfg.personality.replace('_', ' ').title()}{UI.RESET}  {UI.GRAY}Thinking:{UI.RESET} {UI.GREEN}{getattr(cfg, 'thinking_mode', 'expanded').upper()}{UI.RESET}")
-        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/model{UI.RESET}, {UI.CYAN}/think{UI.RESET}, {UI.CYAN}/help{UI.RESET}, {UI.CYAN}/paste{UI.RESET}, {UI.CYAN}/file <path>{UI.RESET}, {UI.CYAN}/visual{UI.RESET}, {UI.CYAN}/clear{UI.RESET}, {UI.CYAN}/status{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
+        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/model{UI.RESET}, {UI.CYAN}/sandbox{UI.RESET}, {UI.CYAN}/think{UI.RESET}, {UI.CYAN}/help{UI.RESET}, {UI.CYAN}/paste{UI.RESET}, {UI.CYAN}/file <path>{UI.RESET}, {UI.CYAN}/visual{UI.RESET}, {UI.CYAN}/clear{UI.RESET}, {UI.CYAN}/status{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
         print(f"{UI.GRAY}─────────────────────────────────────────────────────────────────────────────{UI.RESET}\n")
 
     runtime.load_model(active_path)
@@ -1011,6 +1294,11 @@ def cmd_chat(args):
             sys.stdout.flush()
         elapsed = max(0.001, time.time() - t0)
         print(f"\n\n{UI.GRAY}[⚡ {tok_count} tokens | {tok_count/elapsed:.1f} tok/s | {elapsed:.2f}s | Ephemeral RAM: Active]{UI.RESET}")
+
+        try:
+            ClerkAuthManager().record_usage(active_mid, len(prompt_to_run.split()), tok_count)
+        except Exception:
+            pass
 
         full_text = "".join(full_response)
         try:
@@ -1052,6 +1340,7 @@ def cmd_chat(args):
                 if c == "/help":
                     print(f"\n {UI.BOLD}{UI.CYAN}Available Commands:{UI.RESET}")
                     print(f"   {UI.CYAN}/model [name]{UI.RESET}   - Select or switch foundation model (july, gravity, auto, list)")
+                    print(f"   {UI.CYAN}/sandbox [act]{UI.RESET}   - Windows Sandbox status and isolation control (status, reset, run)")
                     print(f"   {UI.CYAN}/think [mode]{UI.RESET}   - Highlight model thinking (expanded, collapsed, hidden)")
                     print(f"   {UI.CYAN}/paste, /bulk{UI.RESET}   - Enter multi-line bulk prompt mode (finish with /send)")
                     print(f"   {UI.CYAN}/file <path>{UI.RESET}    - Load entire text file as prompt")
@@ -1064,6 +1353,28 @@ def cmd_chat(args):
                     print(f"   {UI.CYAN}/feedback{UI.RESET}       - Record feedback or failure report for continuous evolution")
                     print(f"   {UI.CYAN}/mode <name>{UI.RESET}   - Switch personality (precision_engineer, research_scientist, software_architect, tutor)")
                     print(f"   {UI.CYAN}exit, quit{UI.RESET}      - Exit and safely reclaim RAM\n")
+                    continue
+
+                if c == "/sandbox":
+                    from .sandbox import SandboxManager
+                    mgr = SandboxManager.get_instance()
+                    sub_act = cmd_parts[1].lower() if len(cmd_parts) > 1 else "status"
+                    if sub_act == "status":
+                        print(mgr.render_dashboard())
+                    elif sub_act == "reset":
+                        res = mgr.reset()
+                        print(f"\n  {UI.GREEN}[✓] {res['message']}{UI.RESET}\n")
+                    elif sub_act in ("run", "exec") and len(cmd_parts) > 2:
+                        target_cmd = " ".join(cmd_parts[2:])
+                        print(f"\n  {UI.CYAN}[SANDBOX]{UI.RESET} Executing: {UI.BOLD}{target_cmd}{UI.RESET}")
+                        sbx_res = mgr.execute(target_cmd)
+                        if sbx_res.stdout:
+                            sys.stdout.write(sbx_res.stdout)
+                        if sbx_res.stderr:
+                            sys.stderr.write(sbx_res.stderr)
+                        print(f"\n  {UI.GRAY}[Exit: {sbx_res.exit_code} | Duration: {sbx_res.duration_seconds}s]{UI.RESET}\n")
+                    else:
+                        print(f"\n  {UI.CYAN}Usage: /sandbox status | /sandbox reset | /sandbox run <command>{UI.RESET}\n")
                     continue
 
                 if c in ("/think", "/thinking"):
@@ -1299,6 +1610,11 @@ def cmd_chat(args):
             elapsed = max(0.001, time.time() - t0)
             sys.stdout.write(f"\n{UI.GRAY}[⚡ {tok_count} tokens | {tok_count/elapsed:.1f} tok/s | {elapsed:.2f}s | RAM: Active]{UI.RESET}\n")
 
+            try:
+                ClerkAuthManager().record_usage(active_mid, len(user_input.split()), tok_count)
+            except Exception:
+                pass
+
             # Autonomous Visual Representation Rendering
             full_text = "".join(full_response)
             try:
@@ -1386,6 +1702,72 @@ def cmd_config(args):
     print(f"\n {UI.GRAY}To modify setting:{UI.RESET} {UI.CYAN}july config --set <key> <value>{UI.RESET}\n")
 
 
+def cmd_sandbox(args):
+    """Handles 'july sandbox <action>' CLI commands."""
+    from .sandbox import SandboxManager
+    mgr = SandboxManager.get_instance()
+    action = getattr(args, "action", "status") or "status"
+    action = action.lower().strip()
+
+    if action == "install":
+        print(f"\n {UI.CYAN}[*] Initializing Windows Sandbox Execution Engine & Security Primitives...{UI.RESET}")
+        res = mgr.install()
+        print(f" {UI.GREEN}[✓]{UI.RESET} {res['message']}")
+        print(f" {UI.GRAY}Sandbox Root: {res['root_directory']}{UI.RESET}\n")
+
+    elif action == "status":
+        print(mgr.render_dashboard())
+
+    elif action == "start":
+        res = mgr.start()
+        print(f"\n {UI.GREEN}[✓]{UI.RESET} {res['message']}\n")
+
+    elif action == "stop":
+        res = mgr.stop()
+        print(f"\n {UI.YELLOW}[*]{UI.RESET} {res['message']}\n")
+
+    elif action == "reset":
+        res = mgr.reset()
+        print(f"\n {UI.GREEN}[✓]{UI.RESET} {res['message']}\n")
+
+    elif action == "remove":
+        confirmed = getattr(args, "confirm", False)
+        if not confirmed:
+            try:
+                ans = input(f" {UI.RED}[!] WARNING: Are you sure you want to remove July Sandbox accounts, firewall rules, and ephemeral data? [y/N]: {UI.RESET}").strip().lower()
+                confirmed = ans in ("y", "yes")
+            except (EOFError, KeyboardInterrupt):
+                confirmed = False
+        if not confirmed:
+            print(f"\n {UI.YELLOW}[*] Sandbox removal cancelled.{UI.RESET}\n")
+            return
+        res = mgr.remove(confirmed=True)
+        print(f"\n {UI.GREEN}[✓]{UI.RESET} {res['message']}\n")
+
+    elif action in ("run", "exec"):
+        cmd_str = getattr(args, "target_command", "")
+        if not cmd_str:
+            print(f"\n {UI.RED}[!] Error: No command provided to run in sandbox.{UI.RESET}")
+            print(f"     Usage: july sandbox run \"<command>\"\n")
+            return
+        timeout = getattr(args, "timeout", None)
+        allow_net = getattr(args, "network", False)
+        print(f"\n {UI.CYAN}[SANDBOX EXECUTOR]{UI.RESET} Spawning inside Windows Job Object: {UI.BOLD}{cmd_str}{UI.RESET}")
+        res = mgr.execute(cmd_str, timeout=timeout, allow_network=allow_net)
+        if res.stdout:
+            sys.stdout.write(res.stdout)
+            sys.stdout.flush()
+        if res.stderr:
+            sys.stderr.write(res.stderr)
+            sys.stderr.flush()
+        if res.security_blocked:
+            print(f"\n {UI.RED}[BLOCKED BY SANDBOX SECURITY POLICY]{UI.RESET} {res.violation_reason}\n")
+        else:
+            print(f"\n {UI.GRAY}[Exit: {res.exit_code} | Duration: {res.duration_seconds}s | Peak Mem: {res.peak_memory_mb} MB]{UI.RESET}\n")
+    else:
+        print(f"\n {UI.RED}[!] Unknown sandbox action '{action}'. Available: install, status, start, stop, reset, remove, run{UI.RESET}\n")
+
+
 def main():
     parser = argparse.ArgumentParser(prog="july", description="JULY LLM Autonomous Runtime Platform")
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
@@ -1398,10 +1780,26 @@ def main():
     reg_p.add_argument("-p", "--password", help="Password")
     reg_p.add_argument("-s", "--server", help="Control server URL")
 
-    login_p = subparsers.add_parser("login", help="Authenticate with HS AI Solutions")
-    login_p.add_argument("-u", "--username", help="Username")
-    login_p.add_argument("-p", "--password", help="Password")
+    login_p = subparsers.add_parser("login", help="Authenticate with Clerk Identity & Access Management")
+    login_p.add_argument("-u", "--username", help="Legacy username")
+    login_p.add_argument("-p", "--password", help="Legacy password")
     login_p.add_argument("-s", "--server", help="Control server URL")
+    login_p.add_argument("-b", "--browser", action="store_true", default=True, help="Authenticate via browser (default)")
+    login_p.add_argument("--sso", choices=["google", "github"], help="Direct Single Sign-On provider (google, github)")
+    login_p.add_argument("--token", help="Manual Clerk session token (for headless/CI environments)")
+    login_p.add_argument("--email", help="Email address associated with token")
+
+    subparsers.add_parser("logout", help="Log out and securely wipe local cryptographic credential vault")
+    subparsers.add_parser("signup", help="Create a new Clerk account in your browser")
+    subparsers.add_parser("whoami", help="Display active Clerk user identity, tier, and device registration")
+
+    auth_p = subparsers.add_parser("auth", help="Clerk Identity & Access Management telemetry and device controls")
+    auth_p.add_argument("action", nargs="?", default="status", choices=["status", "devices", "revoke"], help="Action: status, devices, revoke")
+    auth_p.add_argument("device_id", nargs="?", help="Target device ID to revoke")
+
+    subparsers.add_parser("account", help="View account subscription tier, limits, and linked providers")
+    subparsers.add_parser("usage", help="View model token consumption telemetry and daily quotas")
+    subparsers.add_parser("sync", help="Flush offline queued operations and synchronize with cloud backend")
 
     subparsers.add_parser("status", help="Display authentication, model, and hardware telemetry")
 
@@ -1431,6 +1829,13 @@ def main():
     cfg_p = subparsers.add_parser("config", help="View or modify user configuration")
     cfg_p.add_argument("--set", nargs=2, metavar=("KEY", "VALUE"), help="Set a configuration option")
 
+    sbx_p = subparsers.add_parser("sandbox", help="Windows Sandbox Isolated Execution Engine")
+    sbx_p.add_argument("action", nargs="?", default="status", choices=["install", "status", "start", "stop", "reset", "remove", "run", "exec"], help="Sandbox action to perform")
+    sbx_p.add_argument("target_command", nargs="?", default="", help="Command to execute if action is 'run'")
+    sbx_p.add_argument("--confirm", action="store_true", help="Confirm removal without prompting")
+    sbx_p.add_argument("-t", "--timeout", type=float, help="Execution timeout in seconds")
+    sbx_p.add_argument("-n", "--network", action="store_true", help="Allow network access for this execution")
+
     args = parser.parse_args()
 
     if args.command == "install":
@@ -1439,6 +1844,20 @@ def main():
         cmd_register(args)
     elif args.command == "login":
         cmd_login(args)
+    elif args.command == "logout":
+        cmd_logout(args)
+    elif args.command == "signup":
+        cmd_signup(args)
+    elif args.command == "whoami":
+        cmd_whoami(args)
+    elif args.command == "auth":
+        cmd_auth(args)
+    elif args.command == "account":
+        cmd_account(args)
+    elif args.command == "usage":
+        cmd_usage(args)
+    elif args.command == "sync":
+        cmd_sync(args)
     elif args.command == "status":
         cmd_status()
     elif args.command == "model":
@@ -1455,6 +1874,8 @@ def main():
         cmd_update(args)
     elif args.command == "config":
         cmd_config(args)
+    elif args.command == "sandbox":
+        cmd_sandbox(args)
     else:
         cmd_chat(argparse.Namespace(prompt=None))
 

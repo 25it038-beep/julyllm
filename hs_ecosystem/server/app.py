@@ -36,6 +36,12 @@ from hs_ecosystem.core.dual_models import JulyModelCore, GravityModelCore
 from hs_ecosystem.core.model_router import IntelligentModelRouter
 from hs_ecosystem.agent.tool_router import SharedToolRouter
 from hs_ecosystem.agent.agent_engine import SharedAgentEngine
+from hs_ecosystem.agent.task_engine import AutonomousTaskEngine, TaskPersistenceStore
+from hs_ecosystem.agent.tool_registry import ToolRegistry
+from hs_ecosystem.agent.hierarchical_memory import HierarchicalMemorySystem
+from hs_ecosystem.agent.skill_engine import SkillEngine
+from hs_ecosystem.agent.scheduler import AutonomousScheduler
+from july_distribution.client.sandbox import SandboxManager
 from hs_ecosystem.visual.visual_studio import UniversalVisualEngine
 from hs_ecosystem.storage.conversation_store import UniversalConversationStore
 from july_distribution.server.r2_manager import CloudflareR2DistributionGateway
@@ -66,6 +72,15 @@ tool_router = SharedToolRouter(workspace_root=REPO_ROOT)
 agent_engine = SharedAgentEngine(tool_router)
 visual_engine = UniversalVisualEngine()
 conv_store = UniversalConversationStore()
+
+# Initialize Autonomous Agent Platform Subsystems
+auto_tool_registry = ToolRegistry()
+auto_task_store = TaskPersistenceStore()
+auto_task_engine = AutonomousTaskEngine(store=auto_task_store, tool_executor=auto_tool_registry.execute)
+auto_memory = HierarchicalMemorySystem()
+auto_skills = SkillEngine()
+auto_scheduler = AutonomousScheduler(executor_callback=lambda g: auto_task_engine.execute_plan(auto_task_engine.plan_task(g)))
+auto_scheduler.start()
 
 
 # --- Pydantic Request Models ---
@@ -298,6 +313,69 @@ def authorize_tool(req: ToolConfirmationRequest):
     else:
         ok = tool_router.permission_mgr.deny_token(req.token)
     return {"status": "success" if ok else "not_found", "token": req.token, "action": req.action}
+
+
+# --- Autonomous Agent Platform Endpoints ---
+
+class AgentRunRequest(BaseModel):
+    goal: str
+    model: str = "july"
+
+
+@app.post("/api/agent/run")
+def api_agent_run(req: AgentRunRequest):
+    plan = auto_task_engine.plan_task(req.goal, model_id=req.model)
+    executed = auto_task_engine.execute_plan(plan)
+    return {
+        "task_id": executed.task_id,
+        "status": executed.status.value,
+        "verification_passed": executed.verification_passed,
+        "verification_notes": executed.verification_notes,
+        "subtasks": [
+            {
+                "id": st.id,
+                "name": st.name,
+                "status": st.status.value,
+                "output": st.output
+            }
+            for st in executed.subtasks
+        ]
+    }
+
+
+@app.get("/api/agent/tasks")
+def api_agent_tasks(limit: int = 20):
+    return auto_task_store.list_tasks(limit=limit)
+
+
+@app.get("/api/agent/memory")
+def api_agent_memory(query: Optional[str] = None, layer: Optional[str] = None):
+    if query:
+        mems = auto_memory.search_fts(query, layer=layer)
+    else:
+        mems = auto_memory.list_memories(layer=layer)
+    return [m.__dict__ for m in mems]
+
+
+@app.get("/api/agent/skills")
+def api_agent_skills():
+    return auto_skills.list_skills()
+
+
+@app.get("/api/agent/tools")
+def api_agent_tools():
+    return auto_tool_registry.get_schemas()
+
+
+@app.get("/api/agent/scheduler")
+def api_agent_scheduler():
+    return auto_scheduler.list_jobs()
+
+
+@app.get("/api/agent/sandbox/status")
+def api_agent_sandbox_status():
+    sbx = SandboxManager.get_instance()
+    return sbx.get_status()
 
 
 # --- Embedded Obsidian Black & Champagne Gold Web UI ---

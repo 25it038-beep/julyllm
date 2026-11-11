@@ -20,6 +20,7 @@ from .permission_manager import AgentPermissionManager
 from july_distribution.client.reasoning.math_verifier import MathematicalIntelligenceEngine
 from july_distribution.client.reasoning.code_verifier import ProgrammingIntelligenceEngine
 from july_distribution.client.web_search import live_duckduckgo_search
+from july_distribution.client.sandbox import SandboxManager, SecurityViolation
 
 
 class SharedToolRouter:
@@ -53,6 +54,11 @@ class SharedToolRouter:
                 "name": "execute_code_sandbox",
                 "description": "Executes Python or PowerShell code inside a sandboxed isolated process.",
                 "parameters": {"type": "object", "properties": {"language": {"type": "string"}, "code": {"type": "string"}}, "required": ["language", "code"]}
+            },
+            {
+                "name": "execute_shell_sandbox",
+                "description": "Executes a shell command inside the Windows Sandbox (Job Object + restricted token + network offline).",
+                "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}
             },
             {
                 "name": "cas_solve",
@@ -91,9 +97,15 @@ class SharedToolRouter:
 
         # Step 2: Tool execution
         try:
+            sbx = SandboxManager.get_instance()
+
             if tool_name == "file_read":
                 rel_path = arguments.get("file_path", "")
-                target = (self.workspace_root / rel_path).resolve()
+                try:
+                    target = sbx.fs.resolve_and_validate_path(self.workspace_root / rel_path, allow_write=False)
+                except SecurityViolation as sv:
+                    return {"success": False, "error": f"SECURITY VIOLATION: {sv}"}
+
                 if not target.exists() or not target.is_file():
                     return {"success": False, "error": f"File not found: {rel_path}"}
                 with open(target, "r", encoding="utf-8", errors="replace") as f:
@@ -103,7 +115,11 @@ class SharedToolRouter:
             elif tool_name == "file_write":
                 rel_path = arguments.get("file_path", "")
                 content = arguments.get("content", "")
-                target = (self.workspace_root / rel_path).resolve()
+                try:
+                    target = sbx.fs.resolve_and_validate_path(self.workspace_root / rel_path, allow_write=True)
+                except SecurityViolation as sv:
+                    return {"success": False, "error": f"SECURITY VIOLATION: {sv}"}
+
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with open(target, "w", encoding="utf-8") as f:
                     f.write(content)
@@ -111,7 +127,11 @@ class SharedToolRouter:
 
             elif tool_name == "file_delete":
                 rel_path = arguments.get("file_path", "")
-                target = (self.workspace_root / rel_path).resolve()
+                try:
+                    target = sbx.fs.resolve_and_validate_path(self.workspace_root / rel_path, allow_write=True)
+                except SecurityViolation as sv:
+                    return {"success": False, "error": f"SECURITY VIOLATION: {sv}"}
+
                 if target.exists() and target.is_file():
                     target.unlink()
                     return {"success": True, "file_path": str(target), "action": "deleted"}
@@ -121,14 +141,33 @@ class SharedToolRouter:
                 lang = arguments.get("language", "python")
                 code = arguments.get("code", "")
                 res = self.code_engine.verify_code(code, lang)
+                sbx_res = sbx.execute_code(code, language=lang, timeout=15.0)
                 return {
-                    "success": res.is_valid_syntax,
+                    "success": res.is_valid_syntax and (sbx_res.exit_code == 0),
                     "language": res.language,
-                    "sandbox_executed": res.sandbox_executed,
-                    "sandbox_passed": res.sandbox_passed,
-                    "sandbox_output": res.sandbox_output,
+                    "sandbox_executed": True,
+                    "sandbox_passed": sbx_res.exit_code == 0,
+                    "sandbox_output": sbx_res.stdout or sbx_res.stderr,
+                    "exit_code": sbx_res.exit_code,
+                    "duration_seconds": sbx_res.duration_seconds,
+                    "peak_memory_mb": sbx_res.peak_memory_mb,
+                    "security_blocked": sbx_res.security_blocked,
                     "syntax_warnings": res.static_warnings,
                     "complexity": res.time_complexity
+                }
+
+            elif tool_name in ("execute_shell_sandbox", "shell_command"):
+                cmd = arguments.get("command", "")
+                sbx_res = sbx.execute(cmd, timeout=30.0)
+                return {
+                    "success": sbx_res.exit_code == 0,
+                    "exit_code": sbx_res.exit_code,
+                    "stdout": sbx_res.stdout,
+                    "stderr": sbx_res.stderr,
+                    "duration_seconds": sbx_res.duration_seconds,
+                    "peak_memory_mb": sbx_res.peak_memory_mb,
+                    "security_blocked": sbx_res.security_blocked,
+                    "violation_reason": sbx_res.violation_reason
                 }
 
             elif tool_name == "cas_solve":

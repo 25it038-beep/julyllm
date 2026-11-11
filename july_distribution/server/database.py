@@ -31,6 +31,9 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(64), unique=True, nullable=False, index=True)
     email = Column(String(128), unique=True, nullable=False, index=True)
+    clerk_user_id = Column(String(128), unique=True, nullable=True, index=True)
+    tier = Column(String(32), default="free")  # free, pro, enterprise
+    auth_provider = Column(String(32), default="clerk")  # clerk, local, google, github
     password_hash = Column(String(128), nullable=False)
     salt = Column(String(64), nullable=False)
     role = Column(String(32), default="standard")
@@ -105,6 +108,23 @@ class TelemetryLog(Base):
     ram_used_gb = Column(Float, default=0.0)
     vram_used_mb = Column(Float, default=0.0)
     timestamp = Column(Float, nullable=False)
+
+
+class UserUsage(Base):
+    __tablename__ = "user_usages"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    clerk_user_id = Column(String(128), nullable=True, index=True)
+    model_name = Column(String(64), nullable=False)
+    requests_count = Column(Integer, default=0)
+    prompt_tokens = Column(BigInteger, default=0)
+    completion_tokens = Column(BigInteger, default=0)
+    total_tokens = Column(BigInteger, default=0)
+    last_used_at = Column(Float, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "model_name", name="uq_user_model_usage"),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -32,7 +32,8 @@ from .database import get_db, User, Device, ModelVersion, AuditLog, TelemetryLog
 from .security import (
     hash_password, verify_password, create_auth_token, revoke_token,
     validate_token, register_or_update_device, validate_device_access,
-    check_and_increment_download_quota, log_audit_event
+    check_and_increment_download_quota, log_audit_event,
+    sync_clerk_user, record_user_consumption, get_user_usage_stats
 )
 from .r2_manager import CloudflareR2DistributionGateway
 
@@ -351,12 +352,201 @@ def get_my_profile(user: User = Depends(get_current_user)):
     return {
         "username": user.username,
         "email": user.email,
+        "clerk_user_id": getattr(user, "clerk_user_id", None),
+        "tier": getattr(user, "tier", "pro"),
         "role": user.role,
         "model_access_granted": bool(user.model_access_granted),
         "daily_download_quota": user.daily_download_quota,
         "downloads_today": user.downloads_today,
         "last_download_date": user.last_download_date,
         "created_at": user.created_at
+    }
+
+
+# ---------------------------------------------------------------------------
+# Clerk IAM & User Management Endpoints
+# ---------------------------------------------------------------------------
+
+class ClerkSyncRequest(BaseModel):
+    token: str
+    clerk_user_id: str
+    email: EmailStr
+    name: str = "July User"
+    tier: str = "pro"
+    device_id: str
+    device_name: str
+    os_version: str = "Windows"
+
+
+class DeviceRevokeRequest(BaseModel):
+    device_id: str
+
+
+class OfflineSyncRequest(BaseModel):
+    token: str
+    device_id: str
+    queued_events: List[Dict[str, Any]] = []
+
+
+@app.post("/api/v1/auth/clerk-sync")
+def clerk_sync_endpoint(
+    req: ClerkSyncRequest = Body(...),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Syncs Clerk user profile with database, registers client hardware device,
+    stores session token in DB, and returns usage/quota metrics.
+    """
+    ip = request.client.host if request and request.client else "127.0.0.1"
+
+    # Step 1: Provision or update Clerk user
+    user = sync_clerk_user(
+        db=db,
+        clerk_user_id=req.clerk_user_id,
+        email=req.email,
+        name=req.name,
+        tier=req.tier
+    )
+
+    # Step 2: Register device
+    dev_ok, dev_msg, dev_obj = register_or_update_device(
+        db=db,
+        user_id=user.id,
+        device_id=req.device_id,
+        device_name=req.device_name,
+        os_version=req.os_version
+    )
+
+    # Step 3: Register token in database if not already present
+    from .database import Token
+    existing_tok = db.query(Token).filter(Token.token == req.token).first()
+    if not existing_tok:
+        db.add(Token(
+            token=req.token,
+            user_id=user.id,
+            created_at=time.time(),
+            expires_at=time.time() + (30 * 86400),
+            is_revoked=False
+        ))
+        db.commit()
+
+    log_audit_event(db, user.id, user.username, "CLERK_LOGIN_SYNC", f"Clerk user {req.clerk_user_id} synced", ip, req.device_id)
+
+    stats = get_user_usage_stats(db, user.id)
+    return {
+        "success": True,
+        "clerk_user_id": user.clerk_user_id,
+        "email": user.email,
+        "username": user.username,
+        "tier": getattr(user, "tier", "pro"),
+        "role": user.role,
+        "device_status": dev_obj.status if dev_obj else "APPROVED",
+        "usage": stats
+    }
+
+
+@app.get("/api/v1/auth/whoami")
+def clerk_whoami_endpoint(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Returns profile and tier of the authenticated Clerk user."""
+    stats = get_user_usage_stats(db, user.id)
+    return {
+        "clerk_user_id": getattr(user, "clerk_user_id", None) or f"user_{user.id}",
+        "email": user.email,
+        "username": user.username,
+        "role": user.role,
+        "tier": getattr(user, "tier", "pro"),
+        "created_at": user.created_at,
+        "usage": stats
+    }
+
+
+@app.get("/api/v1/auth/devices")
+def clerk_list_devices(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Lists all registered devices for this authenticated user."""
+    devs = db.query(Device).filter(Device.user_id == user.id).all()
+    devices_list = []
+    for d in devs:
+        devices_list.append({
+            "device_id": d.device_id,
+            "device_name": d.device_name,
+            "os_version": d.os_version,
+            "status": d.status,
+            "registered_at": d.registered_at,
+            "last_seen_at": d.last_seen_at
+        })
+    return {"devices": devices_list}
+
+
+@app.post("/api/v1/auth/devices/revoke")
+def clerk_revoke_device(
+    req: DeviceRevokeRequest = Body(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Revokes access for a specific registered device."""
+    device = db.query(Device).filter(Device.user_id == user.id, Device.device_id == req.device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found.")
+
+    device.status = "REVOKED"
+    db.commit()
+    log_audit_event(db, user.id, user.username, "DEVICE_REVOKED", f"Revoked {req.device_id}")
+    return {"success": True, "revoked_device_id": req.device_id}
+
+
+@app.get("/api/v1/auth/usage")
+def clerk_usage_endpoint(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Returns comprehensive token consumption metrics per model."""
+    stats = get_user_usage_stats(db, user.id)
+    tier = getattr(user, "tier", "pro")
+    return {
+        "clerk_user_id": getattr(user, "clerk_user_id", None),
+        "tier": tier,
+        "usage": stats,
+        "limits": {
+            "daily_requests": 10000 if tier in ("pro", "enterprise") else 500,
+            "max_tokens_per_req": 8192
+        }
+    }
+
+
+@app.post("/api/v1/auth/sync")
+def clerk_sync_offline_events(
+    req: OfflineSyncRequest = Body(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Ingests offline execution and usage records into server DB."""
+    for ev in req.queued_events:
+        ev_type = ev.get("type")
+        data = ev.get("data", {})
+        if ev_type == "usage_record":
+            record_user_consumption(
+                db=db,
+                user_id=user.id,
+                clerk_user_id=getattr(user, "clerk_user_id", None),
+                model_name=data.get("model_name", "july"),
+                prompt_tokens=data.get("prompt_tokens", 0),
+                completion_tokens=data.get("completion_tokens", 0)
+            )
+
+    stats = get_user_usage_stats(db, user.id)
+    return {
+        "success": True,
+        "events_processed": len(req.queued_events),
+        "usage": stats,
+        "server_time": time.time(),
+        "tier": getattr(user, "tier", "pro")
     }
 
 
