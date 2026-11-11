@@ -1,4 +1,4 @@
-﻿# ================================================================================
+# ================================================================================
 # HS AI SOLUTIONS — JULY LLM ALL-IN-ONE AUTONOMOUS RUNTIME
 # Founder & Chief Architect: Harshan Seliyan | Organization: HS AI Solutions
 # Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
@@ -7,17 +7,21 @@
 # irm https://raw.githubusercontent.com/25it038-beep/julyllm/main/july_distribution/installer/start.ps1 | iex
 # ================================================================================
 
-[CmdletBinding()]
-param(
-    [Parameter(ValueFromPipeline = $false)]
-    [switch]$Update,
-    [Parameter(ValueFromPipeline = $false)]
-    [switch]$SwitchUser,
-    [Parameter(ValueFromPipeline = $false)]
-    [string]$Model = "",
-    [Parameter(ValueFromPipeline = $false)]
-    [switch]$Voice
-)
+# Initialize execution parameters (compatible with direct invocation and irm ... | iex)
+if (-not (Test-Path variable:Update)) { $Update = $false }
+if (-not (Test-Path variable:SwitchUser)) { $SwitchUser = $false }
+if (-not (Test-Path variable:Model)) { $Model = "" }
+if (-not (Test-Path variable:Voice)) { $Voice = $false }
+
+if ($args) {
+    for ($i = 0; $i -lt $args.Count; $i++) {
+        $argStr = [string]$args[$i]
+        if ($argStr -ieq '-Update') { $Update = $true }
+        elseif ($argStr -ieq '-SwitchUser') { $SwitchUser = $true }
+        elseif ($argStr -ieq '-Voice') { $Voice = $true }
+        elseif ($argStr -ieq '-Model' -and ($i + 1) -lt $args.Count) { $Model = [string]$args[++$i] }
+    }
+}
 
 $ErrorActionPreference = 'Stop'
 $ServerUrl = 'https://julyllm.onrender.com'
