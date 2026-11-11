@@ -23,6 +23,7 @@ import time
 import math
 import json
 import shutil
+import socket
 import hashlib
 import threading
 import urllib.request
@@ -127,12 +128,12 @@ class DirectR2ParallelDownloader:
 
     def __init__(
         self,
-        num_workers: int = 4,
-        chunk_size_mb: int = 64,
+        num_workers: int = 6,
+        chunk_size_mb: int = 16,
         max_retries: int = 5,
         url_refresh_callback: Optional[Callable[[], str]] = None
     ):
-        self.num_workers = max(1, min(8, num_workers))
+        self.num_workers = max(1, min(12, num_workers))
         self.chunk_size_bytes = chunk_size_mb * 1024 * 1024
         self.max_retries = max_retries
         self.url_refresh_callback = url_refresh_callback
@@ -149,9 +150,16 @@ class DirectR2ParallelDownloader:
         # Sliding-window speed calculation
         self._speed_window: List[tuple[float, int]] = []
         
+        # Socket options: optimize TCP window size & latency for long-haul R2 Anycast
+        sock_opts = urllib3.connection.HTTPConnection.default_socket_options + [
+            (socket.SOL_SOCKET, socket.SO_RCVBUF, 2 * 1024 * 1024),
+            (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        ]
+        
         # Connection pool with Keep-Alive
         self.http_pool = urllib3.PoolManager(
-            maxsize=max(16, self.num_workers * 2),
+            maxsize=max(24, self.num_workers * 2),
+            socket_options=sock_opts,
             retries=urllib3.Retry(total=2, backoff_factor=0.5),
             timeout=urllib3.Timeout(connect=15.0, read=45.0)
         )
@@ -230,27 +238,29 @@ class DirectR2ParallelDownloader:
                         continue
                     raise IOError(f"HTTP {resp.status} received for chunk {chunk.index}")
 
-                # Stream and buffer chunk data
-                buffer = bytearray()
-                stream_chunk_size = 256 * 1024  # 256 KB read buffer
+                # Stream directly into pre-allocated file at designated chunk offset
+                stream_chunk_size = 512 * 1024  # 512 KB socket buffer
+                bytes_in_chunk = 0
 
-                for data_slice in resp.stream(stream_chunk_size):
-                    if self.cancel_requested:
-                        resp.release_conn()
-                        return False
-                    buffer.extend(data_slice)
-                    self._record_bytes(len(data_slice))
+                with open(dest_path, "r+b") as f:
+                    f.seek(chunk.start_byte)
+                    for data_slice in resp.stream(stream_chunk_size):
+                        if self.cancel_requested:
+                            resp.release_conn()
+                            return False
+                        f.write(data_slice)
+                        bytes_in_chunk += len(data_slice)
+                        self._record_bytes(len(data_slice))
+                    f.flush()
 
                 resp.release_conn()
 
                 # Validate byte length
-                if len(buffer) != chunk.length:
+                if bytes_in_chunk != chunk.length:
                     raise IOError(
-                        f"Chunk {chunk.index} length mismatch: got {len(buffer)} bytes, expected {chunk.length}"
+                        f"Chunk {chunk.index} length mismatch: got {bytes_in_chunk} bytes, expected {chunk.length}"
                     )
 
-                # Safe offset write
-                self._safe_write_chunk(dest_path, chunk.start_byte, buffer)
                 state.mark_completed(chunk.index)
                 return True
 

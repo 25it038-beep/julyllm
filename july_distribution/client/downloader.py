@@ -161,8 +161,8 @@ class ClientModelDownloader:
         # Step 2: Check for full parallel direct R2 download
         if not max_bytes:
             from .parallel_downloader import DirectR2ParallelDownloader
-            workers = int(os.getenv("R2_DOWNLOAD_WORKERS", "4"))
-            chunk_mb = 64 if mid == "gravity" else 32
+            workers = int(os.getenv("R2_DOWNLOAD_WORKERS", "6"))
+            chunk_mb = 16
             
             p_downloader = DirectR2ParallelDownloader(
                 num_workers=workers,
