@@ -328,15 +328,19 @@ class ClerkAuthManager:
         name = res_data.get("name") or "July Developer"
         tier = res_data.get("tier") or "pro"
 
+        gender = res_data.get("gender") or ""
+
         # If Clerk secret key is present in environment, query authentic Clerk profile
         clerk_sk = os.getenv("CLERK_SECRET_KEY")
         if clerk_sk:
-            user_info = self._fetch_clerk_user_info(token, clerk_sk)
+            user_info = self._fetch_clerk_user_info(token, clerk_sk, email_hint=email)
             if user_info:
                 clerk_user_id = user_info.get("clerk_user_id", clerk_user_id)
                 email = user_info.get("email", email)
                 name = user_info.get("name", name)
                 tier = user_info.get("tier", tier)
+                if user_info.get("gender"):
+                    gender = user_info["gender"]
 
         session_record = self._build_and_save_session(
             token=token,
@@ -347,6 +351,9 @@ class ClerkAuthManager:
             tier=tier,
             server_url=target_server
         )
+        if gender:
+            session_record["gender"] = gender
+            self.vault.store_session(session_record)
 
         # Notify backend to register device & sync identity
         try:
@@ -357,7 +364,7 @@ class ClerkAuthManager:
 
         return session_record
 
-    def _fetch_clerk_user_info(self, token_or_session_id: str, secret_key: str) -> Optional[Dict[str, Any]]:
+    def _fetch_clerk_user_info(self, token_or_session_id: str, secret_key: str, email_hint: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Queries Clerk Backend API using CLERK_SECRET_KEY to fetch authentic user profile."""
         try:
             user_id = None
@@ -365,7 +372,7 @@ class ClerkAuthManager:
                 url = f"https://api.clerk.com/v1/sessions/{token_or_session_id}"
                 req = urllib.request.Request(
                     url,
-                    headers={"Authorization": f"Bearer {secret_key}", "User-Agent": "July-CLI/2.0"}
+                    headers={"Authorization": f"Bearer {secret_key}", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
                 )
                 with urllib.request.urlopen(req, timeout=8) as resp:
                     sess_data = json.loads(resp.read().decode("utf-8"))
@@ -374,24 +381,43 @@ class ClerkAuthManager:
             if not user_id and token_or_session_id.startswith("user_"):
                 user_id = token_or_session_id
 
-            if not user_id:
-                # Query users list to find first active user
-                url = "https://api.clerk.com/v1/users?limit=1"
+            if not user_id and email_hint:
+                # Query users filtered by email
+                url = f"https://api.clerk.com/v1/users?email_address={urllib.parse.quote(email_hint)}"
                 req = urllib.request.Request(
                     url,
-                    headers={"Authorization": f"Bearer {secret_key}", "User-Agent": "July-CLI/2.0"}
+                    headers={"Authorization": f"Bearer {secret_key}", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
                 )
                 with urllib.request.urlopen(req, timeout=8) as resp:
                     users_list = json.loads(resp.read().decode("utf-8"))
                     if users_list:
-                        u_data = users_list[0]
-                        user_id = u_data.get("id")
+                        user_id = users_list[0].get("id")
+
+            if not user_id:
+                # Query users list to find active user
+                url = "https://api.clerk.com/v1/users?limit=10"
+                req = urllib.request.Request(
+                    url,
+                    headers={"Authorization": f"Bearer {secret_key}", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                )
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    users_list = json.loads(resp.read().decode("utf-8"))
+                    if users_list:
+                        # Match email if provided or take first
+                        target_user = users_list[0]
+                        if email_hint:
+                            for u in users_list:
+                                for em in u.get("email_addresses", []):
+                                    if em.get("email_address", "").lower() == email_hint.lower():
+                                        target_user = u
+                                        break
+                        user_id = target_user.get("id")
 
             if user_id:
                 user_url = f"https://api.clerk.com/v1/users/{user_id}"
                 u_req = urllib.request.Request(
                     user_url,
-                    headers={"Authorization": f"Bearer {secret_key}", "User-Agent": "July-CLI/2.0"}
+                    headers={"Authorization": f"Bearer {secret_key}", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
                 )
                 with urllib.request.urlopen(u_req, timeout=8) as resp:
                     u_data = json.loads(resp.read().decode("utf-8"))
@@ -405,19 +431,25 @@ class ClerkAuthManager:
                     if not primary_email and emails:
                         primary_email = emails[0].get("email_address", "")
 
-                    first_name = u_data.get("first_name") or ""
-                    last_name = u_data.get("last_name") or ""
+                    first_name = (u_data.get("first_name") or "").strip()
+                    last_name = (u_data.get("last_name") or "").strip()
                     name = f"{first_name} {last_name}".strip() or primary_email.split("@")[0].title()
-                    meta = u_data.get("public_metadata", {})
+                    meta = u_data.get("public_metadata", {}) or {}
+                    unsafe_meta = u_data.get("unsafe_metadata", {}) or {}
+                    gender = meta.get("gender") or unsafe_meta.get("gender") or ""
                     tier = meta.get("tier", "pro")
+                    role = meta.get("role") or ("developer" if tier in ("pro", "enterprise") else "standard")
 
                     return {
                         "clerk_user_id": user_id,
                         "email": primary_email,
                         "name": name,
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "gender": gender,
                         "image_url": u_data.get("image_url", ""),
                         "tier": tier,
-                        "role": "developer" if tier in ("pro", "enterprise") else "standard"
+                        "role": role
                     }
         except Exception:
             return None
@@ -433,9 +465,10 @@ class ClerkAuthManager:
             raise ConnectionError("No active session found to refresh. Run 'july login'.")
 
         token = session.get("token", "")
+        email = session.get("email", "")
         clerk_sk = os.getenv("CLERK_SECRET_KEY")
         if clerk_sk:
-            user_info = self._fetch_clerk_user_info(token, clerk_sk)
+            user_info = self._fetch_clerk_user_info(token, clerk_sk, email_hint=email)
             if user_info:
                 session.update(user_info)
 

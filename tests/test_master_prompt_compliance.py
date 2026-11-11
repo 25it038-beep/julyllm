@@ -261,7 +261,8 @@ class TestMasterPromptCompliance(unittest.TestCase):
         self.assertIn("CURRENT DATE & TIME", sys_prompt)
         self.assertIn("2026", sys_prompt)
         self.assertIn("GEOGRAPHICAL LOCATION", sys_prompt)
-        self.assertIn("DIRECTIVES FOR IDENTITY, TEMPORAL & GEOGRAPHICAL AWARENESS", sys_prompt)
+        self.assertIn("DIRECTIVES FOR IDENTITY", sys_prompt)
+        self.assertIn("OPPOSITE GENDER TONE ADAPTATION", sys_prompt)
 
 
 if __name__ == "__main__":
