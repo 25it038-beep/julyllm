@@ -1,4 +1,4 @@
-﻿# ================================================================================
+# ================================================================================
 # HS AI SOLUTIONS — JULY LLM ALL-IN-ONE AUTONOMOUS RUNTIME
 # Founder & Chief Architect: Harshan Seliyan | Organization: HS AI Solutions
 # Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
@@ -7,9 +7,13 @@
 # irm https://raw.githubusercontent.com/25it038-beep/julyllm/main/july_distribution/installer/start.ps1 | iex
 # ================================================================================
 
+[CmdletBinding()]
 param(
+    [Parameter(ValueFromPipeline = $false)]
     [switch]$Update,
+    [Parameter(ValueFromPipeline = $false)]
     [switch]$SwitchUser,
+    [Parameter(ValueFromPipeline = $false)]
     [string]$Model = ""
 )
 
