@@ -33,7 +33,7 @@ Write-Host "──────────────────────�
 Write-Host ""
 
 # [1] Ensure Client Runtime & Environment Installed
-$InstallRoot = Join-Path $env:LOCALAPPDATA 'Programs\JulyRuntime'
+$InstallRoot = Join-Path "$env:LOCALAPPDATA" 'Programs\JulyRuntime'
 $BinDir = Join-Path $InstallRoot 'bin'
 $JulyCmd = Join-Path $BinDir 'july.ps1'
 
@@ -126,7 +126,7 @@ if ($isAuth -and (-not $SwitchUser)) {
 # [4] Register Auto-Unload Handlers on Exit (Window close & process kill)
 Register-EngineEvent -SourceIdentifier 'PowerShell.Exiting' -Action {
     $p = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
-    $root = Join-Path $env:LOCALAPPDATA 'Programs\JulyRuntime'
+    $root = Join-Path "$env:LOCALAPPDATA" 'Programs\JulyRuntime'
     $env:PYTHONPATH = $root
     & $p -m july_distribution.client.cli unload | Out-Null
 } -ErrorAction SilentlyContinue | Out-Null
