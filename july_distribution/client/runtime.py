@@ -72,10 +72,27 @@ class ClientInferenceRuntime:
             self.llm = None
             self._is_loaded = False
             gc.collect()
+            if "torch" in sys.modules:
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except Exception:
+                    pass
+            self.storage.reclaim_os_memory()
 
         if model_path is None:
-            from .cli import resolve_model_seed
-            model_path = resolve_model_seed(target)
+            from .storage import PermanentModelStorage
+            perm = PermanentModelStorage()
+            target_f = perm.get_model_file(target)
+            if target_f.exists() and target_f.stat().st_size > 0:
+                model_path = target_f
+            else:
+                from .cli import resolve_model_seed
+                model_path = resolve_model_seed(target)
+
+        if not model_path or not model_path.exists():
+            raise FileNotFoundError(f"Model file for '{target}' not found: {model_path}")
 
         self.current_model_id = target
         self.load_model(model_path)
@@ -179,13 +196,7 @@ class ClientInferenceRuntime:
             sys.stdout.write(routing_note)
             sys.stdout.flush()
 
-        if self.current_model_id == "gravity":
-            sys_prompt = (
-                "You are GRAVITY LLM, an advanced mathematical and reasoning neural model created by Harshan Seliyan "
-                "and developed by HS AI Solutions. Deliver rigorous, exact, and mathematically verified answers."
-            )
-        else:
-            sys_prompt = self.customizer.get_effective_system_prompt()
+        sys_prompt = self.customizer.get_effective_system_prompt(self.current_model_id)
         history = self.customizer.get_session_history(session_id, limit=4)
         custom_kn = self.customizer.retrieve_custom_knowledge(prompt)
 
@@ -270,9 +281,9 @@ class ClientInferenceRuntime:
         else:
             logged_text = raw_text
 
-        # Record to history
-        self.customizer.log_message(session_id, "user", prompt)
-        self.customizer.log_message(session_id, "assistant", logged_text)
+        # Record to history with model attribution
+        self.customizer.log_message(session_id, "user", prompt, model=self.current_model_id)
+        self.customizer.log_message(session_id, "assistant", logged_text, model=self.current_model_id)
 
     def generate_verified(
         self,
@@ -290,8 +301,8 @@ class ClientInferenceRuntime:
         raw_text = "".join(tokens)
         return self.orchestrator.validate_and_synthesize_response(prompt, raw_text, elapsed=elapsed)
 
-    def unload(self, wipe_storage: bool = True):
-        """Safe model unloading and memory reclamation."""
+    def unload(self, wipe_storage: bool = False):
+        """Safe model unloading and memory reclamation without destroying permanent disk files."""
         if self.llm is not None:
             try:
                 if hasattr(self.llm, "close"):
@@ -304,12 +315,22 @@ class ClientInferenceRuntime:
         self._is_loaded = False
         gc.collect()
 
+        if "torch" in sys.modules:
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+
         if wipe_storage and self.active_model_path:
-            self.storage.wipe_and_unlink(self.active_model_path)
+            self.storage.wipe_and_unlink(self.active_model_path, allow_permanent_deletion=True)
             self.active_model_path = None
+        elif self.active_model_path:
+            self.storage.wipe_and_unlink(self.active_model_path, allow_permanent_deletion=False)
 
         self.storage.reclaim_os_memory()
-        print("[JULY RUNTIME] Model safely unloaded. Ephemeral memory reclaimed.")
+        print(f"[JULY RUNTIME] Model ({self.current_model_id}) safely unloaded from active RAM/VRAM.")
 
     def is_loaded(self) -> bool:
         return self._is_loaded

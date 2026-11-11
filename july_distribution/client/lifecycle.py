@@ -276,6 +276,9 @@ class ModelLifecyclePipeline:
 
         state_file = dest_path.with_suffix(dest_path.suffix + ".state.json")
 
+        from .state_manager import DualModelStateManager, ModelStatus
+        state_mgr = DualModelStateManager()
+
         # -------------------------------------------------------------------------
         # STAGE 1: DOWNLOADING (or Local Cache Reuse)
         # -------------------------------------------------------------------------
@@ -284,12 +287,14 @@ class ModelLifecyclePipeline:
             can_skip_download = True
 
         if can_skip_download:
+            state_mgr.set_model_state(mid, ModelStatus.DOWNLOADED.value)
             self._print_stage(
                 1, "DOWNLOADING",
                 f"{UI.GREEN}✓ Reusing existing complete checkpoint ({remote_size:,} bytes). Skipping network transfer.{UI.RESET}",
                 UI.GREEN
             )
         else:
+            state_mgr.set_model_state(mid, ModelStatus.DOWNLOADING.value)
             self._print_stage(
                 1, "DOWNLOADING",
                 f"Connecting directly to Cloudflare R2 ({remote_size / (1024**3):.2f} GiB)...",
@@ -345,6 +350,7 @@ class ModelLifecyclePipeline:
         # -------------------------------------------------------------------------
         # STAGE 2: VERIFYING (Full Cryptographic SHA-256 Validation)
         # -------------------------------------------------------------------------
+        state_mgr.set_model_state(mid, ModelStatus.VERIFYING.value)
         self._print_stage(2, "VERIFYING", f"Computing SHA-256 checksum over {dest_path.stat().st_size:,} bytes...", UI.CYAN)
         t_sha_start = time.time()
 
@@ -540,6 +546,8 @@ class ModelLifecyclePipeline:
         # -------------------------------------------------------------------------
         # STAGE 8: READY (Model Available for Interaction)
         # -------------------------------------------------------------------------
+        state_mgr.set_model_state(mid, ModelStatus.READY.value)
+        state_mgr.activeModel = mid
         self._print_stage(
             8, "READY",
             f"{UI.BOLD}{UI.GREEN}🚀 {model_title} is verified, loaded in RAM, and ready for genuine local inference!{UI.RESET}",

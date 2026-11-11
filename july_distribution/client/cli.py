@@ -126,14 +126,26 @@ MODEL_METADATA = {
 
 
 def resolve_model_seed(model_id: str = "july") -> Optional[Path]:
-    """Finds verified GGUF weights for July or Gravity."""
+    """Finds verified GGUF weights for July or Gravity in permanent storage or workstation seeds."""
+    from .storage import PermanentModelStorage
+    import tempfile
+    perm = PermanentModelStorage()
     mid = model_id.lower().strip()
+
+    # 1. Check permanent model storage first
+    f = perm.get_model_file(mid)
+    expected_size = perm.EXPECTED_SIZES.get(mid)
+    if f.exists() and (expected_size is None or f.stat().st_size == expected_size):
+        return f
+
+    # 2. Workstation seed fallbacks
     if mid == "gravity":
         candidates = [
             Path(r"D:\gravity\Gravity-HS-AI-Solutions.gguf"),
             Path(r"D:\gravity\models\Gravity-HS-AI-Solutions.gguf"),
             Path(os.environ.get("USERPROFILE", str(Path.home()))) / "gravity" / "Gravity-HS-AI-Solutions.gguf",
             Path.cwd() / "models" / "Gravity-HS-AI-Solutions.gguf",
+            Path(tempfile.gettempdir()) / "july_ephemeral_runtime" / "gravity_ram_model.gguf",
         ]
         for c in candidates:
             if c.exists() and c.stat().st_size == 5629108096:
@@ -144,6 +156,7 @@ def resolve_model_seed(model_id: str = "july") -> Optional[Path]:
             Path(__file__).resolve().parent.parent.parent / "models" / "july-final.gguf",
             Path.cwd() / "models" / "july-final.gguf",
             Path(os.environ.get("USERPROFILE", str(Path.home()))) / "OneDrive" / "Desktop" / "collab-editor" / "models" / "july-final.gguf",
+            Path(tempfile.gettempdir()) / "july_ephemeral_runtime" / "july_ram_model.gguf",
         ]
         for c in candidates:
             if c.exists() and c.stat().st_size == 2019377888:
@@ -263,17 +276,33 @@ def cmd_status():
     else:
         print(f"   Status           : {UI.YELLOW}NOT AUTHENTICATED (Run 'july login'){UI.RESET}")
 
-    print(f"\n {UI.BOLD}{UI.CYAN}── ACTIVE FOUNDATION MODEL ──────────────────────────────{UI.RESET}")
-    print(f"   Configured Mode  : {UI.YELLOW}{getattr(cfg, 'selected_model', 'july').upper()}{UI.RESET}")
-    active_path, active_mid = get_active_model_info()
-    if active_path:
-        meta = MODEL_METADATA.get(active_mid, MODEL_METADATA["july"])
-        print(f"   Loaded Model     : {UI.GREEN}{meta['title']}{UI.RESET} ({meta['parameters']} | {meta['quantization']})")
-        print(f"   RAM Storage      : {UI.GREEN}MOUNTED IN MEMORY{UI.RESET}")
-        print(f"   Ephemeral Path   : {active_path}")
-        print(f"   Allocation       : {active_path.stat().st_size:,} bytes")
-    else:
-        print(f"   RAM Storage      : {UI.GRAY}UNLOADED (Run 'july load' or 'july chat'){UI.RESET}")
+    print(f"\n {UI.BOLD}{UI.CYAN}── DUAL FOUNDATION MODEL ARCHITECTURE ───────────────────{UI.RESET}")
+    from .state_manager import DualModelStateManager
+    from .storage import PermanentModelStorage
+    perm_storage = PermanentModelStorage()
+    state_mgr = DualModelStateManager()
+
+    print(f"   Selected Model   : {UI.BOLD}{state_mgr.selectedModel.upper()}{UI.RESET} (User Preference)")
+    print(f"   Active Model     : {UI.GREEN if state_mgr.activeModel != 'none' else UI.GRAY}{state_mgr.activeModel.upper()}{UI.RESET} (Currently Operational in RAM)")
+    print(f"   Available Models : {', '.join([m.upper() for m in state_mgr.availableModels]) or 'None'}")
+    print()
+
+    for mid in ("july", "gravity"):
+        m_file = perm_storage.get_model_file(mid)
+        has_file = m_file.exists() and m_file.stat().st_size > 0
+        state_str = state_mgr.get_model_state(mid)
+        if state_mgr.activeModel == mid:
+            status_badge = f"{UI.GREEN}[ACTIVE / READY]{UI.RESET}"
+        elif has_file:
+            status_badge = f"{UI.CYAN}[AVAILABLE / UNLOADED]{UI.RESET}"
+        elif state_str == "DOWNLOADING":
+            status_badge = f"{UI.YELLOW}[DOWNLOADING]{UI.RESET}"
+        else:
+            status_badge = f"{UI.GRAY}[NOT_DOWNLOADED]{UI.RESET}"
+
+        f_size_mb = (m_file.stat().st_size / (1024*1024)) if has_file else 0
+        meta = MODEL_METADATA.get(mid, {})
+        print(f"   • {UI.BOLD}{mid.upper():<8}{UI.RESET} : {status_badge:<32} {meta.get('parameters', '')} | {f_size_mb:.1f} MB | {m_file}")
 
     print(f"\n {UI.BOLD}{UI.CYAN}── COMPUTE HARDWARE TELEMETRY ────────────────────────────{UI.RESET}")
     hw = detect_client_hardware()
@@ -298,15 +327,21 @@ def cmd_load(args):
         target_model = "july"
     target_model = target_model.lower().strip()
 
-    storage = ClientEphemeralStorage()
-    ephemeral_path = storage.allocate_path(prefix=f"{target_model}_ram_model")
+    from .storage import PermanentModelStorage
+    from .state_manager import DualModelStateManager, ModelStatus
+    perm_storage = PermanentModelStorage()
+    state_mgr = DualModelStateManager()
+    model_path = perm_storage.get_model_file(target_model)
 
     # Fast seed check (if existing master seed present on workstation)
     root_seed = resolve_model_seed(target_model)
-    if root_seed and root_seed.exists() and (not ephemeral_path.exists() or ephemeral_path.stat().st_size == 0):
-        print(f" {UI.GRAY}[*] Priming ephemeral storage from verified local master seed ({root_seed.name})...{UI.RESET}")
+    if root_seed and root_seed.exists() and root_seed != model_path and (not model_path.exists() or model_path.stat().st_size == 0):
+        print(f" {UI.GRAY}[*] Priming permanent storage from verified local master seed ({root_seed.name})...{UI.RESET}")
         import shutil
-        shutil.copyfile(root_seed, ephemeral_path)
+        try:
+            os.link(str(root_seed), str(model_path))
+        except Exception:
+            shutil.copyfile(str(root_seed), str(model_path))
 
     from .lifecycle import ModelLifecyclePipeline
     pipeline = ModelLifecyclePipeline(config=cfg, auth=auth)
@@ -314,20 +349,24 @@ def cmd_load(args):
     try:
         llm, meta, budget = pipeline.execute_pipeline(
             model_id=target_model,
-            dest_path=ephemeral_path,
+            dest_path=model_path,
             force_cpu=(cfg.hardware_mode.lower() == "cpu")
         )
-        record_active_state(ephemeral_path, target_model)
+        record_active_state(model_path, target_model)
+        state_mgr.set_model_state(target_model, ModelStatus.READY.value)
+        state_mgr.activeModel = target_model
         print(f" {UI.GREEN}[✓]{UI.RESET} Run {UI.CYAN}july chat{UI.RESET} to start genuine local inference.\n")
     except Exception as e:
-        if root_seed and root_seed.exists() and ephemeral_path.exists() and ephemeral_path.stat().st_size > 1000000:
+        if root_seed and root_seed.exists() and model_path.exists() and model_path.stat().st_size > 1000000:
             print(f"\n {UI.GRAY}[*] Cloud check delayed ({e}). Mounting verified master seed directly into RAM.{UI.RESET}")
-            record_active_state(ephemeral_path, target_model)
+            record_active_state(model_path, target_model)
+            state_mgr.set_model_state(target_model, ModelStatus.READY.value)
+            state_mgr.activeModel = target_model
             print(f" {UI.GREEN}[✓] {target_model.upper()} LLM verified and loaded into physical RAM.{UI.RESET}")
             print(f" {UI.GREEN}[✓]{UI.RESET} Run {UI.CYAN}july chat{UI.RESET} to start genuine local inference.\n")
         else:
+            state_mgr.set_model_state(target_model, ModelStatus.ERROR.value, {"error": str(e)})
             print(f"\n {UI.RED}[!] Model acquisition & initialization error:{UI.RESET} {e}")
-            storage.wipe_and_unlink(ephemeral_path)
             sys.exit(1)
 
 
@@ -500,11 +539,18 @@ def cmd_personality(args):
 
 def interactive_select_model(cfg: ClientConfig) -> Optional[str]:
     """Displays an interactive numbered menu for selecting foundation model or auto routing."""
-    print(f"\n {UI.MAGENTA}┌── 🧠 HS AI SOLUTIONS — DUAL MODEL SELECTION ──────────────────────────┐{UI.RESET}")
-    print(f" {UI.GRAY}│ Choose active model or enable AUTO mode for dynamic task routing.     │{UI.RESET}")
+    from .state_manager import DualModelStateManager, ModelStatus
+    from .storage import PermanentModelStorage
+    state_mgr = DualModelStateManager()
+    perm_storage = PermanentModelStorage()
+
+    print(f"\n {UI.MAGENTA}┌── 🧠 HS AI SOLUTIONS — DUAL MODEL ARCHITECTURE SELECTOR ─────────────┐{UI.RESET}")
+    print(f" {UI.GRAY}│ July and Gravity are independent, permanently available model choices.│{UI.RESET}")
     print(f" {UI.MAGENTA}├───────────────────────────────────────────────────────────────────────┤{UI.RESET}")
 
     current = getattr(cfg, "selected_model", "july").lower()
+    active_m = state_mgr.activeModel
+
     items = [
         ("1", "july", MODEL_METADATA["july"]),
         ("2", "gravity", MODEL_METADATA["gravity"]),
@@ -512,10 +558,23 @@ def interactive_select_model(cfg: ClientConfig) -> Optional[str]:
     ]
 
     for num, k, meta in items:
-        is_cur = (k == current)
-        mark = f"{UI.GREEN}● ACTIVE{UI.RESET}" if is_cur else " "
-        title_col = f"{UI.BOLD}{UI.CYAN}{meta['title']}{UI.RESET}" if is_cur else f"{UI.WHITE}{meta['title']}{UI.RESET}"
-        print(f" {UI.GRAY}│{UI.RESET} [{UI.YELLOW}{num}{UI.RESET}] {title_col:<34} {mark}")
+        is_pref = (k == current)
+        is_act = (k == active_m)
+
+        if k == "auto":
+            state_label = f"{UI.MAGENTA}[DYNAMIC ROUTER]{UI.RESET}"
+        elif is_act:
+            state_label = f"{UI.GREEN}[Active]{UI.RESET}"
+        elif perm_storage.is_model_present(k):
+            state_label = f"{UI.CYAN}[Available / Unloaded]{UI.RESET}"
+        elif state_mgr.get_model_state(k) == ModelStatus.DOWNLOADING.value:
+            state_label = f"{UI.YELLOW}[Downloading]{UI.RESET}"
+        else:
+            state_label = f"{UI.GRAY}[Available for Download]{UI.RESET}"
+
+        pref_mark = f" {UI.BOLD}{UI.YELLOW}(Selected){UI.RESET}" if is_pref else ""
+        title_col = f"{UI.BOLD}{UI.CYAN}{meta['title']}{UI.RESET}"
+        print(f" {UI.GRAY}│{UI.RESET} [{UI.YELLOW}{num}{UI.RESET}] {title_col:<30} {state_label:<24} {pref_mark}")
         print(f" {UI.GRAY}│     {UI.DIM}Arch: {meta['architecture']} | {meta['parameters']}{UI.RESET}")
         print(f" {UI.GRAY}│     {UI.GRAY}{meta['description'][:68]}{UI.RESET}")
         if num != "3":
@@ -538,8 +597,9 @@ def interactive_select_model(cfg: ClientConfig) -> Optional[str]:
         if matched_key:
             cfg.selected_model = matched_key
             cfg.save()
+            state_mgr.selectedModel = matched_key
             meta = MODEL_METADATA[matched_key]
-            print(f"\n  {UI.GREEN}[✓] Active model configured:[/] {UI.BOLD}{meta['title']}{UI.RESET}")
+            print(f"\n  {UI.GREEN}[✓] Persistent model preference configured:[/] {UI.BOLD}{meta['title']}{UI.RESET}")
             print(f"      {UI.GRAY}{meta['description']}{UI.RESET}\n")
             return matched_key
         else:
@@ -895,20 +955,55 @@ def cmd_chat(args):
                             cfg.selected_model = matched_m
                             cfg.save()
                             meta = MODEL_METADATA[matched_m]
-                            print(f"\n  {UI.GREEN}[✓] Switched active model to:[/] {UI.BOLD}{meta['title']}{UI.RESET}")
+                            print(f"\n  {UI.GREEN}[✓] Selected Model Preference:[/] {UI.BOLD}{meta['title']}{UI.RESET}")
                             print(f"      {UI.GRAY}{meta['description']}{UI.RESET}\n")
                             if matched_m in ("july", "gravity"):
-                                runtime.switch_model(matched_m)
+                                from .storage import PermanentModelStorage
+                                perm = PermanentModelStorage()
+                                if perm.is_model_present(matched_m):
+                                    runtime.switch_model(matched_m, model_path=perm.get_model_file(matched_m))
+                                    record_active_state(perm.get_model_file(matched_m), matched_m)
+                                    print(f"  {UI.GREEN}[✓] {matched_m.upper()} LLM mounted into memory and active.{UI.RESET}\n")
+                                else:
+                                    print(f"  {UI.YELLOW}[*] {matched_m.upper()} LLM is not downloaded on this machine.{UI.RESET}")
+                                    print(f"  {UI.CYAN}[*] Starting background download. You can continue chatting with {runtime.current_model_id.upper()}!{UI.RESET}\n")
+                                    from .dual_engine import DualModelCoordinator
+                                    coord = DualModelCoordinator(config=cfg, runtime=runtime)
+                                    coord.select_model(matched_m)
                         else:
                             print(f"\n  {UI.RED}[!] Unknown model name.{UI.RESET} Available: {UI.CYAN}/model july{UI.RESET}, {UI.CYAN}/model gravity{UI.RESET}, {UI.CYAN}/model auto{UI.RESET}, {UI.CYAN}/model list{UI.RESET}\n")
                     else:
                         new_m = interactive_select_model(cfg)
                         if new_m and new_m in ("july", "gravity"):
-                            runtime.switch_model(new_m)
+                            from .storage import PermanentModelStorage
+                            perm = PermanentModelStorage()
+                            if perm.is_model_present(new_m):
+                                runtime.switch_model(new_m, model_path=perm.get_model_file(new_m))
+                                record_active_state(perm.get_model_file(new_m), new_m)
+                                print(f"  {UI.GREEN}[✓] {new_m.upper()} LLM mounted into memory and active.{UI.RESET}\n")
+                            else:
+                                print(f"  {UI.YELLOW}[*] {new_m.upper()} LLM is not downloaded on this machine.{UI.RESET}")
+                                print(f"  {UI.CYAN}[*] Starting background download. You can continue chatting with {runtime.current_model_id.upper()}!{UI.RESET}\n")
+                                from .dual_engine import DualModelCoordinator
+                                coord = DualModelCoordinator(config=cfg, runtime=runtime)
+                                coord.select_model(new_m)
                     continue
 
+            # Render background download status if any active
+            from .state_manager import DualModelStateManager
+            sm = DualModelStateManager()
+            for d_m in sm.downloadingModels:
+                d_stat = sm.modelInitializationStatus.get(d_m, {})
+                pct = d_stat.get("percent", 0.0)
+                spd = d_stat.get("speed_mb", 0.0)
+                print(f" {UI.GRAY}[Background: {d_m.upper()} downloading: {pct:.1f}% ({spd:.1f} MB/s)]{UI.RESET}")
+
             active_mode = getattr(cfg, "selected_model", "july").upper()
-            if active_mode == "GRAVITY":
+            active_actual = runtime.current_model_id.upper()
+            if active_mode != active_actual and active_mode != "AUTO":
+                badge_color = UI.YELLOW
+                label = f"{active_actual} (Fallback for {active_mode})"
+            elif active_actual == "GRAVITY":
                 badge_color = UI.YELLOW
                 label = "GRAVITY"
             elif active_mode == "AUTO":
@@ -963,14 +1058,19 @@ def cmd_chat(args):
 
 def cmd_unload():
     UI.print_card("HS AI SOLUTIONS — RAM RECLAMATION")
-    active_path = get_active_ephemeral_path()
+    from .state_manager import DualModelStateManager, ModelStatus
+    from .storage import ClientEphemeralStorage
+    state_mgr = DualModelStateManager()
+    active_path, active_mid = get_active_model_info()
     storage = ClientEphemeralStorage()
 
-    if active_path:
-        print(f" {UI.CYAN}[⚡]{UI.RESET} Wiping ephemeral RAM file: {active_path}")
-        storage.wipe_and_unlink(active_path)
+    if active_path or active_mid != "none":
+        print(f" {UI.CYAN}[⚡]{UI.RESET} Releasing {active_mid.upper()} neural weights from active RAM/VRAM...")
+        # Safe memory reclamation: DOES NOT UNLINK PERMANENT DISK GGUF
+        storage.wipe_and_unlink(active_path, allow_permanent_deletion=False)
+        state_mgr.set_model_state(active_mid, ModelStatus.UNLOADED.value)
         clear_active_state()
-        print(f" {UI.GREEN}[✓] Ephemeral model storage wiped from memory.{UI.RESET}")
+        print(f" {UI.GREEN}[✓] Model safely unloaded from active RAM. Permanent GGUF files preserved on disk.{UI.RESET}")
     else:
         print(f" {UI.GRAY}[*] No active model loaded in RAM.{UI.RESET}")
 
