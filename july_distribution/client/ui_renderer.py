@@ -6,6 +6,7 @@ Product: JULY AI CLI (Persistent Dual-Model AI Environment)
 """
 
 from __future__ import annotations
+import math
 from typing import Dict, Any, Optional
 
 
@@ -205,4 +206,126 @@ def render_gpu_card(telemetry: Dict[str, Any], width: int = 60) -> str:
         row("Max Context Window", f"{telemetry.get('context_length', 4096):,} tokens"),
         bottom
     ]
+    return "\n".join(lines)
+
+
+def make_audio_waveform(level: float, length: int = 24, phase: float = 0.0) -> str:
+    """Generates an animated audio waveform string reacting to real-time RMS energy levels."""
+    chars = [" ", " ", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+    wave = []
+    boosted = min(1.0, max(0.0, level * 5.5 + (0.05 if level > 0.005 else 0.0)))
+    for i in range(length):
+        sine = 0.5 + 0.5 * math.sin(phase + i * 0.42) * math.cos(phase * 0.6 + i * 0.28)
+        scaled = min(1.0, max(0.0, sine * boosted))
+        idx = int(scaled * (len(chars) - 1))
+        wave.append(chars[idx])
+    return "".join(wave)
+
+
+def render_live_box(
+    state: str = "Listening",
+    active_model: str = "JULY",
+    voice_engine: str = "TTS (Female)",
+    recognition_engine: str = "Whisper",
+    language: str = "Auto Detect",
+    style: str = "Natural",
+    user_prompt: str = "",
+    ai_response: str = "",
+    level: float = 0.0,
+    waveform_phase: float = 0.0,
+    metrics: Optional[Dict[str, float]] = None,
+    audio_state: str = "Listening",
+    width: int = 54
+) -> str:
+    """
+    Renders signature live voice conversational terminal interface card:
+    ╭──────────────────────────────────────────────────╮
+    │                 JULY LIVE                        │
+    │                                                  │
+    │  ● LIVE [LISTENING]                              │
+    │                                                  │
+    │  Active Model: JULY                              │
+    │  Voice: TTS (Female)                             │
+    │  Recognition: Whisper                            │
+    │  Language: Auto Detect                           │
+    │  Style: Natural                                  │
+    │                                                  │
+    │              Listening...                        │
+    │                                                  │
+    │        ▂▃▅▆██▆▅▃▂   ▂▃▄▅▃▂                       │
+    │                                                  │
+    │  You: ...                                        │
+    │                                                  │
+    │  July: ...                                       │
+    │                                                  │
+    │  Latency: 0.8s                                   │
+    │  Audio: Playing                                  │
+    ╰──────────────────────────────────────────────────╯
+    """
+    inner = width - 2
+    top = "╭" + "─" * inner + "╮"
+    bottom = "╰" + "─" * inner + "╯"
+
+    def row(txt: str) -> str:
+        padded = txt + " " * max(0, inner - len(txt) - 2)
+        return f"│ {padded[:inner - 2]} │"
+
+    def center(txt: str) -> str:
+        pad_l = (inner - len(txt)) // 2
+        pad_r = inner - len(txt) - pad_l
+        return "│" + " " * max(0, pad_l) + txt + " " * max(0, pad_r) + "│"
+
+    lines = [
+        top,
+        center("JULY LIVE"),
+        "│" + " " * inner + "│",
+        row(f" ● LIVE [{state.upper()}]"),
+        "│" + " " * inner + "│",
+        row(f" Active Model: {active_model.upper()}"),
+        row(f" Voice: {voice_engine}"),
+        row(f" Recognition: {recognition_engine}"),
+        row(f" Language: {language}"),
+        row(f" Style: {style}"),
+        "│" + " " * inner + "│",
+    ]
+
+    # Status caption
+    caption = f"{state}..."
+    lines.append(center(caption))
+
+    # Animated waveform
+    waveform = make_audio_waveform(level, length=min(28, inner - 8), phase=waveform_phase)
+    lines.append(center(f"[{waveform}]"))
+    lines.append("│" + " " * inner + "│")
+
+    # User speech preview
+    if user_prompt:
+        u_txt = user_prompt if len(user_prompt) <= inner - 8 else user_prompt[:inner - 11] + "..."
+        lines.append(row(f" You: {u_txt}"))
+        lines.append("│" + " " * inner + "│")
+
+    # AI response preview
+    if ai_response:
+        ai_clean = ai_response.replace("\n", " ").strip()
+        a_txt = ai_clean if len(ai_clean) <= inner - 9 else ai_clean[:inner - 12] + "..."
+        model_name = "Gravity" if active_model.lower() == "gravity" else "July"
+        lines.append(row(f" {model_name}: {a_txt}"))
+        lines.append("│" + " " * inner + "│")
+
+    # Metrics
+    m = metrics or {}
+    tot_lat = m.get("total_latency_sec", 0.0)
+    ft_lat = m.get("first_token_sec", 0.0)
+    fa_lat = m.get("first_audio_sec", 0.0)
+    if tot_lat > 0.0:
+        lat_str = f"Latency: {tot_lat:.2f}s (Token: {ft_lat:.2f}s, Audio: {fa_lat:.2f}s)"
+    elif fa_lat > 0.0:
+        lat_str = f"Latency: {fa_lat:.2f}s (First Audio)"
+    else:
+        lat_str = "Latency: --"
+
+    lines.append(row(f" {lat_str}"))
+    lines.append(row(f" Audio: {audio_state}"))
+    lines.append(bottom)
+
     return "\n".join(lines)

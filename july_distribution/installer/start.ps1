@@ -1,4 +1,4 @@
-# ================================================================================
+﻿# ================================================================================
 # HS AI SOLUTIONS — JULY LLM ALL-IN-ONE AUTONOMOUS RUNTIME
 # Founder & Chief Architect: Harshan Seliyan | Organization: HS AI Solutions
 # Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
@@ -12,6 +12,7 @@ if (-not (Test-Path variable:Update)) { $Update = $false }
 if (-not (Test-Path variable:SwitchUser)) { $SwitchUser = $false }
 if (-not (Test-Path variable:Model)) { $Model = "" }
 if (-not (Test-Path variable:Voice)) { $Voice = $false }
+if (-not (Test-Path variable:Live)) { $Live = $false }
 
 if ($args) {
     for ($i = 0; $i -lt $args.Count; $i++) {
@@ -19,6 +20,7 @@ if ($args) {
         if ($argStr -ieq '-Update') { $Update = $true }
         elseif ($argStr -ieq '-SwitchUser') { $SwitchUser = $true }
         elseif ($argStr -ieq '-Voice') { $Voice = $true }
+        elseif ($argStr -ieq '-Live') { $Live = $true }
         elseif ($argStr -ieq '-Model' -and ($i + 1) -lt $args.Count) { $Model = [string]$args[++$i] }
     }
 }
@@ -51,10 +53,12 @@ $JulyCmd = Join-Path $BinDir 'july.ps1'
 $RateLimiterFile = Join-Path $InstallRoot 'july_distribution\client\rate_limiter.py'
 $VoiceFile = Join-Path $InstallRoot 'july_distribution\client\voice.py'
 $UiRendererFile = Join-Path $InstallRoot 'july_distribution\client\ui_renderer.py'
+$LiveEngineFile = Join-Path $InstallRoot 'july_distribution\client\live_engine.py'
+$VadFile = Join-Path $InstallRoot 'july_distribution\client\vad.py'
 
-$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or $Update)
+$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or -not (Test-Path $LiveEngineFile) -or -not (Test-Path $VadFile) -or $Update)
 if ($NeedsUpdate) {
-    Write-Host " [⚡] [1/4] Synchronizing latest July & Gravity runtime & voice subsystems..." -ForegroundColor Yellow
+    Write-Host " [⚡] [1/4] Synchronizing latest July & Gravity live conversational voice runtime from repository..." -ForegroundColor Yellow
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     try {
         irm $GitHubRawInstall | iex
@@ -275,7 +279,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 Write-Host " 🛡️  Model loaded in RAM. Entering interactive session with active rate limit protection." -ForegroundColor Green
-Write-Host " 🎙️  Voice System Active: Type /voice on (Whisper STT), /voice output on (Female TTS), /voice input" -ForegroundColor Cyan
+Write-Host " 🎙️  Voice System Active: Type /voice on (Mic STT), /voice output on (Female TTS), or /live (Live Conversation)" -ForegroundColor Cyan
 Write-Host " 🔒  Ephemeral Privacy: Model weights and context are completely wiped from RAM on exit." -ForegroundColor DarkYellow
 Write-Host ""
 
@@ -284,6 +288,20 @@ if ($Voice) {
     Invoke-JulyCli voice female | Out-Null
     Invoke-JulyCli voice on | Out-Null
     Write-Host " [✓] Voice Input & Female Speech Output automatically activated." -ForegroundColor Green
+}
+
+if ($Live) {
+    try {
+        Invoke-JulyCli live --model $Model
+    } finally {
+        Write-Host ""
+        Write-Host " [⚡] Session concluded. Securely wiping ephemeral RAM storage..." -ForegroundColor Yellow
+        Invoke-JulyCli unload
+        Unregister-Event -SourceIdentifier 'PowerShell.Exiting' -ErrorAction SilentlyContinue
+        Write-Host " [✓] RAM reclaimed. Zero artifacts remain on disk or memory." -ForegroundColor Green
+        Write-Host ""
+    }
+    return
 }
 
 try {

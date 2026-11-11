@@ -184,6 +184,8 @@ class TTSVoiceOutput:
         self.speed: int = 180  # words per minute
         self.voice_gender: str = "Female"
         self.voice_name: Optional[str] = self._detect_female_voice()
+        self.is_speaking: bool = False
+        self._current_process: Optional[subprocess.Popen] = None
         self._stop_event = threading.Event()
         self._active_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
@@ -269,6 +271,14 @@ class TTSVoiceOutput:
     def stop(self):
         """Immediately interrupts active speech playback."""
         self._stop_event.set()
+        self.is_speaking = False
+        if self._current_process is not None:
+            try:
+                self._current_process.terminate()
+                self._current_process.kill()
+            except Exception:
+                pass
+            self._current_process = None
 
     def speak(self, text: str, non_blocking: bool = True):
         """Synthesizes text into spoken audio in a separate thread without blocking CLI."""
@@ -305,7 +315,10 @@ class TTSVoiceOutput:
 
     def _speak_pyttsx3(self, text: str):
         """Native Windows / Cross-Platform pyttsx3 speech synthesis."""
+        if self._stop_event.is_set():
+            return
         try:
+            self.is_speaking = True
             import pyttsx3
             engine = pyttsx3.init()
             engine.setProperty("rate", self.speed)
@@ -317,18 +330,17 @@ class TTSVoiceOutput:
                 return
 
             engine.say(text)
-            # Run speech loop while checking stop flag
             engine.runAndWait()
             try:
                 engine.stop()
             except Exception:
                 pass
-        except Exception as e:
+        except Exception:
             # Fallback to SAPI5 if pyttsx3 fails COM initialization
             if sys.platform == "win32":
                 self._speak_sapi5(text)
-            else:
-                raise e
+        finally:
+            self.is_speaking = False
 
     def _speak_sapi5(self, text: str):
         """Windows SAPI5 speech synthesis via PowerShell."""
@@ -348,13 +360,24 @@ class TTSVoiceOutput:
             f"$s.Dispose()"
         )
         try:
-            subprocess.run(
+            self.is_speaking = True
+            p = subprocess.Popen(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
-                timeout=45,
-                capture_output=True
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
             )
+            self._current_process = p
+            while p.poll() is None:
+                if self._stop_event.is_set():
+                    p.terminate()
+                    p.kill()
+                    break
+                time.sleep(0.02)
         except Exception:
             pass
+        finally:
+            self.is_speaking = False
+            self._current_process = None
 
     def _speak_piper(self, text: str):
         """Lightweight neural TTS fallback via Piper executable if available."""

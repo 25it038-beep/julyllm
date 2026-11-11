@@ -39,7 +39,8 @@ from .customization import UserCustomizationManager
 from .runtime import ClientInferenceRuntime
 from .visual_renderer import detect_visual_content, render_visual_html, open_visual_in_browser, render_mermaid_to_cli
 from .voice import CLIHardwareVoiceCoordinator, clean_text_for_speech
-from .ui_renderer import render_cli_status_box, render_hardware_card, render_memory_card, render_gpu_card
+from .ui_renderer import render_cli_status_box, render_hardware_card, render_memory_card, render_gpu_card, render_live_box, make_audio_waveform
+from .live_engine import LiveConversationManager, LiveState, VOICE_STYLES
 
 # Enable Windows Virtual Terminal Processing for ANSI colors
 if os.name == "nt":
@@ -1520,6 +1521,141 @@ def cmd_voice(args=None):
         print(f"\n {UI.YELLOW}Unknown voice action '{action}'. Options: on, off, input, language, model, output on|off, female, gender <female|male>, speed, stop{UI.RESET}\n")
 
 
+def enter_live_mode(
+    runtime: ClientInferenceRuntime,
+    cfg: ClientConfig,
+    voice_coord: CLIHardwareVoiceCoordinator,
+    coordinator=None,
+    style: str = "natural",
+    active_model: Optional[str] = None
+):
+    """Enters real-time conversational AI voice mode with continuous listening, streaming VAD and instant TTS."""
+    perm_storage = PermanentModelStorage()
+    model_name = (active_model or getattr(runtime, "current_model_id", None) or "july").lower().strip()
+
+    if not runtime.is_loaded():
+        f = perm_storage.get_model_file(model_name)
+        if not f.exists():
+            f = perm_storage.get_model_file("july")
+            model_name = "july"
+        if f.exists():
+            runtime.load_model(f)
+
+    print(f"\n {UI.BOLD}{UI.CYAN}╭──────────────────────────────────────────────────╮{UI.RESET}")
+    print(f" {UI.BOLD}{UI.CYAN}│        JULY LIVE VOICE ENVIRONMENT ACTIVATED     │{UI.RESET}")
+    print(f" {UI.BOLD}{UI.CYAN}╰──────────────────────────────────────────────────╯{UI.RESET}")
+    print(f"  {UI.GRAY}• Continuous microphone listening active (no Enter key required).{UI.RESET}")
+    print(f"  {UI.GRAY}• Interrupt anytime by speaking aloud (natural barge-in).{UI.RESET}")
+    print(f"  {UI.GRAY}• Say or type {UI.YELLOW}'/exit-live'{UI.GRAY} or press {UI.YELLOW}Ctrl+C{UI.GRAY} to return to chat.{UI.RESET}\n")
+
+    live_mgr = LiveConversationManager(
+        runtime=runtime,
+        active_model=model_name,
+        style=style,
+        vad_silence_duration=0.8
+    )
+
+    try:
+        from rich.live import Live
+        from rich.console import Console
+        console = Console()
+        rich_available = True
+    except ImportError:
+        rich_available = False
+
+    live_thread = None
+
+    if rich_available:
+        try:
+            initial_card = render_live_box(
+                state="Listening",
+                active_model=model_name,
+                voice_engine=f"TTS ({live_mgr.tts.voice_gender})",
+                recognition_engine=f"Whisper ({live_mgr.stt.model_name})",
+                language=live_mgr.stt.language.upper(),
+                style=live_mgr.current_style.title(),
+                audio_state="Listening"
+            )
+
+            with Live(initial_card, refresh_per_second=8, console=console) as live_display:
+                def on_tick(snap):
+                    box = render_live_box(
+                        state=snap["state"],
+                        active_model=snap["active_model"],
+                        voice_engine=f"TTS ({snap['voice_gender']})",
+                        recognition_engine=f"Whisper ({snap['whisper_model']})",
+                        language=snap["whisper_lang"],
+                        style=snap["style"],
+                        user_prompt=snap["user_prompt"],
+                        ai_response=snap["ai_response"],
+                        level=snap["level"],
+                        waveform_phase=snap["waveform_phase"],
+                        metrics=snap["metrics"],
+                        audio_state=snap["audio_state"]
+                    )
+                    live_display.update(box)
+
+                live_thread = threading.Thread(
+                    target=live_mgr.start_live_loop,
+                    args=(on_tick,),
+                    name="july-live-worker",
+                    daemon=True
+                )
+                live_thread.start()
+
+                while live_mgr.is_running and live_thread.is_alive():
+                    time.sleep(0.08)
+
+        except KeyboardInterrupt:
+            pass
+        finally:
+            live_mgr.stop()
+            if live_thread and live_thread.is_alive():
+                live_thread.join(timeout=1.0)
+    else:
+        try:
+            live_thread = threading.Thread(
+                target=live_mgr.start_live_loop,
+                name="july-live-worker",
+                daemon=True
+            )
+            live_thread.start()
+            while live_mgr.is_running and live_thread.is_alive():
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            live_mgr.stop()
+            if live_thread and live_thread.is_alive():
+                live_thread.join(timeout=1.0)
+
+    print(f"\n {UI.GREEN}[✓] Exited live voice conversation mode. Returning to standard CLI.{UI.RESET}\n")
+
+
+def cmd_live(args=None):
+    """Command-line entrypoint: 'july live'."""
+    is_auth, session = ensure_authenticated_for_models(prompt_user=True)
+    if not is_auth:
+        print(f"\n {UI.RED}[!] Model Access Blocked:{UI.RESET} Authentication required before starting live voice mode.")
+        print(f" {UI.GRAY}[i] Run 'july login' to authenticate with Clerk / HS AI Solutions.{UI.RESET}\n")
+        sys.exit(1)
+
+    cfg = ClientConfig.load()
+    voice_coord = CLIHardwareVoiceCoordinator.get_instance()
+    runtime = ClientInferenceRuntime.get_instance(config=cfg)
+
+    req_model = getattr(args, "model", None) or cfg.selected_model or "july"
+    req_style = getattr(args, "style", "natural") or "natural"
+
+    enter_live_mode(
+        runtime=runtime,
+        cfg=cfg,
+        voice_coord=voice_coord,
+        style=req_style,
+        active_model=req_model
+    )
+
+
 def cmd_chat(args):
     # Enforce authentication before allowing model chat
     is_auth, session = ensure_authenticated_for_models(prompt_user=True)
@@ -1749,6 +1885,8 @@ def cmd_chat(args):
                     print(f"   {UI.CYAN}/gpu{UI.RESET}                    - GPU acceleration, VRAM allocation, and layer offloading")
                     print(f"   {UI.CYAN}/voice <on|off|input|lang|model>{UI.RESET} - Whisper STT microphone input & language")
                     print(f"   {UI.CYAN}/voice output <on|off|speed|stop>{UI.RESET} - Multilingual TTS voice response synthesis")
+                    print(f"   {UI.CYAN}/live [style]{UI.RESET}         - Real-time continuous conversational voice AI mode")
+                    print(f"   {UI.CYAN}/exit-live{UI.RESET}            - Exit real-time voice mode and return to standard chat")
                     print(f"   {UI.CYAN}/sandbox [act]{UI.RESET}   - Windows Sandbox status and isolation control (status, reset, run)")
                     print(f"   {UI.CYAN}/think [mode]{UI.RESET}   - Highlight model thinking (expanded, collapsed, hidden)")
                     print(f"   {UI.CYAN}/paste, /bulk{UI.RESET}   - Enter multi-line bulk prompt mode (finish with /send)")
@@ -1760,6 +1898,22 @@ def cmd_chat(args):
                     print(f"   {UI.CYAN}/feedback{UI.RESET}       - Record feedback or failure report for continuous evolution")
                     print(f"   {UI.CYAN}/mode <name>{UI.RESET}   - Switch personality profile")
                     print(f"   {UI.CYAN}exit, quit{UI.RESET}      - Exit and safely reclaim RAM\n")
+                    continue
+
+                if c in ("/live", "live"):
+                    sub_style = cmd_parts[1].lower().strip() if len(cmd_parts) > 1 else getattr(cfg, "voice_style", "natural")
+                    enter_live_mode(
+                        runtime=runtime,
+                        cfg=cfg,
+                        voice_coord=voice_coord,
+                        coordinator=coordinator,
+                        style=sub_style,
+                        active_model=runtime.current_model_id
+                    )
+                    continue
+
+                if c == "/exit-live":
+                    print(f"\n {UI.GRAY}Already in standard chat mode.{UI.RESET}\n")
                     continue
 
                 if c == "/hardware":
@@ -2458,6 +2612,10 @@ def main():
     sbx_p.add_argument("-t", "--timeout", type=float, help="Execution timeout in seconds")
     sbx_p.add_argument("-n", "--network", action="store_true", help="Allow network access for this execution")
 
+    live_p = subparsers.add_parser("live", help="Start real-time conversational voice AI session")
+    live_p.add_argument("-M", "--model", choices=["july", "gravity"], default=None, help="Foundation model to use")
+    live_p.add_argument("-S", "--style", choices=["natural", "friendly", "professional", "tutor", "companion"], default="natural", help="Voice style")
+
     args = parser.parse_args()
 
     if args.command == "install":
@@ -2500,6 +2658,8 @@ def main():
         cmd_personality(args)
     elif args.command == "chat":
         cmd_chat(args)
+    elif args.command == "live":
+        cmd_live(args)
     elif args.command == "unload":
         cmd_unload()
     elif args.command == "update":

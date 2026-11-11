@@ -170,7 +170,8 @@ class ClientInferenceRuntime:
         self,
         prompt: str,
         session_id: str = "default",
-        max_tokens: Optional[int] = None
+        max_tokens: Optional[int] = None,
+        cancel_event: Optional[threading.Event] = None
     ) -> Generator[str, None, None]:
         """Streams output tokens formatted with user customizations."""
         if not self._is_loaded or self.llm is None:
@@ -282,6 +283,8 @@ class ClientInferenceRuntime:
 
         full_response = []
         for chunk in stream:
+            if cancel_event and cancel_event.is_set():
+                break
             choices = chunk.get("choices", [])
             if choices:
                 delta = choices[0].get("text", "")

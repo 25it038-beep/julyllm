@@ -175,6 +175,7 @@ Write-Host "  july login     - Authenticate with HS AI Solutions: july login -u 
 Write-Host "  july status    - Display authentication, model state, and hardware telemetry" -ForegroundColor Gray
 Write-Host "  july load      - Retrieve GGUF model into temporary RAM-backed storage" -ForegroundColor Gray
 Write-Host "  july chat      - Start interactive chat running genuine local inference" -ForegroundColor Gray
+Write-Host "  july live      - Launch real-time conversational voice AI companion session" -ForegroundColor Cyan
 Write-Host "  july voice     - Configure Whisper speech-to-text and female TTS audio synthesis" -ForegroundColor Gray
 Write-Host "  july config    - View and customize system instructions & persona" -ForegroundColor Gray
 Write-Host "  july unload    - Safely unload model and wipe RAM storage" -ForegroundColor Gray
