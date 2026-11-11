@@ -1751,7 +1751,8 @@ def cmd_chat(args):
         print(f"  {UI.GRAY}User Account:{UI.RESET} {UI.GREEN}{user_email}{UI.RESET} {UI.GRAY}[{UI.CYAN}{user_tier.upper()}{UI.GRAY} Plan • Model Access Granted]{UI.RESET}")
         print(f"  {UI.GRAY}Active Model:{UI.RESET} {UI.CYAN}{active_mode} LLM{UI.RESET} {UI.GRAY}(Type {UI.YELLOW}/model{UI.GRAY} to switch models){UI.RESET}")
         print(f"  {UI.GRAY}Personality :{UI.RESET} {UI.YELLOW}{cfg.personality.replace('_', ' ').title()}{UI.RESET}  {UI.GRAY}Thinking:{UI.RESET} {UI.GREEN}{getattr(cfg, 'thinking_mode', 'expanded').upper()}{UI.RESET}")
-        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/model{UI.RESET}, {UI.CYAN}/hardware{UI.RESET}, {UI.CYAN}/memory{UI.RESET}, {UI.CYAN}/gpu{UI.RESET}, {UI.CYAN}/voice{UI.RESET}, {UI.CYAN}/think{UI.RESET}, {UI.CYAN}/help{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
+        print(f"  {UI.GRAY}Live Voice  :{UI.RESET} {UI.BOLD}{UI.GREEN}Type /live for continuous hands-free voice conversation{UI.RESET}")
+        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/live{UI.RESET}, {UI.CYAN}/model{UI.RESET}, {UI.CYAN}/hardware{UI.RESET}, {UI.CYAN}/memory{UI.RESET}, {UI.CYAN}/gpu{UI.RESET}, {UI.CYAN}/voice{UI.RESET}, {UI.CYAN}/think{UI.RESET}, {UI.CYAN}/help{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
         print(f"{UI.GRAY}─────────────────────────────────────────────────────────────────────────────{UI.RESET}\n")
 
         # Premium Status Box (Requirement 7)
