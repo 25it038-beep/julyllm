@@ -22,7 +22,7 @@ from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, Header, Request, Depends, status, Body
 from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -370,7 +370,7 @@ def get_my_profile(user: User = Depends(get_current_user)):
 class ClerkSyncRequest(BaseModel):
     token: str
     clerk_user_id: str
-    email: EmailStr
+    email: str
     name: str = "July User"
     tier: str = "pro"
     device_id: str
