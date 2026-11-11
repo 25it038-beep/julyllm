@@ -169,6 +169,53 @@ class TestMasterPromptCompliance(unittest.TestCase):
         self.assertIn("SIGN-OUT INSTRUCTIONS", output)
         self.assertIn("july logout", output)
 
+    def test_07_strict_auth_blocks_model_selection_when_unauthenticated(self):
+        """Strict Auth Rule: Unauthenticated user is NOT allowed to select or view models."""
+        self.vault.clear_session()
+        self.assertFalse(self.clerk.is_authenticated())
+
+        captured = io.StringIO()
+        with patch("sys.stdout", captured), \
+             patch("july_distribution.client.cli.ClerkAuthManager", return_value=self.clerk), \
+             patch("july_distribution.client.cli.ClientAuthManager.is_authenticated", return_value=False):
+            # Attempt to select model without auth (interactive prompt declined)
+            with patch("sys.stdin.isatty", return_value=False):
+                cli.cmd_model(argparse.Namespace(name="gravity", list=False, status=False))
+
+        output = captured.getvalue()
+        self.assertIn("Model Access Blocked", output)
+        self.assertIn("Strict authentication required before viewing or selecting July or Gravity models", output)
+
+    def test_08_strict_auth_blocks_config_model_when_unauthenticated(self):
+        """Strict Auth Rule: Unauthenticated user cannot bypass via config --set selected_model."""
+        self.vault.clear_session()
+        self.assertFalse(self.clerk.is_authenticated())
+
+        captured = io.StringIO()
+        with patch("sys.stdout", captured), \
+             patch("july_distribution.client.cli.ClerkAuthManager", return_value=self.clerk), \
+             patch("july_distribution.client.cli.ClientAuthManager.is_authenticated", return_value=False):
+            with patch("sys.stdin.isatty", return_value=False):
+                cli.cmd_config(argparse.Namespace(set=["selected_model", "gravity"]))
+
+        output = captured.getvalue()
+        self.assertIn("Model Selection Blocked", output)
+        self.assertIn("Strict authentication required before configuring model", output)
+
+    def test_09_strict_auth_allows_model_selection_when_authenticated(self):
+        """Strict Auth Rule: Authenticated user CAN select and switch models freely."""
+        self.clerk.login_manual("valid_auth_token", email="verified@hs-ai.solutions")
+        self.assertTrue(self.clerk.is_authenticated())
+
+        captured = io.StringIO()
+        with patch("sys.stdout", captured), \
+             patch("july_distribution.client.cli.ClerkAuthManager", return_value=self.clerk):
+            cli.cmd_model(argparse.Namespace(name="gravity", list=False, status=False))
+
+        output = captured.getvalue()
+        self.assertIn("Configured active model", output)
+        self.assertIn("GRAVITY", output)
+
 
 if __name__ == "__main__":
     unittest.main()

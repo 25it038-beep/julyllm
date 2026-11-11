@@ -198,7 +198,25 @@ Register-EngineEvent -SourceIdentifier 'PowerShell.Exiting' -Action {
     & $p -m july_distribution.client.cli unload | Out-Null
 } -ErrorAction SilentlyContinue | Out-Null
 
-# [6] Foundation Model Selection & Ephemeral RAM Initialization
+# [6] Foundation Model Selection & Ephemeral RAM Initialization (Strict Auth Guard)
+$authJsonRaw = & $PythonExe -c $authCheckCode 2>$null
+$isStrictlyAuth = $false
+try {
+    $authInfo = $authJsonRaw | ConvertFrom-Json
+    $isStrictlyAuth = [bool]($authInfo.authenticated)
+} catch {
+    $isStrictlyAuth = $false
+}
+
+if (-not $isStrictlyAuth) {
+    Write-Host ""
+    Write-Host " [!] STRICT AUTH ENFORCEMENT: Model selection is blocked." -ForegroundColor Red
+    Write-Host "     Access to July & Gravity models requires verified Clerk authentication." -ForegroundColor Red
+    Write-Host "     Please execute 'july login' to authenticate with Clerk." -ForegroundColor DarkGray
+    Write-Host ""
+    return
+}
+
 if (-not $Model) {
     if ($env:JULY_MODEL) {
         $Model = $env:JULY_MODEL

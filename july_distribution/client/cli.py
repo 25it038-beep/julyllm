@@ -242,7 +242,7 @@ def _print_auth_success(sess: dict, is_signup: bool = False):
 
 def ensure_authenticated_for_models(prompt_user: bool = True) -> tuple[bool, Optional[dict]]:
     """
-    Enforces authentication before allowing model inference or loading.
+    Strictly enforces authentication before allowing model selection, inference, or loading.
     If unauthenticated and running interactively in CLI, offers immediate authentication.
     """
     clerk = ClerkAuthManager()
@@ -255,11 +255,12 @@ def ensure_authenticated_for_models(prompt_user: bool = True) -> tuple[bool, Opt
         sess = auth.get_session() or {"email": "legacy_user", "tier": "standard", "clerk_user_id": "legacy"}
         return True, sess
 
-    # Not authenticated
+    # Not authenticated - Strict Gating
     if prompt_user and sys.stdin.isatty():
         print(f"\n {UI.YELLOW}┌────────────────────────────────────────────────────────────────────────────┐{UI.RESET}")
-        print(f" {UI.YELLOW}│{UI.RESET}  {UI.BOLD}{UI.RED}AUTHENTICATION REQUIRED TO ACCESS JULY & GRAVITY MODELS{UI.RESET}                 {UI.YELLOW}│{UI.RESET}")
-        print(f" {UI.YELLOW}│{UI.RESET}  Model execution is restricted to authenticated HS AI Solutions users.     {UI.YELLOW}│{UI.RESET}")
+        print(f" {UI.YELLOW}│{UI.RESET}  {UI.BOLD}{UI.RED}STRICT AUTHENTICATION REQUIRED TO SELECT OR USE AI MODELS{UI.RESET}                {UI.YELLOW}│{UI.RESET}")
+        print(f" {UI.YELLOW}│{UI.RESET}  Model selection and inference are strictly gated by HS AI Solutions Clerk  {UI.YELLOW}│{UI.RESET}")
+        print(f" {UI.YELLOW}│{UI.RESET}  authentication. Please log in to unlock model access.                      {UI.YELLOW}│{UI.RESET}")
         print(f" {UI.YELLOW}└────────────────────────────────────────────────────────────────────────────┘{UI.RESET}\n")
 
         try:
@@ -1175,6 +1176,13 @@ def interactive_select_personality(cfg: ClientConfig, customizer: UserCustomizat
 
 
 def cmd_personality(args):
+    # Enforce strict authentication before allowing personality / mode configuration
+    is_auth, _ = ensure_authenticated_for_models(prompt_user=True)
+    if not is_auth:
+        print(f"\n {UI.RED}[!] Access Blocked:{UI.RESET} Strict authentication required before configuring model personality.")
+        print(f" {UI.GRAY}[i] Run 'july login' to authenticate with Clerk / HS AI Solutions.{UI.RESET}\n")
+        return
+
     UI.print_banner("Personality & Tone Configuration")
     cfg = ClientConfig.load()
     customizer = UserCustomizationManager(cfg)
@@ -1202,6 +1210,13 @@ def cmd_personality(args):
 
 def interactive_select_model(cfg: ClientConfig) -> Optional[str]:
     """Displays an interactive numbered menu for selecting foundation model or auto routing."""
+    # Enforce strict authentication before displaying model selector menu
+    is_auth, _ = ensure_authenticated_for_models(prompt_user=True)
+    if not is_auth:
+        print(f"\n {UI.RED}[!] Model Selection Blocked:{UI.RESET} Strict authentication required before selecting a model.")
+        print(f" {UI.GRAY}[i] Run 'july login' to authenticate with Clerk / HS AI Solutions.{UI.RESET}\n")
+        return None
+
     from .state_manager import DualModelStateManager, ModelStatus
     from .storage import PermanentModelStorage
     state_mgr = DualModelStateManager()
@@ -1274,6 +1289,13 @@ def interactive_select_model(cfg: ClientConfig) -> Optional[str]:
 
 
 def cmd_model(args):
+    # Enforce strict authentication before allowing model selection, listing, or configuration
+    is_auth, session = ensure_authenticated_for_models(prompt_user=True)
+    if not is_auth:
+        print(f"\n {UI.RED}[!] Model Access Blocked:{UI.RESET} Strict authentication required before viewing or selecting July or Gravity models.")
+        print(f" {UI.GRAY}[i] Run 'july login' to authenticate with Clerk / HS AI Solutions.{UI.RESET}\n")
+        return
+
     UI.print_banner("Dual-Model Configuration & Management")
     cfg = ClientConfig.load()
     name = getattr(args, "name", None)
@@ -1863,6 +1885,12 @@ def cmd_config(args):
     cfg = ClientConfig.load()
     if args.set:
         key, val = args.set
+        if key in ("selected_model", "model"):
+            is_auth, _ = ensure_authenticated_for_models(prompt_user=True)
+            if not is_auth:
+                print(f"\n {UI.RED}[!] Model Selection Blocked:{UI.RESET} Strict authentication required before configuring model.")
+                print(f" {UI.GRAY}[i] Run 'july login' to authenticate with Clerk / HS AI Solutions.{UI.RESET}\n")
+                return
         if hasattr(cfg, key):
             curr_val = getattr(cfg, key)
             if isinstance(curr_val, bool):
