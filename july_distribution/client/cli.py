@@ -315,11 +315,13 @@ def cmd_load(args):
         import shutil
         shutil.copyfile(root_seed, ephemeral_path)
 
-    def progress(received, total, speed):
-        pct = (received / total) * 100
+    def progress(received, total, speed, eta=0.0):
+        pct = (received / max(1, total)) * 100
         mb_r = received / (1024 * 1024)
         mb_t = total / (1024 * 1024)
-        sys.stdout.write(f"\r  Retrieving Cloudflare R2: [{pct:5.1f}%] {mb_r:7.1f} / {mb_t:7.1f} MB ({speed:5.1f} MB/s)")
+        eta_m = int(eta // 60)
+        eta_s = int(eta % 60)
+        sys.stdout.write(f"\r  Retrieving Cloudflare R2: [{pct:5.1f}%] {mb_r:7.1f} / {mb_t:7.1f} MB ({speed:5.1f} MB/s | ETA: {eta_m:02d}m{eta_s:02d}s)")
         sys.stdout.flush()
 
     try:

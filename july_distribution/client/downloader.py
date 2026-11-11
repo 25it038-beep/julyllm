@@ -158,39 +158,53 @@ class ClientModelDownloader:
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         existing_bytes = dest_path.stat().st_size if dest_path.exists() else 0
 
-        # Step 2: Pre-flight Disk Space Check
-        free_bytes = shutil.disk_usage(dest_path.parent).free
-        needed_bytes = target_size - existing_bytes
-        if free_bytes < needed_bytes + (50 * 1024 * 1024):
-            raise IOError(
-                f"Insufficient disk space. Needed: {needed_bytes/(1024**3):.2f} GB, "
-                f"Available: {free_bytes/(1024**3):.2f} GB"
+        # Step 2: Check for full parallel direct R2 download
+        if not max_bytes:
+            from .parallel_downloader import DirectR2ParallelDownloader
+            workers = int(os.getenv("R2_DOWNLOAD_WORKERS", "4"))
+            chunk_mb = 64 if mid == "gravity" else 32
+            
+            p_downloader = DirectR2ParallelDownloader(
+                num_workers=workers,
+                chunk_size_mb=chunk_mb,
+                url_refresh_callback=lambda: self.request_presigned_download(mid)["download_url"]
+            )
+            
+            def internal_cb(stats: Dict[str, Any]):
+                if progress_callback:
+                    progress_callback(
+                        stats["completed_bytes"],
+                        stats["total_bytes"],
+                        stats["speed_mbps"],
+                        stats["eta_seconds"]
+                    )
+                else:
+                    bar_len = 25
+                    pct = stats["percent"]
+                    filled = int(bar_len * pct / 100)
+                    bar = "=" * filled + "-" * (bar_len - filled)
+                    mb_done = stats["completed_bytes"] / (1024 * 1024)
+                    mb_tot = stats["total_bytes"] / (1024 * 1024)
+                    eta_m = int(stats["eta_seconds"] // 60)
+                    eta_s = int(stats["eta_seconds"] % 60)
+                    sys.stdout.write(
+                        f"\r  [{mid.upper()} R2] [{bar}] {pct:5.1f}% | {mb_done:7.1f}/{mb_tot:7.1f} MB "
+                        f"| {stats['speed_mbps']:5.1f} MB/s | [{stats['completed_chunks']}/{stats['total_chunks']} chunks] "
+                        f"| {stats['active_workers']} streams | ETA {eta_m:02d}m{eta_s:02d}s | Retries: {stats['retries']}"
+                    )
+                    sys.stdout.flush()
+
+            return p_downloader.download(
+                download_url=download_url,
+                dest_path=dest_path,
+                total_size=full_size,
+                model_id=mid,
+                object_key=info.get("object_key", ""),
+                expected_sha256=expected_sha,
+                progress_callback=internal_cb
             )
 
-        # Check existing byte length
-        if existing_bytes == target_size:
-            print(f"[{mid.upper()} CLIENT] Local file already complete ({existing_bytes:,} bytes).")
-            if expected_sha and not max_bytes:
-                print(f"[{mid.upper()} CLIENT] Verifying SHA-256 checksum...")
-                actual_sha = self.compute_sha256(dest_path, chunk_size)
-                if actual_sha == expected_sha:
-                    print(f"[{mid.upper()} CLIENT] SHA-256 verified successfully: {actual_sha}")
-                    return dest_path
-                else:
-                    print(f"[{mid.upper()} CLIENT] SHA-256 mismatch. Re-downloading...")
-                    dest_path.unlink()
-                    existing_bytes = 0
-            else:
-                return dest_path
-        elif existing_bytes > target_size:
-            dest_path.unlink()
-            existing_bytes = 0
-        elif mid == "gravity" and existing_bytes == 2019377888:
-            print(f"[{mid.upper()} CLIENT] Detected residual buffer from July LLM ({existing_bytes:,} bytes). Clearing for Gravity...")
-            dest_path.unlink(missing_ok=True)
-            existing_bytes = 0
-
-        # Step 3: Range Request Header setup for resumption
+        # Pre-flight Disk Space Check (Slice / Test mode)
         headers = {}
         mode = "wb"
         if existing_bytes > 0:
@@ -237,16 +251,12 @@ class ClientModelDownloader:
     def download_to_ephemeral_storage(
         self,
         dest_path: Path,
-        progress_callback: Optional[Callable[[int, int, float], None]] = None,
+        progress_callback: Optional[Callable[[int, int, float, float], None]] = None,
         model_id: str = "july"
     ) -> Path:
-        """Backwards-compatible wrapper for ephemeral RAM mounting."""
-        def legacy_cb(rec, tot, spd, eta):
-            if progress_callback:
-                progress_callback(rec, tot, spd)
-
+        """Wrapper for ephemeral RAM mounting with parallel direct R2 streaming."""
         return self.download_model(
             model_id=model_id,
             dest_path=dest_path,
-            progress_callback=legacy_cb
+            progress_callback=progress_callback
         )
