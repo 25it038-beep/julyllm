@@ -216,6 +216,53 @@ class TestMasterPromptCompliance(unittest.TestCase):
         self.assertIn("Configured active model", output)
         self.assertIn("GRAVITY", output)
 
+    def test_10_context_provider_identifies_user(self):
+        """Context Engine: Model is provided full user identity context."""
+        from july_distribution.client.context_provider import RuntimeContextProvider
+        self.clerk.login_manual("token_creator_test", email="harshanseliyan28@gmail.com")
+
+        with patch("july_distribution.client.context_provider.ClerkAuthManager", return_value=self.clerk):
+            u_ctx = RuntimeContextProvider.get_user_context()
+            self.assertTrue(u_ctx["authenticated"])
+            self.assertEqual(u_ctx["email"], "harshanseliyan28@gmail.com")
+            self.assertTrue(u_ctx["is_creator"])
+            self.assertIn("CREATOR", u_ctx["tier"])
+
+    def test_11_context_provider_temporal_anchor(self):
+        """Context Engine: Model receives exact live date, time and year anchor."""
+        from july_distribution.client.context_provider import RuntimeContextProvider
+        t_ctx = RuntimeContextProvider.get_temporal_context()
+        self.assertEqual(t_ctx["year"], 2026)
+        self.assertTrue(len(t_ctx["date"]) > 5)
+        self.assertTrue(len(t_ctx["time"]) > 4)
+        self.assertIn(t_ctx["day_of_week"], ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
+
+    def test_12_context_provider_location_context(self):
+        """Context Engine: Model receives city, region, country, and timezone."""
+        from july_distribution.client.context_provider import RuntimeContextProvider
+        l_ctx = RuntimeContextProvider.get_location_context()
+        self.assertIn("country", l_ctx)
+        self.assertIn("timezone", l_ctx)
+        self.assertIn("hostname", l_ctx)
+
+    def test_13_system_prompt_includes_runtime_context(self):
+        """Context Engine: System prompt contains live identity, temporal, and location directives."""
+        from july_distribution.client.customization import UserCustomizationManager
+        from july_distribution.client.config import ClientConfig
+        self.clerk.login_manual("token_sys_test", email="harshanseliyan28@gmail.com")
+
+        cfg = ClientConfig()
+        customizer = UserCustomizationManager(cfg)
+        with patch("july_distribution.client.context_provider.ClerkAuthManager", return_value=self.clerk):
+            sys_prompt = customizer.get_effective_system_prompt("july")
+
+        self.assertIn("LIVE RUNTIME CONTEXT", sys_prompt)
+        self.assertIn("harshanseliyan28@gmail.com", sys_prompt)
+        self.assertIn("CURRENT DATE & TIME", sys_prompt)
+        self.assertIn("2026", sys_prompt)
+        self.assertIn("GEOGRAPHICAL LOCATION", sys_prompt)
+        self.assertIn("DIRECTIVES FOR IDENTITY, TEMPORAL & GEOGRAPHICAL AWARENESS", sys_prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

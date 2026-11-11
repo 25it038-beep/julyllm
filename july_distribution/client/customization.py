@@ -191,7 +191,16 @@ class UserCustomizationManager:
         # Append memory context if present
         memory_text = self.get_memory_summary()
 
+        # Append dynamic live runtime context (User Identity, Current Date/Time, Location)
+        try:
+            from .context_provider import RuntimeContextProvider
+            context_block = RuntimeContextProvider.build_system_context_block()
+        except Exception:
+            context_block = ""
+
         parts = [base_identity, persona_text]
+        if context_block:
+            parts.append(context_block)
         if user_custom and user_custom != persona_text:
             parts.append(f"User Directive: {user_custom}")
         if memory_text:

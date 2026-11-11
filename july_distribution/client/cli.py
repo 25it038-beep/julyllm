@@ -1547,6 +1547,8 @@ def cmd_chat(args):
 
                 if c == "/help":
                     print(f"\n {UI.BOLD}{UI.CYAN}Available Commands:{UI.RESET}")
+                    print(f"   {UI.CYAN}/whoami{UI.RESET}         - View active authenticated identity, tier & creator badge")
+                    print(f"   {UI.CYAN}/context{UI.RESET}        - View live runtime context (Date, Time, Location & Host)")
                     print(f"   {UI.CYAN}/model [name]{UI.RESET}   - Select or switch foundation model (july, gravity, auto, list)")
                     print(f"   {UI.CYAN}/sandbox [act]{UI.RESET}   - Windows Sandbox status and isolation control (status, reset, run)")
                     print(f"   {UI.CYAN}/think [mode]{UI.RESET}   - Highlight model thinking (expanded, collapsed, hidden)")
@@ -1664,6 +1666,15 @@ def cmd_chat(args):
                     session_id = f"cli_{int(time.time())}"
                     UI.print_banner()
                     print(f"  {UI.GREEN}[✓] Chat screen and conversation history cleared.{UI.RESET}\n")
+                    continue
+
+                if c in ("/whoami", "/account", "/user"):
+                    cmd_whoami()
+                    continue
+
+                if c in ("/context", "/time", "/location"):
+                    from .context_provider import RuntimeContextProvider
+                    print("\n" + RuntimeContextProvider.build_system_context_block() + "\n")
                     continue
 
                 if c == "/status":
