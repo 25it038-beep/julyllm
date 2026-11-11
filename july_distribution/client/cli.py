@@ -19,6 +19,7 @@ Implements commands:
 from __future__ import annotations
 import os
 import sys
+import re
 import time
 import argparse
 import getpass
@@ -370,40 +371,270 @@ def cmd_load(args):
             sys.exit(1)
 
 
-class VisualTokenFilter:
-    """Filters out raw <visual ...> tags during streaming so text stays clean."""
-    def __init__(self):
-        self.in_tag = False
+class ThinkingResultStreamFilter:
+    """
+    Differentiates model thinking and result by highlighting in CLI.
+    - Captures reasoning tags (<think>, <thought>, <reasoning>, [thinking], [think]) and textual markers.
+    - Highlights thinking in a dedicated, formatted container with subtle styling and timer.
+    - Differentiates and highlights the final Result/Answer in bold vibrant colors.
+    - Filters out raw <visual ...> tags cleanly during streaming.
+    - Supports 'expanded' (full highlighted thinking), 'collapsed' (summary badge), and 'hidden' modes.
+    """
+    STATE_INITIAL = "INITIAL"
+    STATE_THINKING = "THINKING"
+    STATE_RESULT = "RESULT"
+
+    OPEN_TAGS = ["<think>", "<thought>", "<reasoning>", "[thinking]", "[think]"]
+    OPEN_TEXT_MARKERS = [
+        "thinking process:", "thought:", "thoughts:", "reasoning:",
+        "### thinking", "## thinking", "### reasoning", "## reasoning",
+        "### thought process", "## thought process"
+    ]
+    CLOSE_REGEX = re.compile(
+        r"(?:</think>|</thought>|</reasoning>|\[/thinking\]|\[/think\]|"
+        r"(?:^|\n)\s*(?:###?\s*(?:answer|result|solution|response|conclusion)|final answer:|answer:|result:))",
+        re.IGNORECASE
+    )
+
+    def __init__(self, model_name: str = "JULY", badge_color: str = UI.CYAN, thinking_mode: str = "expanded"):
+        self.model_name = model_name
+        self.badge_color = badge_color
+        self.thinking_mode = thinking_mode.lower() if thinking_mode else "expanded"
+        self.state = self.STATE_INITIAL
         self.buffer = ""
+        self.think_start_time = 0.0
+        self.has_thought = False
+        self.in_visual = False
+        self.result_header_printed = False
 
     def process(self, token: str) -> str:
         self.buffer += token
-        if not self.in_tag:
-            low = self.buffer.lower()
-            if "<visual" in low:
-                idx = low.find("<visual")
-                to_print = self.buffer[:idx]
-                self.buffer = self.buffer[idx:]
-                self.in_tag = True
-                return to_print
-            elif len(self.buffer) > 10:
-                flush_len = len(self.buffer) - 8
-                to_print = self.buffer[:flush_len]
-                self.buffer = self.buffer[flush_len:]
-                return to_print
-            return ""
-        else:
-            if "</visual>" in self.buffer.lower() or (">" in self.buffer and "}" in self.buffer):
-                self.in_tag = False
-                self.buffer = ""
-            return ""
+        output = []
+
+        while self.buffer:
+            if self.state == self.STATE_INITIAL:
+                stripped = self.buffer.lstrip()
+                if not stripped:
+                    break
+
+                low_stripped = stripped.lower()
+
+                matched_open = None
+                for tag in self.OPEN_TAGS:
+                    if low_stripped.startswith(tag):
+                        matched_open = tag
+                        break
+
+                if matched_open:
+                    self.state = self.STATE_THINKING
+                    self.has_thought = True
+                    self.think_start_time = time.time()
+                    tag_len = len(matched_open)
+                    self.buffer = stripped[tag_len:]
+                    if self.buffer.startswith("\n"):
+                        self.buffer = self.buffer[1:]
+
+                    if self.thinking_mode == "expanded":
+                        header = (
+                            f"\n  \033[38;5;244m╭─ 🧠 Thinking Process ──────────────────────────────────────────\033[0m\n"
+                            f"  \033[38;5;240m│\033[0m \033[38;5;245m\033[3m"
+                        )
+                        output.append(header)
+                    continue
+
+                potential_match = False
+                for tag in self.OPEN_TAGS:
+                    if tag.startswith(low_stripped) or (low_stripped.startswith("<") and len(low_stripped) < 12):
+                        potential_match = True
+                        break
+
+                if potential_match and len(stripped) < 15:
+                    break
+
+                matched_text_marker = None
+                for marker in self.OPEN_TEXT_MARKERS:
+                    if low_stripped.startswith(marker):
+                        matched_text_marker = marker
+                        break
+
+                if matched_text_marker:
+                    self.state = self.STATE_THINKING
+                    self.has_thought = True
+                    self.think_start_time = time.time()
+                    marker_len = len(matched_text_marker)
+                    self.buffer = stripped[marker_len:]
+                    if self.buffer.startswith("\n"):
+                        self.buffer = self.buffer[1:]
+                    if self.thinking_mode == "expanded":
+                        header = (
+                            f"\n  \033[38;5;244m╭─ 🧠 Thinking Process ──────────────────────────────────────────\033[0m\n"
+                            f"  \033[38;5;240m│\033[0m \033[38;5;245m\033[3m"
+                        )
+                        output.append(header)
+                    continue
+
+                self.state = self.STATE_RESULT
+                continue
+
+            elif self.state == self.STATE_THINKING:
+                m = self.CLOSE_REGEX.search(self.buffer)
+                if m:
+                    close_idx = m.start()
+                    tag_len = len(m.group(0))
+
+                    thinking_chunk = self.buffer[:close_idx]
+                    if self.thinking_mode == "expanded":
+                        formatted_chunk = thinking_chunk.replace("\n", "\n  \033[38;5;240m│\033[0m \033[38;5;245m\033[3m")
+                        output.append(formatted_chunk)
+
+                    self.buffer = self.buffer[close_idx + tag_len:]
+                    if self.buffer.startswith("\n"):
+                        self.buffer = self.buffer.lstrip("\r\n")
+
+                    dur = max(0.1, time.time() - self.think_start_time)
+                    if self.thinking_mode == "expanded":
+                        footer = (
+                            f"\033[0m\n  \033[38;5;244m╰───────────────────────────────────────────\033[0m "
+                            f"\033[90m(thought for {dur:.1f}s)\033[0m\n\n"
+                            f"  {self.badge_color}\033[1m✦ Result:\033[0m\n  \033[0m"
+                        )
+                    elif self.thinking_mode == "collapsed":
+                        footer = (
+                            f"\n  \033[90m[🧠 Thought for {dur:.1f}s]\033[0m\n\n"
+                            f"  {self.badge_color}\033[1m✦ Result:\033[0m\n  \033[0m"
+                        )
+                    else:
+                        footer = f"\n  {self.badge_color}\033[1m✦ Result:\033[0m\n  \033[0m"
+
+                    output.append(footer)
+                    self.result_header_printed = True
+                    self.state = self.STATE_RESULT
+                    continue
+                else:
+                    partial_len = 0
+                    low = self.buffer.lower()
+                    for tag in ["</think>", "</thought>", "</reasoning>", "[/thinking]"]:
+                        for pl in range(1, len(tag)):
+                            if low.endswith(tag[:pl]):
+                                if pl > partial_len:
+                                    partial_len = pl
+
+                    if partial_len > 0:
+                        to_emit = self.buffer[:-partial_len]
+                        self.buffer = self.buffer[-partial_len:]
+                    else:
+                        to_emit = self.buffer
+                        self.buffer = ""
+
+                    if to_emit and self.thinking_mode == "expanded":
+                        formatted = to_emit.replace("\n", "\n  \033[38;5;240m│\033[0m \033[38;5;245m\033[3m")
+                        output.append(formatted)
+                    break
+
+            elif self.state == self.STATE_RESULT:
+                if not self.in_visual:
+                    low = self.buffer.lower()
+
+                    matched_open = None
+                    open_idx = -1
+                    for tag in self.OPEN_TAGS:
+                        idx = low.find(tag)
+                        if idx != -1:
+                            if open_idx == -1 or idx < open_idx:
+                                open_idx = idx
+                                matched_open = tag
+
+                    if matched_open is not None:
+                        pre_text = self.buffer[:open_idx]
+                        if pre_text:
+                            output.append(pre_text)
+
+                        tag_len = len(matched_open)
+                        self.buffer = self.buffer[open_idx + tag_len:]
+                        if self.buffer.startswith("\n"):
+                            self.buffer = self.buffer[1:]
+
+                        self.state = self.STATE_THINKING
+                        self.has_thought = True
+                        self.think_start_time = time.time()
+                        if self.thinking_mode == "expanded":
+                            header = (
+                                f"\n  \033[38;5;244m╭─ 🧠 Thinking Process ──────────────────────────────────────────\033[0m\n"
+                                f"  \033[38;5;240m│\033[0m \033[38;5;245m\033[3m"
+                            )
+                            output.append(header)
+                        continue
+
+                    if "<visual" in low:
+                        idx = low.find("<visual")
+                        pre_vis = self.buffer[:idx]
+                        self.buffer = self.buffer[idx:]
+                        self.in_visual = True
+                        output.append(pre_vis)
+                        continue
+
+                    partial_len = 0
+                    for tag in self.OPEN_TAGS + ["<visual"]:
+                        for pl in range(1, len(tag)):
+                            if low.endswith(tag[:pl]):
+                                if pl > partial_len:
+                                    partial_len = pl
+
+                    if partial_len > 0:
+                        to_emit = self.buffer[:-partial_len]
+                        self.buffer = self.buffer[-partial_len:]
+                        if to_emit:
+                            output.append(to_emit)
+                        break
+                    else:
+                        output.append(self.buffer)
+                        self.buffer = ""
+                        break
+                else:
+                    low = self.buffer.lower()
+                    if "</visual>" in low:
+                        idx = low.find("</visual>")
+                        self.buffer = self.buffer[idx + len("</visual>"):]
+                        self.in_visual = False
+                        continue
+                    elif ">" in self.buffer and "}" in self.buffer:
+                        idx = self.buffer.find(">")
+                        self.buffer = self.buffer[idx + 1:]
+                        self.in_visual = False
+                        continue
+                    break
+
+        return "".join(output)
 
     def flush(self) -> str:
-        if not self.in_tag:
-            out = self.buffer
+        output = []
+        if self.state == self.STATE_THINKING:
+            if self.buffer and self.thinking_mode == "expanded":
+                formatted = self.buffer.replace("\n", "\n  \033[38;5;240m│\033[0m \033[38;5;245m\033[3m")
+                output.append(formatted)
+            dur = max(0.1, time.time() - self.think_start_time)
+            if self.thinking_mode == "expanded":
+                footer = (
+                    f"\033[0m\n  \033[38;5;244m╰───────────────────────────────────────────\033[0m "
+                    f"\033[90m(thought for {dur:.1f}s)\033[0m\n"
+                )
+            elif self.thinking_mode == "collapsed":
+                footer = f"\n  \033[90m[🧠 Thought for {dur:.1f}s]\033[0m\n"
+            else:
+                footer = ""
+            output.append(footer)
             self.buffer = ""
-            return out
-        return ""
+        elif self.state == self.STATE_INITIAL:
+            output.append(self.buffer)
+            self.buffer = ""
+        elif self.state == self.STATE_RESULT:
+            if not self.in_visual:
+                output.append(self.buffer)
+            self.buffer = ""
+        return "".join(output)
+
+
+VisualTokenFilter = ThinkingResultStreamFilter
 
 
 def read_terminal_input(prompt_label: str) -> str:
@@ -741,8 +972,8 @@ def cmd_chat(args):
         UI.print_banner()
         active_mode = getattr(cfg, "selected_model", "july").upper()
         print(f"  {UI.GRAY}Active Model:{UI.RESET} {UI.CYAN}{active_mode} LLM{UI.RESET} {UI.GRAY}(Type {UI.YELLOW}/model{UI.GRAY} to switch models){UI.RESET}")
-        print(f"  {UI.GRAY}Personality :{UI.RESET} {UI.YELLOW}{cfg.personality.replace('_', ' ').title()}{UI.RESET}")
-        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/model{UI.RESET}, {UI.CYAN}/help{UI.RESET}, {UI.CYAN}/paste{UI.RESET}, {UI.CYAN}/file <path>{UI.RESET}, {UI.CYAN}/visual{UI.RESET}, {UI.CYAN}/clear{UI.RESET}, {UI.CYAN}/status{UI.RESET}, {UI.CYAN}/studio{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
+        print(f"  {UI.GRAY}Personality :{UI.RESET} {UI.YELLOW}{cfg.personality.replace('_', ' ').title()}{UI.RESET}  {UI.GRAY}Thinking:{UI.RESET} {UI.GREEN}{getattr(cfg, 'thinking_mode', 'expanded').upper()}{UI.RESET}")
+        print(f"  {UI.GRAY}Commands    :{UI.RESET} {UI.CYAN}/model{UI.RESET}, {UI.CYAN}/think{UI.RESET}, {UI.CYAN}/help{UI.RESET}, {UI.CYAN}/paste{UI.RESET}, {UI.CYAN}/file <path>{UI.RESET}, {UI.CYAN}/visual{UI.RESET}, {UI.CYAN}/clear{UI.RESET}, {UI.CYAN}/status{UI.RESET}, {UI.CYAN}exit{UI.RESET}")
         print(f"{UI.GRAY}─────────────────────────────────────────────────────────────────────────────{UI.RESET}\n")
 
     runtime.load_model(active_path)
@@ -750,13 +981,23 @@ def cmd_chat(args):
     if prompt_to_run:
         # One-off or bulk prompt
         active_mode = getattr(cfg, "selected_model", "july").upper()
-        label = "GRAVITY" if active_mode == "GRAVITY" else "JULY"
+        if active_mode == "GRAVITY":
+            badge_color = UI.YELLOW
+            label = "GRAVITY"
+        elif active_mode == "AUTO":
+            badge_color = UI.MAGENTA
+            label = f"AUTO ({runtime.current_model_id.upper()})"
+        else:
+            badge_color = UI.CYAN
+            label = "JULY"
+
         print(f"\n{UI.BOLD}{UI.GREEN}❯ You{UI.RESET} {UI.GRAY}›{UI.RESET} {prompt_to_run[:200]}{'...' if len(prompt_to_run) > 200 else ''}")
-        print(f"{UI.BOLD}{UI.CYAN}❯ {label}{UI.RESET} {UI.GRAY}›{UI.RESET} ", end="", flush=True)
+        print(f"{UI.BOLD}{badge_color}❯ {label}{UI.RESET} {UI.GRAY}›{UI.RESET} ", end="", flush=True)
         t0 = time.time()
         tok_count = 0
         full_response = []
-        token_filter = VisualTokenFilter()
+        th_mode = getattr(cfg, "thinking_mode", "expanded")
+        token_filter = ThinkingResultStreamFilter(model_name=label, badge_color=badge_color, thinking_mode=th_mode)
         for token in runtime.generate_stream(prompt_to_run):
             chunk = token_filter.process(token)
             if chunk:
@@ -811,6 +1052,7 @@ def cmd_chat(args):
                 if c == "/help":
                     print(f"\n {UI.BOLD}{UI.CYAN}Available Commands:{UI.RESET}")
                     print(f"   {UI.CYAN}/model [name]{UI.RESET}   - Select or switch foundation model (july, gravity, auto, list)")
+                    print(f"   {UI.CYAN}/think [mode]{UI.RESET}   - Highlight model thinking (expanded, collapsed, hidden)")
                     print(f"   {UI.CYAN}/paste, /bulk{UI.RESET}   - Enter multi-line bulk prompt mode (finish with /send)")
                     print(f"   {UI.CYAN}/file <path>{UI.RESET}    - Load entire text file as prompt")
                     print(f"   {UI.CYAN}\"\"\" <text> \"\"\"{UI.RESET} - Triple-quote multi-line prompt anytime")
@@ -822,6 +1064,29 @@ def cmd_chat(args):
                     print(f"   {UI.CYAN}/feedback{UI.RESET}       - Record feedback or failure report for continuous evolution")
                     print(f"   {UI.CYAN}/mode <name>{UI.RESET}   - Switch personality (precision_engineer, research_scientist, software_architect, tutor)")
                     print(f"   {UI.CYAN}exit, quit{UI.RESET}      - Exit and safely reclaim RAM\n")
+                    continue
+
+                if c in ("/think", "/thinking"):
+                    if len(cmd_parts) > 1:
+                        target = cmd_parts[1].lower().strip()
+                        if target in ("on", "show", "expand", "expanded", "1"):
+                            cfg.thinking_mode = "expanded"
+                        elif target in ("collapse", "collapsed", "summary", "2"):
+                            cfg.thinking_mode = "collapsed"
+                        elif target in ("off", "hide", "hidden", "0"):
+                            cfg.thinking_mode = "hidden"
+                        else:
+                            print(f"\n  {UI.RED}[!] Unknown mode '{target}'. Available: {UI.CYAN}/think expanded{UI.RESET} | {UI.CYAN}collapsed{UI.RESET} | {UI.CYAN}hidden{UI.RESET}\n")
+                            continue
+                        cfg.save()
+                        print(f"\n  {UI.GREEN}[✓] Thinking display mode set to:[/] {UI.BOLD}{cfg.thinking_mode.upper()}{UI.RESET}\n")
+                    else:
+                        modes = ["expanded", "collapsed", "hidden"]
+                        cur = getattr(cfg, "thinking_mode", "expanded")
+                        nxt = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "expanded"
+                        cfg.thinking_mode = nxt
+                        cfg.save()
+                        print(f"\n  {UI.GREEN}[✓] Toggled thinking display mode to:[/] {UI.BOLD}{nxt.upper()}{UI.RESET} (options: expanded, collapsed, hidden)\n")
                     continue
 
                 if c in ("/paste", "/bulk", "/multiline"):
@@ -1018,7 +1283,8 @@ def cmd_chat(args):
             t0 = time.time()
             tok_count = 0
             full_response = []
-            token_filter = VisualTokenFilter()
+            th_mode = getattr(cfg, "thinking_mode", "expanded")
+            token_filter = ThinkingResultStreamFilter(model_name=label, badge_color=badge_color, thinking_mode=th_mode)
             for token in runtime.generate_stream(user_input, session_id=session_id):
                 chunk = token_filter.process(token)
                 if chunk:
