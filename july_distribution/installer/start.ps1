@@ -1,10 +1,16 @@
-# ================================================================================
+﻿# ================================================================================
 # HS AI SOLUTIONS — JULY LLM ALL-IN-ONE AUTONOMOUS RUNTIME
 # Organization: HS AI Solutions
 # Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
 # One-liner execution:
 # irm https://raw.githubusercontent.com/25it038-beep/julyllm/main/july_distribution/installer/start.ps1 | iex
 # ================================================================================
+
+param(
+    [switch]$Update,
+    [switch]$SwitchUser,
+    [string]$Model = ""
+)
 
 $ErrorActionPreference = 'Stop'
 $ServerUrl = 'https://julyllm.onrender.com'
@@ -69,44 +75,52 @@ function Invoke-JulyCli {
 Invoke-JulyCli config --set server_url $ServerUrl | Out-Null
 Write-Host "      [✓] Connected to HS AI Cloud Control: $ServerUrl" -ForegroundColor Gray
 
-# [3] Interactive Login or Register Selection Card
-Write-Host ""
-Write-Host " ┌──────────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
-Write-Host " │                    AUTHENTICATION SELECTION                      │" -ForegroundColor White
-Write-Host " │  [1]  🔑  Sign In to Existing Account                            │" -ForegroundColor Green
-Write-Host " │  [2]  ✨  Create New HS AI Solutions Account                     │" -ForegroundColor Yellow
-Write-Host " └──────────────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
-$choice = Read-Host " Select Option [1 or 2]"
+# [3] Check Existing Session or Prompt Interactive Authentication
+$authOutput = & $PythonExe -c "from july_distribution.client.auth import ClientAuthManager; a = ClientAuthManager(); print(f'{a.is_authenticated()}|{a.get_session().get(\"username\", \"\") if a.is_authenticated() else \"\"}')" 2>$null
+$authParts = ($authOutput -split '\|')
+$isAuth = ($authParts[0] -eq 'True')
 
-if ($choice -eq '2') {
-    Write-Host ""
-    Write-Host " ─── NEW ACCOUNT REGISTRATION ───" -ForegroundColor Yellow
-    $username = Read-Host "  Choose Username"
-    $email = Read-Host "  Enter Email    "
-    $password = Read-Host "  Choose Password" -AsSecureString
-    $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
-    $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-
-    Write-Host "  Registering credentials on HS AI Cloud..." -ForegroundColor Gray
-    Invoke-JulyCli register --username $username --email $email --password $pwd
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  [!] User registration skipped or exists. Continuing to authenticate..." -ForegroundColor Yellow
-    }
-    Invoke-JulyCli login --username $username --password $pwd
+if ($isAuth -and (-not $SwitchUser)) {
+    Write-Host "      [✓] Active Session: Authenticated as $($authParts[1])" -ForegroundColor Green
 } else {
     Write-Host ""
-    Write-Host " ─── SIGN IN ───" -ForegroundColor Green
-    $username = Read-Host "  Username"
-    $password = Read-Host "  Password" -AsSecureString
-    $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
-    $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+    Write-Host " ┌──────────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
+    Write-Host " │                    AUTHENTICATION SELECTION                      │" -ForegroundColor White
+    Write-Host " │  [1]  🔑  Sign In to Existing Account                            │" -ForegroundColor Green
+    Write-Host " │  [2]  ✨  Create New HS AI Solutions Account                     │" -ForegroundColor Yellow
+    Write-Host " └──────────────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
+    $choice = Read-Host " Select Option [1 or 2]"
 
-    Invoke-JulyCli login --username $username --password $pwd
-}
+    if ($choice -eq '2') {
+        Write-Host ""
+        Write-Host " ─── NEW ACCOUNT REGISTRATION ───" -ForegroundColor Yellow
+        $username = Read-Host "  Choose Username"
+        $email = Read-Host "  Enter Email    "
+        $password = Read-Host "  Choose Password" -AsSecureString
+        $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
+        $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host " [!] Authentication failed. Please verify credentials." -ForegroundColor Red
-    return
+        Write-Host "  Registering credentials on HS AI Cloud..." -ForegroundColor Gray
+        Invoke-JulyCli register --username $username --email $email --password $pwd
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [!] User registration skipped or exists. Continuing to authenticate..." -ForegroundColor Yellow
+        }
+        Invoke-JulyCli login --username $username --password $pwd
+    } else {
+        Write-Host ""
+        Write-Host " ─── SIGN IN ───" -ForegroundColor Green
+        $username = Read-Host "  Username"
+        $password = Read-Host "  Password" -AsSecureString
+        $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
+        $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+
+        Invoke-JulyCli login --username $username --password $pwd
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host " [!] Authentication failed. Please verify credentials." -ForegroundColor Red
+        return
+    }
 }
 
 # [4] Register Auto-Unload Handlers on Exit (Window close & process kill)
@@ -120,7 +134,11 @@ Register-EngineEvent -SourceIdentifier 'PowerShell.Exiting' -Action {
 # [5] Load Model into RAM and Run Chat with Guaranteed Clean-up
 Write-Host ""
 Write-Host " [⚡] [3/4] Initializing Ephemeral RAM Model..." -ForegroundColor Green
-Invoke-JulyCli load
+if ($Model) {
+    Invoke-JulyCli load --model $Model
+} else {
+    Invoke-JulyCli load
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Host " [!] Could not initialize model." -ForegroundColor Red
     return
@@ -132,7 +150,11 @@ Write-Host " 🛡️  Ephemeral Privacy: When you exit or close this terminal, t
 Write-Host ""
 
 try {
-    Invoke-JulyCli chat
+    if ($Model) {
+        Invoke-JulyCli chat --model $Model
+    } else {
+        Invoke-JulyCli chat
+    }
 } finally {
     Write-Host ""
     Write-Host " [⚡] Session concluded. Securely wiping ephemeral RAM storage..." -ForegroundColor Yellow
