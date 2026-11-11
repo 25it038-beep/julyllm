@@ -34,6 +34,16 @@ from .web_search import (
 class ClientInferenceRuntime:
     """Manages local llama.cpp execution on the client computer with external reasoning orchestration."""
 
+    _instance: Optional[ClientInferenceRuntime] = None
+
+    @classmethod
+    def get_instance(cls, config: Optional[ClientConfig] = None) -> ClientInferenceRuntime:
+        if cls._instance is None:
+            cls._instance = cls(config=config)
+        elif config is not None:
+            cls._instance.config = config
+        return cls._instance
+
     def __init__(
         self,
         config: Optional[ClientConfig] = None,

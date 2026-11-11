@@ -1,4 +1,4 @@
-﻿# ================================================================================
+# ================================================================================
 # HS AI SOLUTIONS — JULY LLM ALL-IN-ONE AUTONOMOUS RUNTIME
 # Founder & Chief Architect: Harshan Seliyan | Organization: HS AI Solutions
 # Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
@@ -55,8 +55,17 @@ $VoiceFile = Join-Path $InstallRoot 'july_distribution\client\voice.py'
 $UiRendererFile = Join-Path $InstallRoot 'july_distribution\client\ui_renderer.py'
 $LiveEngineFile = Join-Path $InstallRoot 'july_distribution\client\live_engine.py'
 $VadFile = Join-Path $InstallRoot 'july_distribution\client\vad.py'
+$RuntimeFile = Join-Path $InstallRoot 'july_distribution\client\runtime.py'
 
-$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or -not (Test-Path $LiveEngineFile) -or -not (Test-Path $VadFile) -or $Update)
+$HasGetInstance = $false
+if (Test-Path $RuntimeFile) {
+    $runtimeContent = Get-Content $RuntimeFile -Raw -ErrorAction SilentlyContinue
+    if ($runtimeContent -and $runtimeContent.Contains("get_instance")) {
+        $HasGetInstance = $true
+    }
+}
+
+$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or -not (Test-Path $LiveEngineFile) -or -not (Test-Path $VadFile) -or -not $HasGetInstance -or $Update)
 if ($NeedsUpdate) {
     Write-Host " [⚡] [1/4] Synchronizing latest July & Gravity live conversational voice runtime from repository..." -ForegroundColor Yellow
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12

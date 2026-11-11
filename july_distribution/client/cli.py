@@ -1642,7 +1642,10 @@ def cmd_live(args=None):
 
     cfg = ClientConfig.load()
     voice_coord = CLIHardwareVoiceCoordinator.get_instance()
-    runtime = ClientInferenceRuntime.get_instance(config=cfg)
+    if hasattr(ClientInferenceRuntime, "get_instance"):
+        runtime = ClientInferenceRuntime.get_instance(config=cfg)
+    else:
+        runtime = ClientInferenceRuntime(config=cfg)
 
     req_model = getattr(args, "model", None) or cfg.selected_model or "july"
     req_style = getattr(args, "style", "natural") or "natural"
