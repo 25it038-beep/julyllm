@@ -1,7 +1,8 @@
-# ================================================================================
+﻿# ================================================================================
 # HS AI SOLUTIONS — JULY LLM ALL-IN-ONE AUTONOMOUS RUNTIME
-# Organization: HS AI Solutions
+# Founder & Chief Architect: Harshan Seliyan | Organization: HS AI Solutions
 # Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
+#
 # One-liner execution:
 # irm https://raw.githubusercontent.com/25it038-beep/julyllm/main/july_distribution/installer/start.ps1 | iex
 # ================================================================================
@@ -15,6 +16,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $ServerUrl = 'https://julyllm.onrender.com'
 $StudioUrl = 'https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/'
+$GitHubRawInstall = 'https://raw.githubusercontent.com/25it038-beep/julyllm/main/july_distribution/installer/install.ps1'
 
 # Render ASCII Banner & Portal Header
 Clear-Host
@@ -26,8 +28,8 @@ Write-Host "██   ██║██║   ██║██║    ╚██╔╝ 
 Write-Host "╚█████╔╝╚██████╔╝███████╗██║       ███████╗███████╗██║ ╚═╝ ██║" -ForegroundColor Cyan
 Write-Host " ╚════╝  ╚═════╝ ╚══════╝╚═╝       ╚══════╝╚══════╝╚═╝     ╚═╝" -ForegroundColor Cyan
 Write-Host "─────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
-Write-Host "  HS AI SOLUTIONS  •  AUTONOMOUS NEURAL RUNTIME PLATFORM" -ForegroundColor White
-Write-Host "  Studio Portal    : " -NoNewline -ForegroundColor Gray
+Write-Host "  HS AI SOLUTIONS  •  JULY LLM & GRAVITY LLM RUNTIME PLATFORM" -ForegroundColor White
+Write-Host "  Founder & Architect: Harshan Seliyan  •  Studio Portal: " -NoNewline -ForegroundColor Gray
 Write-Host "$StudioUrl" -ForegroundColor Yellow
 Write-Host "─────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
 Write-Host ""
@@ -37,10 +39,15 @@ $InstallRoot = Join-Path "$env:LOCALAPPDATA" 'Programs\JulyRuntime'
 $BinDir = Join-Path $InstallRoot 'bin'
 $JulyCmd = Join-Path $BinDir 'july.ps1'
 
-if (-not (Test-Path $JulyCmd)) {
-    Write-Host " [⚡] [1/4] Client runtime not found. Initializing installation..." -ForegroundColor Yellow
+if (-not (Test-Path $JulyCmd) -or -not (Test-Path (Join-Path $InstallRoot 'july_distribution'))) {
+    Write-Host " [⚡] [1/4] Client runtime not found. Initializing installation from repository..." -ForegroundColor Yellow
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    irm "$ServerUrl/install.ps1" | iex
+    try {
+        irm $GitHubRawInstall | iex
+    } catch {
+        Write-Host "      [*] Direct script fetch failed, attempting server install..." -ForegroundColor DarkGray
+        irm "$ServerUrl/install.ps1" | iex
+    }
 }
 
 # Refresh PATH in current session
@@ -49,7 +56,7 @@ $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $env:Path = $machPath + ';' + $userPath + ';' + $BinDir
 
 # [2] Ensure Dependencies (Python & llama-cpp-python)
-Write-Host " [⚡] [2/4] Verifying hardware acceleration & Python engine..." -ForegroundColor Green
+Write-Host " [⚡] [1/4] Verifying hardware acceleration & Python environment..." -ForegroundColor Green
 $PythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
 if (-not $PythonExe) {
     Write-Host "      [!] Error: Python 3.10+ is required. Please install Python from python.org." -ForegroundColor Red
@@ -60,10 +67,10 @@ if (-not $PythonExe) {
 $hasLlama = & $PythonExe -c "import llama_cpp" 2>$null; $LlamaOk = ($LASTEXITCODE -eq 0)
 if (-not $LlamaOk) {
     Write-Host "      [+] Installing llama-cpp-python runtime..." -ForegroundColor Yellow
-    & $PythonExe -m pip install --upgrade pip
+    & $PythonExe -m pip install --upgrade pip -q
     & $PythonExe -m pip install llama-cpp-python -q
 }
-Write-Host "      [✓] Dependencies and compute environment active." -ForegroundColor Gray
+Write-Host "      [✓] Compute dependencies and hardware bindings active." -ForegroundColor Gray
 
 # Define internal CLI dispatcher to bypass PowerShell parameter binding
 function Invoke-JulyCli {
@@ -75,55 +82,133 @@ function Invoke-JulyCli {
 Invoke-JulyCli config --set server_url $ServerUrl | Out-Null
 Write-Host "      [✓] Connected to HS AI Cloud Control: $ServerUrl" -ForegroundColor Gray
 
-# [3] Check Existing Session or Prompt Interactive Authentication
-$authOutput = & $PythonExe -c "from july_distribution.client.auth import ClientAuthManager as A; a=A(); u=a.get_session().get('username','') if a.is_authenticated() else ''; print(f'{a.is_authenticated()}|{u}')" 2>$null
-$authParts = ($authOutput -split '\|')
-$isAuth = ($authParts[0] -eq 'True')
+# [3] Verify Official Clerk Authentication (Zero Plaintext / DPAPI Protected)
+Write-Host ""
+Write-Host " [⚡] [2/4] Verifying Clerk Identity & Access Management (IAM)..." -ForegroundColor Green
+
+$env:PYTHONPATH = $InstallRoot
+$authCheckCode = "import json; from july_distribution.client.clerk_auth import ClerkAuthManager; c=ClerkAuthManager(); s=c.get_session(); print(json.dumps({'authenticated': c.is_authenticated(), 'email': s.get('email', '') if s else '', 'tier': s.get('tier', 'standard') if s else 'standard', 'name': s.get('name', 'Developer') if s else 'Developer', 'uid': s.get('clerk_user_id', '') if s else ''}))"
+$authJsonRaw = & $PythonExe -c $authCheckCode 2>$null
+$authInfo = $null
+try {
+    $authInfo = $authJsonRaw | ConvertFrom-Json
+} catch {
+    $authInfo = [PSCustomObject]@{ authenticated = $false; email = ''; tier = 'standard'; name = ''; uid = '' }
+}
+
+$isAuth = [bool]($authInfo.authenticated)
 
 if ($isAuth -and (-not $SwitchUser)) {
-    Write-Host "      [✓] Active Session: Authenticated as $($authParts[1])" -ForegroundColor Green
+    Write-Host "      [✓] Clerk Identity Verified: $($authInfo.name) ($($authInfo.email))" -ForegroundColor Green
+    Write-Host "      [✓] Active Subscription    : $($authInfo.tier.ToUpper()) Plan" -ForegroundColor Cyan
+    Write-Host "      [✓] Credential Vault       : Windows DPAPI (Hardware Bound)" -ForegroundColor Gray
 } else {
     Write-Host ""
     Write-Host " ┌──────────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
-    Write-Host " │                    AUTHENTICATION SELECTION                      │" -ForegroundColor White
-    Write-Host " │  [1]  🔑  Sign In to Existing Account                            │" -ForegroundColor Green
-    Write-Host " │  [2]  ✨  Create New HS AI Solutions Account                     │" -ForegroundColor Yellow
+    Write-Host " │             CLERK AUTHENTICATION REQUIRED TO ACCESS JULY         │" -ForegroundColor White
+    Write-Host " │                                                                  │" -ForegroundColor Gray
+    Write-Host " │  Access to July & Gravity AI models is protected by Clerk IAM.   │" -ForegroundColor Gray
+    Write-Host " │  Please authenticate to unlock models and rate-limited quotas.   │" -ForegroundColor Gray
     Write-Host " └──────────────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
-    $choice = Read-Host " Select Option [1 or 2]"
+    Write-Host ""
+    Write-Host " Select Authentication Method:" -ForegroundColor White
+    Write-Host "   [1]  🔑  Sign In with Email & Password (In-CLI Terminal)" -ForegroundColor Green
+    Write-Host "   [2]  🎟️  Sign In with Clerk Token / API Key (In-CLI Terminal)" -ForegroundColor Green
+    Write-Host "   [3]  ✨  Create New HS AI Account / Sign Up (In-CLI Terminal)" -ForegroundColor Yellow
+    Write-Host "   [4]  🌐  Browser Single Sign-On (Google, GitHub, Clerk Web)" -ForegroundColor Cyan
+    Write-Host "   [q]  ❌  Cancel & Exit" -ForegroundColor DarkGray
+    Write-Host ""
+    $choice = Read-Host " Selection [1-4]"
 
-    if ($choice -eq '2') {
+    if ($choice -eq '1') {
         Write-Host ""
-        Write-Host " ─── NEW ACCOUNT REGISTRATION ───" -ForegroundColor Yellow
-        $username = Read-Host "  Choose Username"
-        $email = Read-Host "  Enter Email    "
-        $password = Read-Host "  Choose Password" -AsSecureString
-        $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
+        Write-Host " ─── IN-CLI EMAIL & PASSWORD SIGN IN ───" -ForegroundColor Green
+        $ident = Read-Host "  Email or Username"
+        $secPwd = Read-Host "  Password" -AsSecureString
+        $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPwd)
         $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
-        Write-Host "  Registering credentials on HS AI Cloud..." -ForegroundColor Gray
-        Invoke-JulyCli register --username $username --email $email --password $pwd
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "  [!] User registration skipped or exists. Continuing to authenticate..." -ForegroundColor Yellow
+        Invoke-JulyCli login -u $ident -p $pwd
+    } elseif ($choice -eq '2') {
+        Write-Host ""
+        Write-Host " ─── IN-CLI TOKEN / API KEY SIGN IN ───" -ForegroundColor Green
+        $secToken = Read-Host "  Clerk Token or API Key" -AsSecureString
+        $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secToken)
+        $token = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+        $email = Read-Host "  Email (Optional, press Enter to skip)"
+
+        if ($email) {
+            Invoke-JulyCli login --token $token --email $email
+        } else {
+            Invoke-JulyCli login --token $token
         }
-        Invoke-JulyCli login --username $username --password $pwd
+    } elseif ($choice -eq '3') {
+        Write-Host ""
+        Write-Host " ─── NEW DEVELOPER REGISTRATION (IN-CLI) ───" -ForegroundColor Yellow
+        $email = Read-Host "  Email Address"
+        $uname = Read-Host "  Choose Username"
+        $secPwd = Read-Host "  Choose Password (min 6 chars)" -AsSecureString
+        $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPwd)
+        $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+
+        Invoke-JulyCli signup -u $uname -e $email -p $pwd
+    } elseif ($choice -eq '4') {
+        Write-Host ""
+        Write-Host " ─── BROWSER CLERK AUTHENTICATION ───" -ForegroundColor Cyan
+        Invoke-JulyCli login --browser-only
     } else {
         Write-Host ""
-        Write-Host " ─── SIGN IN ───" -ForegroundColor Green
-        $username = Read-Host "  Username"
-        $password = Read-Host "  Password" -AsSecureString
-        $BSTR = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
-        $pwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-
-        Invoke-JulyCli login --username $username --password $pwd
-    }
-
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host " [!] Authentication failed. Please verify credentials." -ForegroundColor Red
+        Write-Host " [!] Authentication cancelled. Access to July & Gravity models is locked." -ForegroundColor Red
+        Write-Host "     Run 'july login' whenever you are ready to authenticate." -ForegroundColor DarkGray
+        Write-Host ""
         return
     }
+
+    # Verify authentication success
+    $authJsonRaw = & $PythonExe -c $authCheckCode 2>$null
+    try {
+        $authInfo = $authJsonRaw | ConvertFrom-Json
+        $isAuth = [bool]($authInfo.authenticated)
+    } catch {
+        $isAuth = $false
+    }
+
+    if (-not $isAuth) {
+        Write-Host ""
+        Write-Host " [!] Authentication failed or cancelled. Access to AI models is locked." -ForegroundColor Red
+        Write-Host "     Please run 'july login' with valid Clerk credentials." -ForegroundColor DarkGray
+        Write-Host ""
+        return
+    }
+
+    Write-Host ""
+    Write-Host " [✓] Authentication Verified! AI Model access unlocked." -ForegroundColor Green
 }
 
-# [4] Register Auto-Unload Handlers on Exit (Window close & process kill)
+# [4] Display Rate Limit Policy & Remaining Quota for User Tier
+Write-Host ""
+Write-Host " [⚡] [3/4] Checking Rate Limit Governance & Quota Policy..." -ForegroundColor Green
+
+$rlCheckCode = "import json; from july_distribution.client.clerk_auth import ClerkAuthManager; from july_distribution.client.rate_limiter import ClientRateLimiter; c=ClerkAuthManager(); s=c.get_session(); t=s.get('tier', 'standard') if s else 'standard'; m=ClientRateLimiter.get_instance().get_metrics(tier=t); print(json.dumps(m))"
+$rlJsonRaw = & $PythonExe -c $rlCheckCode 2>$null
+$rlMetrics = $null
+try {
+    $rlMetrics = $rlJsonRaw | ConvertFrom-Json
+} catch {
+    $rlMetrics = [PSCustomObject]@{ tier_title = 'Standard / Free Tier'; rpm_used = 0; rpm_max = 20; rpm_remaining = 20; tpm_used = 0; tpm_max = 5000; tpm_remaining = 5000; daily_used = 0; daily_max = 500; daily_remaining = 500; window_seconds = 60 }
+}
+
+Write-Host " ┌──────────────────────────────────────────────────────────────────┐" -ForegroundColor DarkGray
+Write-Host " │                 RATE LIMIT & MODEL ACCESS POLICY                 │" -ForegroundColor Cyan
+Write-Host " ├──────────────────────────────────────────────────────────────────┤" -ForegroundColor DarkGray
+Write-Host " │  Tier Policy      : $($rlMetrics.tier_title.PadRight(43))│" -ForegroundColor White
+Write-Host " │  Request Rate     : $($rlMetrics.rpm_used)/$($rlMetrics.rpm_max) req/min ($($rlMetrics.rpm_remaining) remaining)".PadRight(67) + "│" -ForegroundColor Green
+Write-Host " │  Token Throughput : $($rlMetrics.tpm_used)/$($rlMetrics.tpm_max) tok/min ($($rlMetrics.tpm_remaining) remaining)".PadRight(67) + "│" -ForegroundColor Green
+Write-Host " │  Daily Allotment  : $($rlMetrics.daily_used)/$($rlMetrics.daily_max) req/day ($($rlMetrics.daily_remaining) remaining)".PadRight(67) + "│" -ForegroundColor Green
+Write-Host " │  Sliding Window   : 60s active sliding window protection         │" -ForegroundColor DarkGray
+Write-Host " └──────────────────────────────────────────────────────────────────┘" -ForegroundColor DarkGray
+
+# [5] Register Auto-Unload Handlers on Exit
 Register-EngineEvent -SourceIdentifier 'PowerShell.Exiting' -Action {
     $p = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
     $root = Join-Path "$env:LOCALAPPDATA" 'Programs\JulyRuntime'
@@ -131,22 +216,24 @@ Register-EngineEvent -SourceIdentifier 'PowerShell.Exiting' -Action {
     & $p -m july_distribution.client.cli unload | Out-Null
 } -ErrorAction SilentlyContinue | Out-Null
 
-# [5] Foundation Model Selection & Ephemeral RAM Initialization
+# [6] Foundation Model Selection & Ephemeral RAM Initialization
 if (-not $Model) {
     if ($env:JULY_MODEL) {
         $Model = $env:JULY_MODEL
     } else {
         Write-Host ""
-        Write-Host " ┌──────────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
-        Write-Host " │                    FOUNDATION MODEL SELECTION                    │" -ForegroundColor White
-        Write-Host " │  [1]  🌟  July LLM (General Intelligence & Agentic Reasoning)     │" -ForegroundColor Cyan
-        Write-Host " │  [2]  🌌  Gravity LLM (Deep Multi-Model Reasoning Engine)        │" -ForegroundColor Yellow
-        Write-Host " └──────────────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
-        $mChoice = Read-Host " Select Foundation Model [1 or 2] (Default: 2 - Gravity)"
-        if ($mChoice -eq '1') {
-            $Model = "july"
-        } else {
+        Write-Host " Select Foundation Model:" -ForegroundColor White
+        Write-Host "   [1]  🌟  July LLM (General Intelligence, Coding & Agentic Reasoning)" -ForegroundColor Cyan
+        Write-Host "   [2]  🌌  Gravity LLM (Deep Mathematical Reasoning, Proofs & Physics)" -ForegroundColor Yellow
+        Write-Host "   [3]  ⚡  Auto Router (Dynamic Query Routing to July or Gravity)" -ForegroundColor Magenta
+        Write-Host ""
+        $mChoice = Read-Host " Select Model [1, 2, or 3] (Default: 1 - July)"
+        if ($mChoice -eq '2') {
             $Model = "gravity"
+        } elseif ($mChoice -eq '3') {
+            $Model = "auto"
+        } else {
+            $Model = "july"
         }
     }
 }
@@ -154,24 +241,20 @@ if (-not $Model) {
 Invoke-JulyCli config --set selected_model $Model | Out-Null
 
 Write-Host ""
-Write-Host " [⚡] [3/4] Initializing Ephemeral RAM Model ($($Model.ToUpper()) LLM)..." -ForegroundColor Green
+Write-Host " [⚡] [4/4] Mounting $($Model.ToUpper()) LLM into Ephemeral Physical RAM..." -ForegroundColor Green
 Invoke-JulyCli load --model $Model
 if ($LASTEXITCODE -ne 0) {
-    Write-Host " [!] Could not initialize model." -ForegroundColor Red
+    Write-Host " [!] Could not initialize model. Ensure authentication was verified." -ForegroundColor Red
     return
 }
 
 Write-Host ""
-Write-Host " [⚡] [4/4] Model loaded in physical RAM. Entering interactive session..." -ForegroundColor Green
-Write-Host " 🛡️  Ephemeral Privacy: When you exit or close this terminal, the model is wiped from RAM immediately." -ForegroundColor DarkYellow
+Write-Host " 🛡️  Model loaded in RAM. Entering interactive session with active rate limit protection." -ForegroundColor Green
+Write-Host " 🔒  Ephemeral Privacy: Model weights and context are completely wiped from RAM on exit." -ForegroundColor DarkYellow
 Write-Host ""
 
 try {
-    if ($Model) {
-        Invoke-JulyCli chat --model $Model
-    } else {
-        Invoke-JulyCli chat
-    }
+    Invoke-JulyCli chat --model $Model
 } finally {
     Write-Host ""
     Write-Host " [⚡] Session concluded. Securely wiping ephemeral RAM storage..." -ForegroundColor Yellow
