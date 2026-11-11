@@ -324,7 +324,7 @@ def cmd_login(args):
 
     # 3. Interactive In-CLI Authentication Menu
     provider = getattr(args, "sso", None)
-    force_browser = getattr(args, "browser_only", False)
+    force_browser = bool(getattr(args, "browser_only", False) or getattr(args, "browser", False))
 
     if not provider and not force_browser and sys.stdin.isatty():
         print(f"\n {UI.BOLD}{UI.CYAN}Select Authentication Method:{UI.RESET}")

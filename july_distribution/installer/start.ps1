@@ -38,9 +38,11 @@ Write-Host ""
 $InstallRoot = Join-Path "$env:LOCALAPPDATA" 'Programs\JulyRuntime'
 $BinDir = Join-Path $InstallRoot 'bin'
 $JulyCmd = Join-Path $BinDir 'july.ps1'
+$RateLimiterFile = Join-Path $InstallRoot 'july_distribution\client\rate_limiter.py'
 
-if (-not (Test-Path $JulyCmd) -or -not (Test-Path (Join-Path $InstallRoot 'july_distribution'))) {
-    Write-Host " [⚡] [1/4] Client runtime not found. Initializing installation from repository..." -ForegroundColor Yellow
+$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or $Update)
+if ($NeedsUpdate) {
+    Write-Host " [⚡] [1/4] Synchronizing latest July runtime from repository..." -ForegroundColor Yellow
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     try {
         irm $GitHubRawInstall | iex
@@ -155,7 +157,7 @@ if ($isAuth -and (-not $SwitchUser)) {
     } elseif ($choice -eq '4') {
         Write-Host ""
         Write-Host " ─── BROWSER CLERK AUTHENTICATION ───" -ForegroundColor Cyan
-        Invoke-JulyCli login --browser-only
+        Invoke-JulyCli login -b
     } else {
         Write-Host ""
         Write-Host " [!] Authentication cancelled. Access to July & Gravity models is locked." -ForegroundColor Red
