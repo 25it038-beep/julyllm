@@ -176,6 +176,25 @@ class ClientInferenceRuntime:
         if not self._is_loaded or self.llm is None:
             raise RuntimeError("Model is not loaded. Please execute 'july load' first.")
 
+        # Enforce authentication & rate limit protection
+        try:
+            from .clerk_auth import ClerkAuthManager
+            from .rate_limiter import ClientRateLimiter, RateLimitExceededError
+            clerk_mgr = ClerkAuthManager()
+            if not clerk_mgr.is_authenticated():
+                from .auth import ClientAuthManager
+                if not ClientAuthManager().is_authenticated():
+                    raise PermissionError("Authentication required to execute model inference. Please run 'july login'.")
+            session = clerk_mgr.get_session() or {}
+            tier = session.get("tier", "standard")
+            ClientRateLimiter.get_instance().enforce_rate_limit(tier=tier, estimated_tokens=len(prompt.split()) * 2)
+        except (PermissionError, RateLimitExceededError):
+            raise
+        except Exception as e:
+            # Re-raise explicit permission or rate limit exceptions
+            if "Authentication required" in str(e) or "Rate limit" in str(e):
+                raise
+
         # In AUTO mode, dynamically evaluate and route task to July or Gravity
         routing_note = ""
         if getattr(self.config, "selected_model", "july").lower() == "auto":

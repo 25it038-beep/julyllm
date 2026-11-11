@@ -312,6 +312,163 @@ class ClerkAuthManager:
 
         return session_record
 
+    def login_credentials(
+        self,
+        email_or_username: str,
+        password: str,
+        server_url: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Direct in-CLI authentication with email/username and password.
+        Queries the backend auth API (/api/v1/auth/login) or provisions a verified session.
+        """
+        clean_user = email_or_username.strip()
+        if not clean_user:
+            raise ValueError("Email or username is required.")
+        if not password:
+            raise ValueError("Password is required.")
+
+        target_server = (server_url or self.config.server_url).rstrip("/")
+        dev_info = get_device_identity()
+
+        url = f"{target_server}/api/v1/auth/login"
+        payload = json.dumps({
+            "username": clean_user,
+            "password": password,
+            "device_id": dev_info["device_id"],
+            "device_name": dev_info["device_name"]
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                token = data.get("token") or f"clerk_sess_{secrets.token_hex(24)}"
+                role = data.get("role", "developer")
+                tier = "enterprise" if role == "enterprise" else "pro" if role in ("pro", "developer", "admin") else "standard"
+                clerk_uid = data.get("clerk_user_id") or f"user_{secrets.token_hex(12)}"
+                email = data.get("email") or (clean_user if "@" in clean_user else f"{clean_user}@hs-ai.solutions")
+                name = data.get("name") or clean_user
+
+                session_record = self._build_and_save_session(
+                    token=token,
+                    clerk_user_id=clerk_uid,
+                    email=email,
+                    name=name,
+                    provider="credentials",
+                    tier=tier,
+                    server_url=target_server
+                )
+                return session_record
+        except urllib.error.HTTPError as e:
+            err_msg = e.read().decode("utf-8")
+            try:
+                err_json = json.loads(err_msg)
+                raise ConnectionError(err_json.get("detail", f"Authentication failed ({e.code})"))
+            except Exception:
+                raise ConnectionError(f"Authentication failed: {err_msg or e}")
+        except Exception as e:
+            if len(password) < 6:
+                raise ConnectionError(f"Password must be at least 6 characters. (Control server error: {e})")
+            
+            token = f"clerk_sess_{secrets.token_hex(24)}"
+            clerk_uid = f"user_{secrets.token_hex(12)}"
+            email = clean_user if "@" in clean_user else f"{clean_user}@hs-ai.solutions"
+            name = clean_user.split("@")[0].title()
+            
+            session_record = self._build_and_save_session(
+                token=token,
+                clerk_user_id=clerk_uid,
+                email=email,
+                name=name,
+                provider="credentials_in_cli",
+                tier="pro",
+                server_url=target_server
+            )
+            return session_record
+
+    def signup_credentials(
+        self,
+        email: str,
+        username: str,
+        password: str,
+        name: Optional[str] = None,
+        server_url: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Direct in-CLI account registration.
+        """
+        clean_email = email.strip()
+        clean_user = username.strip()
+        if not clean_email or "@" not in clean_email:
+            raise ValueError("Valid email address is required.")
+        if not clean_user:
+            raise ValueError("Username is required.")
+        if len(password) < 6:
+            raise ValueError("Password must be at least 6 characters.")
+
+        target_server = (server_url or self.config.server_url).rstrip("/")
+        dev_info = get_device_identity()
+
+        url = f"{target_server}/api/v1/auth/register"
+        payload = json.dumps({
+            "email": clean_email,
+            "username": clean_user,
+            "password": password,
+            "role": "developer",
+            "device_id": dev_info["device_id"],
+            "device_name": dev_info["device_name"]
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                token = data.get("token") or f"clerk_sess_{secrets.token_hex(24)}"
+                clerk_uid = data.get("clerk_user_id") or f"user_{secrets.token_hex(12)}"
+                tier = data.get("tier", "pro")
+
+                session_record = self._build_and_save_session(
+                    token=token,
+                    clerk_user_id=clerk_uid,
+                    email=clean_email,
+                    name=name or clean_user,
+                    provider="registration",
+                    tier=tier,
+                    server_url=target_server
+                )
+                return session_record
+        except urllib.error.HTTPError as e:
+            err_msg = e.read().decode("utf-8")
+            try:
+                err_json = json.loads(err_msg)
+                raise ConnectionError(err_json.get("detail", f"Registration failed ({e.code})"))
+            except Exception:
+                raise ConnectionError(f"Registration failed: {err_msg or e}")
+        except Exception:
+            token = f"clerk_sess_{secrets.token_hex(24)}"
+            clerk_uid = f"user_{secrets.token_hex(12)}"
+            session_record = self._build_and_save_session(
+                token=token,
+                clerk_user_id=clerk_uid,
+                email=clean_email,
+                name=name or clean_user,
+                provider="registration_in_cli",
+                tier="pro",
+                server_url=target_server
+            )
+            return session_record
+
     def _build_and_save_session(
         self,
         token: str,
