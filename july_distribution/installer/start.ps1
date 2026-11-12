@@ -56,6 +56,7 @@ $UiRendererFile = Join-Path $InstallRoot 'july_distribution\client\ui_renderer.p
 $LiveEngineFile = Join-Path $InstallRoot 'july_distribution\client\live_engine.py'
 $VadFile = Join-Path $InstallRoot 'july_distribution\client\vad.py'
 $RuntimeFile = Join-Path $InstallRoot 'july_distribution\client\runtime.py'
+$CliFile = Join-Path $InstallRoot 'july_distribution\client\cli.py'
 
 $HasGetInstance = $false
 if (Test-Path $RuntimeFile) {
@@ -65,7 +66,15 @@ if (Test-Path $RuntimeFile) {
     }
 }
 
-$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or -not (Test-Path $LiveEngineFile) -or -not (Test-Path $VadFile) -or -not $HasGetInstance -or $Update)
+$HasCliThreading = $false
+if (Test-Path $CliFile) {
+    $cliContent = Get-Content $CliFile -Raw -ErrorAction SilentlyContinue
+    if ($cliContent -and $cliContent.Contains("import threading")) {
+        $HasCliThreading = $true
+    }
+}
+
+$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or -not (Test-Path $LiveEngineFile) -or -not (Test-Path $VadFile) -or -not $HasGetInstance -or -not $HasCliThreading -or $Update)
 if ($NeedsUpdate) {
     Write-Host " [⚡] [1/4] Synchronizing latest July & Gravity live conversational voice runtime from repository..." -ForegroundColor Yellow
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
