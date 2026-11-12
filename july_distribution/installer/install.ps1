@@ -1,4 +1,4 @@
-# ================================================================================
+﻿# ================================================================================
 # HS AI SOLUTIONS — JULY LLM WINDOWS INSTALLER
 # Organization: HS AI Solutions
 # Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
@@ -6,7 +6,7 @@
 # irm https://julyllm.onrender.com/install.ps1 | iex
 # ================================================================================
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 Write-Host ""
 Write-Host "     ██╗██╗   ██╗██╗  ██╗   ██╗    ██╗     ██╗     ███╗   ███╗" -ForegroundColor Cyan
@@ -139,9 +139,14 @@ if (-not $PythonExe) {
 } else {
     Write-Host "      Python located: $PythonExe" -ForegroundColor Gray
     try {
-        $hasLlama = & $PythonExe -c "import llama_cpp; print('v' + llama_cpp.__version__)" 2>$null
-        if ($hasLlama) {
-            Write-Host "      llama-cpp-python engine: INSTALLED ($hasLlama)" -ForegroundColor Gray
+        $codeLlama = "import sys, importlib.util as u; sys.exit(0 if u.find_spec('llama_cpp') else 1)"
+        $prevEAP = $ErrorActionPreference
+        $ErrorActionPreference = 'SilentlyContinue'
+        & $PythonExe -c $codeLlama 2>$null
+        $llamaFound = ($LASTEXITCODE -eq 0)
+        $ErrorActionPreference = $prevEAP
+        if ($llamaFound) {
+            Write-Host "      llama-cpp-python engine: INSTALLED" -ForegroundColor Gray
         } else {
             Write-Host "      llama-cpp-python: Installing..." -ForegroundColor Yellow
             & $PythonExe -m pip install llama-cpp-python -q
@@ -151,8 +156,13 @@ if (-not $PythonExe) {
     }
 
     try {
-        $hasVoice = & $PythonExe -c "import whisper, sounddevice, pyttsx3; print('Ready')" 2>$null
-        if ($hasVoice) {
+        $codeVoice = "import sys, importlib.util as u; sys.exit(0 if all(u.find_spec(m) for m in ['whisper', 'sounddevice', 'pyttsx3']) else 1)"
+        $prevEAP = $ErrorActionPreference
+        $ErrorActionPreference = 'SilentlyContinue'
+        & $PythonExe -c $codeVoice 2>$null
+        $voiceFound = ($LASTEXITCODE -eq 0)
+        $ErrorActionPreference = $prevEAP
+        if ($voiceFound) {
             Write-Host "      Voice STT & Female TTS engines: INSTALLED" -ForegroundColor Gray
         } else {
             Write-Host "      Voice STT & Female TTS: Installing dependencies..." -ForegroundColor Yellow

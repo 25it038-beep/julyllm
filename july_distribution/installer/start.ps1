@@ -1,4 +1,4 @@
-# ================================================================================
+﻿# ================================================================================
 # HS AI SOLUTIONS — JULY LLM ALL-IN-ONE AUTONOMOUS RUNTIME
 # Founder & Chief Architect: Harshan Seliyan | Organization: HS AI Solutions
 # Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
@@ -25,7 +25,7 @@ if ($args) {
     }
 }
 
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 $ServerUrl = 'https://julyllm.onrender.com'
 $StudioUrl = 'https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/'
 $GitHubRawInstall = 'https://raw.githubusercontent.com/25it038-beep/julyllm/main/july_distribution/installer/install.ps1'
@@ -90,8 +90,13 @@ if (-not $PythonExe) {
     return
 }
 
-# Auto-install llama-cpp-python if missing
-$hasLlama = & $PythonExe -c "import llama_cpp" 2>$null; $LlamaOk = ($LASTEXITCODE -eq 0)
+# Auto-install llama-cpp-python if missing (traceback-free probe)
+$codeLlama = "import sys, importlib.util as u; sys.exit(0 if u.find_spec('llama_cpp') else 1)"
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'SilentlyContinue'
+& $PythonExe -c $codeLlama 2>$null
+$LlamaOk = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $prevEAP
 if (-not $LlamaOk) {
     Write-Host "      [+] Installing llama-cpp-python runtime..." -ForegroundColor Yellow
     & $PythonExe -m pip install --upgrade pip -q
@@ -99,7 +104,12 @@ if (-not $LlamaOk) {
 }
 
 # Auto-install voice packages if missing (Whisper STT, sounddevice, pyttsx3)
-$hasVoice = & $PythonExe -c "import whisper, sounddevice, pyttsx3" 2>$null; $VoiceOk = ($LASTEXITCODE -eq 0)
+$codeVoice = "import sys, importlib.util as u; sys.exit(0 if all(u.find_spec(m) for m in ['whisper', 'sounddevice', 'pyttsx3']) else 1)"
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'SilentlyContinue'
+& $PythonExe -c $codeVoice 2>$null
+$VoiceOk = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $prevEAP
 if (-not $VoiceOk) {
     Write-Host "      [+] Installing voice intelligence dependencies (Whisper STT, sounddevice, pyttsx3)..." -ForegroundColor Yellow
     & $PythonExe -m pip install sounddevice pyttsx3 openai-whisper numpy -q
