@@ -20,7 +20,10 @@ from ctypes import wintypes
 from typing import Optional, Dict, Any, List
 
 # Windows Kernel32 DLL binding
-kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+if sys.platform == "win32":
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+else:
+    kernel32 = None
 
 # Win32 Limit Flags
 JOB_OBJECT_LIMIT_WORKINGSET = 0x00000001

@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# HS AI SOLUTIONS — JULY LLM NATIVE LINUX LAUNCHER
+# Founder & Chief Architect: Harshan Seliyan | Organization: HS AI Solutions
+# Product: JULY AI / JULY OS | Platform: Linux & Tails OS (Amnesia)
+# ==============================================================================
+set -e
+
+# Resolve installation root
+if [ -n "$JULY_RUNTIME_DIR" ] && [ -d "$JULY_RUNTIME_DIR" ]; then
+    INSTALL_ROOT="$JULY_RUNTIME_DIR"
+else
+    # Attempt to resolve from script location
+    SCRIPT_PATH="${BASH_SOURCE[0]}"
+    while [ -h "$SCRIPT_PATH" ]; do
+        DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd)"
+        SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+        [[ $SCRIPT_PATH != /* ]] && SCRIPT_PATH="$DIR/$SCRIPT_PATH"
+    done
+    SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd)"
+
+    if [ -f "$SCRIPT_DIR/july_distribution/client/cli.py" ]; then
+        INSTALL_ROOT="$SCRIPT_DIR"
+    elif [ -f "$SCRIPT_DIR/../july_distribution/client/cli.py" ]; then
+        INSTALL_ROOT="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
+    elif [ -d "$HOME/Persistent/.july_runtime/july_distribution" ]; then
+        INSTALL_ROOT="$HOME/Persistent/.july_runtime"
+    elif [ -d "$HOME/.local/share/JulyRuntime/july_distribution" ]; then
+        INSTALL_ROOT="$HOME/.local/share/JulyRuntime"
+    elif [ -d "/tmp/july_runtime/july_distribution" ]; then
+        INSTALL_ROOT="/tmp/july_runtime"
+    else
+        INSTALL_ROOT="$SCRIPT_DIR"
+    fi
+fi
+
+# Locate Python 3.10+ in isolated virtualenv or system
+PYTHON=""
+if [ -x "$INSTALL_ROOT/venv/bin/python3" ]; then
+    PYTHON="$INSTALL_ROOT/venv/bin/python3"
+elif [ -x "$INSTALL_ROOT/venv/bin/python" ]; then
+    PYTHON="$INSTALL_ROOT/venv/bin/python"
+elif [ -x "$HOME/Persistent/.july_runtime/venv/bin/python3" ]; then
+    PYTHON="$HOME/Persistent/.july_runtime/venv/bin/python3"
+elif [ -x "$HOME/.local/share/JulyRuntime/venv/bin/python3" ]; then
+    PYTHON="$HOME/.local/share/JulyRuntime/venv/bin/python3"
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON="$(command -v python3)"
+elif command -v python >/dev/null 2>&1; then
+    PYTHON="$(command -v python)"
+else
+    echo -e "\033[91m[!] Error: Python 3.10+ is required to execute JULY CLI.\033[0m"
+    echo -e "    Please install python3 via your distribution package manager."
+    exit 1
+fi
+
+# Export runtime environment
+export PYTHONPATH="$INSTALL_ROOT:$PYTHONPATH"
+export PYTHONUNBUFFERED=1
+
+# Auto-detect Tails OS persistent storage location if available
+if [ -z "$JULY_CLIENT_HOME" ]; then
+    if [ -d "/home/amnesia/Persistent/.july" ] && [ -w "/home/amnesia/Persistent/.july" ]; then
+        export JULY_CLIENT_HOME="/home/amnesia/Persistent/.july"
+    elif [ -d "$HOME/Persistent/.july" ] && [ -w "$HOME/Persistent/.july" ]; then
+        export JULY_CLIENT_HOME="$HOME/Persistent/.july"
+    fi
+fi
+
+# Handover execution directly to July CLI dispatcher
+exec "$PYTHON" -m july_distribution.client.cli "$@"

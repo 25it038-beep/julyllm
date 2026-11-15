@@ -177,7 +177,23 @@ class SecureCredentialVault:
         tmp_file.replace(self.vault_file)
 
     def retrieve_session(self) -> Optional[Dict[str, Any]]:
-        """Reads, decrypts, and verifies stored session credentials."""
+        """Reads, decrypts, and verifies stored session credentials. Supports env fallback for Tails OS."""
+        # Check environment variable fallback (Requirement 7: Linux/Tails credential fallback)
+        env_token = os.getenv("JULY_API_KEY") or os.getenv("JULY_TOKEN") or os.getenv("CLERK_TOKEN")
+        if env_token:
+            return {
+                "token": env_token,
+                "clerk_user_id": os.getenv("JULY_USER_ID", "user_env_direct"),
+                "email": os.getenv("JULY_USER_EMAIL", "developer@hs-ai.solutions"),
+                "name": os.getenv("JULY_USER_NAME", "July Developer"),
+                "provider": "environment_variable",
+                "tier": os.getenv("JULY_USER_TIER", "pro"),
+                "server_url": os.getenv("JULY_SERVER_URL", "https://julyllm.onrender.com"),
+                "created_at": time.time(),
+                "expires_at": time.time() + 86400 * 365,
+                "environment_fallback": True,
+            }
+
         if not self.vault_file.exists():
             return None
 
@@ -211,6 +227,8 @@ class SecureCredentialVault:
         sess = session or self.retrieve_session()
         if not sess:
             return True
+        if sess.get("environment_fallback"):
+            return False
         expires_at = sess.get("expires_at")
         if expires_at and time.time() >= float(expires_at):
             return True

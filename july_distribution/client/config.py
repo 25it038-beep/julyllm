@@ -20,9 +20,24 @@ def get_default_july_dir() -> Path:
     custom_dir = os.getenv("JULY_CLIENT_HOME")
     if custom_dir:
         p = Path(custom_dir)
+    elif os.getenv("JULY_PERSISTENT") == "1":
+        # Check standard Tails Persistent Storage locations
+        tails_persistent = Path.home() / "Persistent" / ".july"
+        amnesia_persistent = Path("/home/amnesia/Persistent/.july")
+        if tails_persistent.parent.exists() and os.access(str(tails_persistent.parent), os.W_OK):
+            p = tails_persistent
+        elif amnesia_persistent.parent.exists() and os.access(str(amnesia_persistent.parent), os.W_OK):
+            p = amnesia_persistent
+        else:
+            p = Path.home() / ".july"
     else:
         p = Path.home() / ".july"
-    p.mkdir(parents=True, exist_ok=True)
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        # Fallback to /tmp if home is restricted
+        p = Path("/tmp") / ".july"
+        p.mkdir(parents=True, exist_ok=True)
     return p
 
 

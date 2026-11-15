@@ -179,10 +179,21 @@ def get_detailed_hardware_telemetry(active_model_id: str = "july", runtime: Any 
 
 
 def get_device_identity() -> Dict[str, str]:
-    """Generates a stable hardware device identifier on Windows."""
+    """Generates a stable hardware device identifier. On Tails OS, respects amnesia privacy."""
     import platform
     import hashlib
     import socket
+
+    try:
+        from .os_detector import OSDetector
+        if OSDetector.is_tails():
+            return {
+                "device_id": "tails_amnesia_device",
+                "device_name": "amnesia",
+                "os_version": "Tails OS (Amnesia)"
+            }
+    except Exception:
+        pass
 
     hostname = socket.gethostname()
     system = platform.system()

@@ -19,8 +19,12 @@ import ctypes
 from ctypes import wintypes
 from typing import Optional, List, Dict, Any
 
-advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
-kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+if sys.platform == "win32":
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+else:
+    advapi32 = None
+    kernel32 = None
 
 # Win32 Token Access Rights
 TOKEN_QUERY = 0x0008

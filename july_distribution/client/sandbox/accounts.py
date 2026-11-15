@@ -25,8 +25,12 @@ from ctypes import wintypes
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 
-crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
-kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+if sys.platform == "win32":
+    crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+else:
+    crypt32 = None
+    kernel32 = None
 
 GROUP_NAME = "JulySandboxUsers"
 ACCOUNT_R1 = "july-sbx-r1"
