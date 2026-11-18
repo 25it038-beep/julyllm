@@ -961,6 +961,9 @@ class ThinkingResultStreamFilter:
         self.has_thought = False
         self.in_visual = False
         self.result_header_printed = False
+        from .adaptive_reasoning import StreamLoopDetector
+        self.loop_detector = StreamLoopDetector()
+        self.loop_broken = False
 
     @staticmethod
     def _sanitize(text: str) -> str:
@@ -1100,9 +1103,24 @@ class ThinkingResultStreamFilter:
                         to_emit = self.buffer
                         self.buffer = ""
 
-                    if to_emit and self.thinking_mode == "expanded":
-                        formatted = to_emit.replace("\n", "\n  \033[38;5;240m│\033[0m \033[38;5;245m\033[3m")
-                        output.append(formatted)
+                    if to_emit:
+                        if self.loop_detector.check(to_emit):
+                            # Loop caught inside thinking! Force-close container and transition to result
+                            dur = max(0.1, time.time() - self.think_start_time)
+                            footer = (
+                                f"\033[0m\n  \033[38;5;244m╰───────────────────────────────────────────\033[0m "
+                                f"\033[90m(loop auto-resolved after {dur:.1f}s)\033[0m\n\n"
+                                f"  {self.badge_color}\033[1m✦ Result:\033[0m\n  \033[0m"
+                            )
+                            output.append(footer)
+                            self.result_header_printed = True
+                            self.state = self.STATE_RESULT
+                            self.loop_broken = True
+                            continue
+
+                        if self.thinking_mode == "expanded":
+                            formatted = to_emit.replace("\n", "\n  \033[38;5;240m│\033[0m \033[38;5;245m\033[3m")
+                            output.append(formatted)
                     break
 
             elif self.state == self.STATE_RESULT:
@@ -1169,13 +1187,16 @@ class ThinkingResultStreamFilter:
                     if partial_len > 0:
                         to_emit = self.buffer[:-partial_len]
                         self.buffer = self.buffer[-partial_len:]
-                        if to_emit:
-                            output.append(to_emit)
-                        break
                     else:
-                        output.append(self.buffer)
+                        to_emit = self.buffer
                         self.buffer = ""
-                        break
+
+                    if to_emit:
+                        if self.loop_broken and self.loop_detector.check(to_emit):
+                            pass
+                        else:
+                            output.append(to_emit)
+                    break
                 else:
                     low = self.buffer.lower()
                     if "</visual>" in low:

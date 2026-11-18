@@ -345,3 +345,49 @@ class LoopGuard:
 
     def should_terminate(self) -> bool:
         return self.iteration_count >= self.max_iterations
+
+
+class StreamLoopDetector:
+    """
+    Monitors live token streams to detect and break degenerate repetitive loops.
+    Detects repeated sentences, repeated markdown blocks, and cyclic n-grams.
+    """
+
+    def __init__(self, max_history_chars: int = 500, repeat_threshold: int = 3):
+        self.history = ""
+        self.max_history_chars = max_history_chars
+        self.repeat_threshold = repeat_threshold
+
+    def check(self, delta: str) -> bool:
+        if not delta:
+            return False
+        self.history += delta
+        if len(self.history) > self.max_history_chars:
+            self.history = self.history[-self.max_history_chars:]
+
+        # 1. Check for identical non-trivial lines repeated >= repeat_threshold
+        lines = [line.strip() for line in self.history.splitlines() if len(line.strip()) >= 12]
+        if len(lines) >= self.repeat_threshold:
+            if sum(1 for line in lines if line == lines[-1]) >= self.repeat_threshold:
+                return True
+
+        # 2. Check for multi-line or block-level cyclic repeats (length 15 to 140 chars)
+        buf_len = len(self.history)
+        for plen in range(15, min(140, buf_len // self.repeat_threshold + 1)):
+            candidate = self.history[-plen:]
+            repeats = 1
+            pos = buf_len - plen
+            while pos >= plen:
+                if self.history[pos - plen:pos] == candidate:
+                    repeats += 1
+                    pos -= plen
+                    if repeats >= self.repeat_threshold:
+                        return True
+                else:
+                    break
+
+        return False
+
+    def reset(self):
+        self.history = ""
+

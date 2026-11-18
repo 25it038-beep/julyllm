@@ -401,9 +401,16 @@ class ClientInferenceRuntime:
             top_p=eff_top_p,
             top_k=40,
             min_p=0.05,
+            repeat_penalty=1.15,
+            frequency_penalty=0.08,
+            presence_penalty=0.05,
             stop=model_stops,
             stream=True
         )
+
+        from .adaptive_reasoning import StreamLoopDetector
+        loop_detector = StreamLoopDetector()
+        in_thinking = bool(steering.prefill_assistant and "<think>" in steering.prefill_assistant)
 
         for chunk in stream:
             if cancel_event and cancel_event.is_set():
@@ -412,6 +419,48 @@ class ClientInferenceRuntime:
             if choices:
                 delta = choices[0].get("text", "")
                 if delta:
+                    if "</think>" in delta:
+                        in_thinking = False
+
+                    if loop_detector.check(delta):
+                        # Degenerate repetition loop caught!
+                        if in_thinking:
+                            # Force close thinking container so UI is not stuck
+                            close_tag = "\n</think>\n"
+                            full_response.append(close_tag)
+                            yield close_tag
+                            in_thinking = False
+
+                            # Auto-recovery: generate direct answer without looping
+                            cleaned_thought = re.sub(r"(\n?[^\n]{12,}\n?)\1{2,}", r"\1", "".join(full_response))
+                            recovery_prompt = formatted + cleaned_thought
+                            try:
+                                recovery_stream = self.llm(
+                                    recovery_prompt,
+                                    max_tokens=tokens_to_gen,
+                                    temperature=max(eff_temp, 0.4),
+                                    top_p=eff_top_p,
+                                    top_k=40,
+                                    min_p=0.05,
+                                    repeat_penalty=1.20,
+                                    frequency_penalty=0.15,
+                                    presence_penalty=0.10,
+                                    stop=model_stops,
+                                    stream=True
+                                )
+                                for r_chunk in recovery_stream:
+                                    if cancel_event and cancel_event.is_set():
+                                        break
+                                    r_choices = r_chunk.get("choices", [])
+                                    if r_choices:
+                                        r_delta = r_choices[0].get("text", "")
+                                        if r_delta:
+                                            full_response.append(r_delta)
+                                            yield r_delta
+                            except Exception:
+                                pass
+                        break
+
                     full_response.append(delta)
                     yield delta
 
