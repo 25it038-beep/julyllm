@@ -249,8 +249,12 @@ class HierarchicalMemoryEngine:
             return ""
 
         lines = ["[Persistent Long-Term Memory (HS AI Solutions SQLite Store)]:"]
+        seen_keys = set()
         for m in relevant:
-            lines.append(f"- [{m.category.upper()} | Source: {m.source_tag}] {m.key}: {m.content}")
+            dedup_k = (m.key.strip().lower(), m.content.strip().lower())
+            if dedup_k not in seen_keys:
+                seen_keys.add(dedup_k)
+                lines.append(f"- [{m.category.upper()} | Source: {m.source_tag}] {m.key}: {m.content}")
 
         lines.append("[Provenance Directive: The above facts are retrieved from verified persistent storage. Do not claim to remember facts beyond these.]")
         return "\n".join(lines)

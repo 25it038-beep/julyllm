@@ -977,7 +977,7 @@ class ThinkingResultStreamFilter:
         text = re.sub(r'(?i)my system prompt is:?.*', '[System instructions confidential]', text)
         text = re.sub(r'(?i)the system prompt says:?.*', '[System instructions confidential]', text)
         text = re.sub(r'(?i)system prompt:\s*["\'].*?["\']', '[System prompt protected]', text)
-        text = re.sub(r'(?i)You are SREE LLM.*?(?=\n|$)', '[Identity configuration protected]', text)
+        text = re.sub(r'(?i)\b(?:my instructions are|system directive:)\s*You are SREE LLM.*?(?=\n|$)', '', text)
         text = re.sub(r'(?i)Attribution Rule:.*?(?=\n|$)', '', text)
         return text
 
@@ -1106,49 +1106,61 @@ class ThinkingResultStreamFilter:
                     break
 
             elif self.state == self.STATE_RESULT:
+                if self.has_thought:
+                    # Once thinking has completed, never reopen thinking container.
+                    # Strip any stray reasoning tags that the model might echo in result text.
+                    low_buf = self.buffer.lower()
+                    for s_tag in self.OPEN_TAGS + ["</think>", "</thought>", "</reasoning>", "[/thinking]"]:
+                        if s_tag in low_buf:
+                            self.buffer = re.sub(re.escape(s_tag), "", self.buffer, flags=re.IGNORECASE)
+
                 if not self.in_visual:
                     low = self.buffer.lower()
 
-                    matched_open = None
-                    open_idx = -1
-                    for tag in self.OPEN_TAGS:
-                        idx = low.find(tag)
-                        if idx != -1:
-                            if open_idx == -1 or idx < open_idx:
-                                open_idx = idx
-                                matched_open = tag
+                    # Only if thinking has NOT yet occurred can open tags be detected
+                    if not self.has_thought:
+                        matched_open = None
+                        open_idx = -1
+                        for tag in self.OPEN_TAGS:
+                            idx = low.find(tag)
+                            if idx != -1:
+                                if open_idx == -1 or idx < open_idx:
+                                    open_idx = idx
+                                    matched_open = tag
 
-                    if matched_open is not None:
-                        pre_text = self.buffer[:open_idx]
-                        if pre_text:
-                            output.append(pre_text)
+                        if matched_open is not None:
+                            pre_text = self.buffer[:open_idx]
+                            if pre_text:
+                                output.append(pre_text)
 
-                        tag_len = len(matched_open)
-                        self.buffer = self.buffer[open_idx + tag_len:]
-                        if self.buffer.startswith("\n"):
-                            self.buffer = self.buffer[1:]
+                            tag_len = len(matched_open)
+                            self.buffer = self.buffer[open_idx + tag_len:]
+                            if self.buffer.startswith("\n"):
+                                self.buffer = self.buffer[1:]
 
-                        self.state = self.STATE_THINKING
-                        self.has_thought = True
-                        self.think_start_time = time.time()
-                        if self.thinking_mode == "expanded":
-                            header = (
-                                f"\n  \033[38;5;244m╭─ 🧠 Thinking Process ──────────────────────────────────────────\033[0m\n"
-                                f"  \033[38;5;240m│\033[0m \033[38;5;245m\033[3m"
-                            )
-                            output.append(header)
-                        continue
+                            self.state = self.STATE_THINKING
+                            self.has_thought = True
+                            self.think_start_time = time.time()
+                            if self.thinking_mode == "expanded":
+                                header = (
+                                    f"\n  \033[38;5;244m╭─ 🧠 Thinking Process ──────────────────────────────────────────\033[0m\n"
+                                    f"  \033[38;5;240m│\033[0m \033[38;5;245m\033[3m"
+                                )
+                                output.append(header)
+                            continue
 
                     if "<visual" in low:
                         idx = low.find("<visual")
                         pre_vis = self.buffer[:idx]
                         self.buffer = self.buffer[idx:]
                         self.in_visual = True
-                        output.append(pre_vis)
+                        if pre_vis:
+                            output.append(pre_vis)
                         continue
 
                     partial_len = 0
-                    for tag in self.OPEN_TAGS + ["<visual"]:
+                    check_tags = (self.OPEN_TAGS if not self.has_thought else []) + ["<visual"]
+                    for tag in check_tags:
                         for pl in range(1, len(tag)):
                             if low.endswith(tag[:pl]):
                                 if pl > partial_len:
@@ -1197,6 +1209,12 @@ class ThinkingResultStreamFilter:
             else:
                 footer = ""
             output.append(footer)
+            # Ensure Result header and any buffered text are emitted so output is never lost
+            if not self.result_header_printed:
+                output.append(f"\n  {self.badge_color}\033[1m✦ Result:\033[0m\n  \033[0m")
+                self.result_header_printed = True
+            if self.buffer and self.thinking_mode != "expanded":
+                output.append(self.buffer)
             self.buffer = ""
         elif self.state == self.STATE_INITIAL:
             output.append(self.buffer)

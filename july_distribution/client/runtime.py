@@ -155,7 +155,7 @@ class ClientInferenceRuntime:
         if not gen_threads or gen_threads <= 0:
             gen_threads = max(1, min(physical_cores, 8))
         batch_threads = max(1, logical_cores)
-        batch_size = max(512, getattr(self.config, "n_batch", 512) or 512)
+        batch_size = max(1024, getattr(self.config, "n_batch", 1024) or 1024) if n_gpu > 0 else max(512, getattr(self.config, "n_batch", 512) or 512)
 
         try:
             use_flash = bool(n_gpu > 0 and getattr(self.config, "flash_attention", True))
@@ -328,9 +328,14 @@ class ClientInferenceRuntime:
             for msg in history:
                 m_role = msg.get("role", "user")
                 m_content = msg.get("content", "").strip()
-                # Clean thinking scratchpads from previous turns to prevent topic inertia
+                # Clean thinking scratchpads and collapse heavy past code blocks to prevent topic inertia & speed up TTFT
                 if m_role == "assistant":
                     m_content = re.sub(r"(?s)<think>.*?</think>", "", m_content).strip()
+                    m_content = re.sub(r"```[a-zA-Z0-9_-]*\n[\s\S]*?```", "[Code solution provided]", m_content)
+                    if len(m_content) > 250:
+                        m_content = m_content[:250].strip() + "..."
+                elif m_role == "user" and len(m_content) > 250:
+                    m_content = m_content[:250].strip() + "..."
                 formatted += f"<|im_start|>{m_role}\n{m_content}<|im_end|>\n"
 
             formatted += f"<|im_start|>user\n{prompt}<|im_end|>\n"
@@ -359,6 +364,11 @@ class ClientInferenceRuntime:
                 m_content = msg.get("content", "").strip()
                 if m_role == "assistant":
                     m_content = re.sub(r"(?s)<think>.*?</think>", "", m_content).strip()
+                    m_content = re.sub(r"```[a-zA-Z0-9_-]*\n[\s\S]*?```", "[Code solution provided]", m_content)
+                    if len(m_content) > 250:
+                        m_content = m_content[:250].strip() + "..."
+                elif m_role == "user" and len(m_content) > 250:
+                    m_content = m_content[:250].strip() + "..."
                 formatted += f"<|start_header_id|>{m_role}<|end_header_id|>\n\n{m_content}<|eot_id|>"
 
             formatted += f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|>"
@@ -384,13 +394,7 @@ class ClientInferenceRuntime:
         )
 
         full_response = []
-
-        # If assistant prompt was prefilled (e.g. closed minimal <think> for SREE),
-        # emit it to the stream immediately so the UI highlights the thinking box
-        # and immediately streams the result tokens without delay!
-        if steering.prefill_assistant:
-            full_response.append(steering.prefill_assistant)
-            yield steering.prefill_assistant
+        yielded_prefill = False
 
         for chunk in stream:
             if cancel_event and cancel_event.is_set():
@@ -399,8 +403,17 @@ class ClientInferenceRuntime:
             if choices:
                 delta = choices[0].get("text", "")
                 if delta:
+                    if not yielded_prefill and steering.prefill_assistant:
+                        yielded_prefill = True
+                        full_response.append(steering.prefill_assistant)
+                        yield steering.prefill_assistant
                     full_response.append(delta)
                     yield delta
+
+        # Fallback if stream was empty
+        if not yielded_prefill and steering.prefill_assistant:
+            full_response.append(steering.prefill_assistant)
+            yield steering.prefill_assistant
 
         raw_text = "".join(full_response)
 

@@ -235,11 +235,11 @@ class AdaptiveReasoningEngine:
         if level == ThinkingLevel.CONVERSATIONAL:
             if is_first_turn:
                 sys_dir = (
-                    f"[DIRECTIVE: First turn: Greet {user_name} warmly ('{greeting_pref} {user_name}!') in {opp_persona} tone ({tone_summary}). State verified time/date/location if asked, then answer prompt directly.]"
+                    f"[DIRECTIVE: First turn: Greet {user_name} warmly ('{greeting_pref} {user_name}!') in {opp_persona} tone ({tone_summary}). State verified time/date/location if asked, then answer prompt directly. Do NOT output unrequested coding solutions.]"
                 )
             else:
                 sys_dir = (
-                    f"[DIRECTIVE: Multi-turn continuation: NO RE-GREETINGS. Jump directly into answering the prompt in {opp_persona} tone. Switch topics cleanly.]"
+                    f"[DIRECTIVE: Multi-turn continuation: NO RE-GREETINGS. Jump directly into answering the prompt in {opp_persona} tone. Switch topics cleanly. Do NOT output unrequested coding solutions.]"
                 )
 
             return AdaptiveSteeringConfig(
