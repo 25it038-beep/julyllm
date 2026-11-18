@@ -651,6 +651,23 @@ CENTRAL_MODEL_REGISTRY = {
         "context_length": 262144,
         "status": "available",
         "description": "Frontier Specialist for Pure Mathematics, CAS, Physics Simulation, and Algorithmic Proofs"
+    },
+    "sree": {
+        "id": "sree",
+        "name": "SREE LLM",
+        "family": "SREE AI Family",
+        "storage_provider": "cloudflare_r2",
+        "bucket": os.getenv("JULY_R2_BUCKET", "july"),
+        "object_key": os.getenv("SREE_R2_OBJECT", "sree-final.gguf"),
+        "approx_size_gib": 1.80,
+        "size_bytes": 1929903232,
+        "sha256": os.getenv("SREE_MODEL_SHA256", "6b2d4e6983180dd2d02396686fb0bbeaecad2a47193ec78e011254ee6f7207cc"),
+        "architecture": "qwen2",
+        "base_model": "VibeThinker 3B Q4_K_M",
+        "layers": 36,
+        "context_length": 32768,
+        "status": "available",
+        "description": "Dense Cognitive & STEM Reasoning Specialist — Math CAS, Symbolic Verification, and Deep Step-by-Step Thinking (<think>)"
     }
 }
 

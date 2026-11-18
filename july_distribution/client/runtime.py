@@ -62,9 +62,9 @@ class ClientInferenceRuntime:
         self._is_loaded = False
 
     def switch_model(self, model_id: str, model_path: Optional[Path] = None):
-        """Switches active model cleanly between july and gravity."""
+        """Switches active model cleanly between july, gravity, and sree."""
         target = model_id.lower().strip()
-        if target not in ("july", "gravity"):
+        if target not in ("july", "gravity", "sree"):
             target = "july"
 
         if self._is_loaded and self.current_model_id == target and self.llm is not None:
@@ -253,32 +253,62 @@ class ClientInferenceRuntime:
         guidance = self.orchestrator.prepare_reasoning_guidance(prompt)
 
         # Build chat format
-        formatted = f"<|start_header_id|>system<|end_header_id|>\n\n{sys_prompt}"
-        if custom_kn:
-            formatted += f"\n\nReference Knowledge:\n{custom_kn}"
-        if guidance:
-            formatted += f"\n\n[HS AI REASONING ORCHESTRATOR INVARIANTS]:\n{guidance}\nFollow these formal invariants strictly."
-        if web_context:
-            formatted += (
-                f"\n\n{web_context}\n\n"
-                f"CRITICAL REAL-TIME GROUNDING DIRECTIVE:\n"
-                f"- You have access to verified real-time live internet facts above.\n"
-                f"- You MUST prioritize and base your response on these real-time search facts to provide accurate, up-to-date answers.\n"
-                f"- Override any older pretraining memory with the provided live web search data."
-            )
-        formatted += "<|eot_id|>"
+        is_sree = "sree" in getattr(self, "current_model_id", "july").lower()
+        if is_sree:
+            # Sree uses ChatML format and native <think> tags for dense reasoning
+            formatted = f"<|im_start|>system\n{sys_prompt}"
+            if custom_kn:
+                formatted += f"\n\nReference Knowledge:\n{custom_kn}"
+            if guidance:
+                formatted += f"\n\n[HS AI COGNITIVE REASONING INVARIANTS]:\n{guidance}\nFollow these formal invariants strictly."
+            if web_context:
+                formatted += (
+                    f"\n\n{web_context}\n\n"
+                    f"CRITICAL REAL-TIME GROUNDING DIRECTIVE:\n"
+                    f"- You have access to verified real-time live internet facts above.\n"
+                    f"- You MUST prioritize and base your response on these real-time search facts to provide accurate, up-to-date answers.\n"
+                    f"- Override any older pretraining memory with the provided live web search data."
+                )
+            formatted += "<|im_end|>\n"
 
-        for msg in history:
-            formatted += f"<|start_header_id|>{msg['role']}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"
+            for msg in history:
+                formatted += f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
 
-        formatted += "<|start_header_id|>user<|end_header_id|>\n\n"
-        if web_context:
-            formatted += f"[Real-Time Live Web Search Information:\n{web_context}]\n\nQuestion: {prompt}<|eot_id|>"
+            formatted += "<|im_start|>user\n"
+            if web_context:
+                formatted += f"[Real-Time Live Web Search Information:\n{web_context}]\n\nQuestion: {prompt}<|im_end|>\n"
+            else:
+                formatted += f"{prompt}<|im_end|>\n"
+            formatted += "<|im_start|>assistant\n"
+            model_stops = ["<|im_end|>", "<|im_start|>", "<|endoftext|>"]
         else:
-            formatted += f"{prompt}<|eot_id|>"
-        formatted += "<|start_header_id|>assistant<|end_header_id|>\n\n"
+            formatted = f"<|start_header_id|>system<|end_header_id|>\n\n{sys_prompt}"
+            if custom_kn:
+                formatted += f"\n\nReference Knowledge:\n{custom_kn}"
+            if guidance:
+                formatted += f"\n\n[HS AI REASONING ORCHESTRATOR INVARIANTS]:\n{guidance}\nFollow these formal invariants strictly."
+            if web_context:
+                formatted += (
+                    f"\n\n{web_context}\n\n"
+                    f"CRITICAL REAL-TIME GROUNDING DIRECTIVE:\n"
+                    f"- You have access to verified real-time live internet facts above.\n"
+                    f"- You MUST prioritize and base your response on these real-time search facts to provide accurate, up-to-date answers.\n"
+                    f"- Override any older pretraining memory with the provided live web search data."
+                )
+            formatted += "<|eot_id|>"
 
-        # Unlimited tokens: if requested_max <= 0 or None, llama.cpp generates until EOS (<|eot_id|>)
+            for msg in history:
+                formatted += f"<|start_header_id|>{msg['role']}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"
+
+            formatted += "<|start_header_id|>user<|end_header_id|>\n\n"
+            if web_context:
+                formatted += f"[Real-Time Live Web Search Information:\n{web_context}]\n\nQuestion: {prompt}<|eot_id|>"
+            else:
+                formatted += f"{prompt}<|eot_id|>"
+            formatted += "<|start_header_id|>assistant<|end_header_id|>\n\n"
+            model_stops = ["<|eot_id|>", "<|end_of_text|>", "<|endoftext|>"]
+
+        # Unlimited tokens: if requested_max <= 0 or None, llama.cpp generates until EOS
         requested_max = max_tokens if max_tokens is not None else self.config.max_tokens
         tokens_to_gen = None if (requested_max is None or requested_max <= 0) else requested_max
 
@@ -287,7 +317,7 @@ class ClientInferenceRuntime:
             max_tokens=tokens_to_gen,
             temperature=self.config.temperature,
             top_p=self.config.top_p,
-            stop=["<|eot_id|>", "<|end_of_text|>", "<|endoftext|>"],
+            stop=model_stops,
             stream=True
         )
 

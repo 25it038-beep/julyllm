@@ -282,15 +282,18 @@ if (-not $Model) {
         Write-Host " Select Foundation Model / Interactive Mode:" -ForegroundColor White
         Write-Host "   [1]  🌟  July LLM (General Intelligence, Coding & Agentic Reasoning)" -ForegroundColor Cyan
         Write-Host "   [2]  🌌  Gravity LLM (Deep Mathematical Reasoning, Proofs & Physics)" -ForegroundColor Yellow
-        Write-Host "   [3]  ⚡  Auto Router (Dynamic Query Routing to July or Gravity)" -ForegroundColor Magenta
-        Write-Host "   [4]  🎙️   JULY LIVE (Continuous Conversational Voice AI Mode)" -ForegroundColor Green
+        Write-Host "   [3]  🧠  SREE LLM (Dense Cognitive Reasoning, Multi-Step Thinking & STEM)" -ForegroundColor Cyan
+        Write-Host "   [4]  ⚡  Auto Router (Dynamic Query Routing to July, Gravity, or Sree)" -ForegroundColor Magenta
+        Write-Host "   [5]  🎙️   JULY LIVE (Continuous Conversational Voice AI Mode)" -ForegroundColor Green
         Write-Host ""
-        $mChoice = Read-Host " Select Option [1, 2, 3, or 4] (Default: 1 - July)"
+        $mChoice = Read-Host " Select Option [1, 2, 3, 4, or 5] (Default: 1 - July)"
         if ($mChoice -eq '2') {
             $Model = "gravity"
         } elseif ($mChoice -eq '3') {
-            $Model = "auto"
+            $Model = "sree"
         } elseif ($mChoice -eq '4') {
+            $Model = "auto"
+        } elseif ($mChoice -eq '5') {
             $Model = "july"
             $Live = $true
         } else {

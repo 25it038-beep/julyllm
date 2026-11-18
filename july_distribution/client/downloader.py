@@ -98,21 +98,32 @@ class ClientModelDownloader:
         try:
             from ..server.r2_manager import CloudflareR2DistributionGateway
             gw = CloudflareR2DistributionGateway()
-            key = "Gravity-HS-AI-Solutions.gguf" if mid == "gravity" else "july-final.gguf"
+            if mid == "sree":
+                key = "sree-final.gguf"
+                model_name = "SREE LLM"
+                expected_sha = "6b2d4e6983180dd2d02396686fb0bbeaecad2a47193ec78e011254ee6f7207cc"
+            elif mid == "gravity":
+                key = "Gravity-HS-AI-Solutions.gguf"
+                model_name = "Gravity LLM"
+                expected_sha = "f24a90361aaac8cb3dce9f18b276b1444af106d205f411c4e674b58a9adf53c8"
+            else:
+                key = "july-final.gguf"
+                model_name = "July LLM"
+                expected_sha = "f15752352dc3297ad50e6baeccbae400ca1a9338c4e3ca8475757af587323bd4"
             head = gw.verify_object_head(key)
             if head.get("success"):
                 url = gw.generate_short_lived_download_url(key, expires_in_seconds=900)
                 return {
                     "success": True,
                     "model_id": mid,
-                    "model_name": "Gravity LLM" if mid == "gravity" else "July LLM",
+                    "model_name": model_name,
                     "storage_provider": "cloudflare_r2",
                     "bucket": gw.bucket_name,
                     "object_key": key,
                     "download_url": url,
                     "expires_in_seconds": 900,
                     "size_bytes": head["content_length"],
-                    "expected_sha256": "f24a90361aaac8cb3dce9f18b276b1444af106d205f411c4e674b58a9adf53c8" if mid == "gravity" else "f15752352dc3297ad50e6baeccbae400ca1a9338c4e3ca8475757af587323bd4",
+                    "expected_sha256": expected_sha,
                     "chunk_size_bytes": 8 * 1024 * 1024
                 }
         except Exception as r2_err:

@@ -127,6 +127,19 @@ MODEL_METADATA = {
         "context_length": 131072,
         "default_file": "gravity-final.gguf",
     },
+    "sree": {
+        "title": "SREE LLM",
+        "name": "sree",
+        "family": "SREE AI Family",
+        "badge": "SREE LLM • HS AI SOLUTIONS",
+        "description": "Dense Cognitive & STEM Reasoning Specialist — Math CAS, Proofs, Deep Thinking (<think>)",
+        "architecture": "Dense Cognitive Reasoning (Qwen2 / VibeThinker-3B)",
+        "parameters": "3.09B",
+        "layers": 36,
+        "quantization": "Q4_K_M",
+        "context_length": 32768,
+        "default_file": "model.gguf",
+    },
     "auto": {
         "title": "AUTO (Intelligent Dynamic Router)",
         "name": "auto",
@@ -167,6 +180,18 @@ def resolve_model_seed(model_id: str = "july") -> Optional[Path]:
         ]
         for c in candidates:
             if c.exists() and c.stat().st_size == 5629108096:
+                return c
+        return None
+    elif mid == "sree":
+        candidates = [
+            Path(__file__).resolve().parent.parent.parent / "models" / "sree" / "model.gguf",
+            Path.cwd() / "models" / "sree" / "model.gguf",
+            Path.cwd() / "models" / "sree" / "VibeThinker-3B.Q4_K_M.gguf",
+            Path(os.environ.get("USERPROFILE", str(Path.home()))) / "OneDrive" / "Desktop" / "collab-editor" / "models" / "sree" / "model.gguf",
+            Path(tempfile.gettempdir()) / "july_ephemeral_runtime" / "sree_ram_model.gguf",
+        ]
+        for c in candidates:
+            if c.exists() and c.stat().st_size == 1929903232:
                 return c
         return None
     else:
@@ -1265,7 +1290,8 @@ def interactive_select_model(cfg: ClientConfig) -> Optional[str]:
     items = [
         ("1", "july", MODEL_METADATA["july"]),
         ("2", "gravity", MODEL_METADATA["gravity"]),
-        ("3", "auto", MODEL_METADATA["auto"]),
+        ("3", "sree", MODEL_METADATA["sree"]),
+        ("4", "auto", MODEL_METADATA["auto"]),
     ]
 
     for num, k, meta in items:
@@ -1288,13 +1314,13 @@ def interactive_select_model(cfg: ClientConfig) -> Optional[str]:
         print(f" {UI.GRAY}│{UI.RESET} [{UI.YELLOW}{num}{UI.RESET}] {title_col:<30} {state_label:<24} {pref_mark}")
         print(f" {UI.GRAY}│     {UI.DIM}Arch: {meta['architecture']} | {meta['parameters']}{UI.RESET}")
         print(f" {UI.GRAY}│     {UI.GRAY}{meta['description'][:68]}{UI.RESET}")
-        if num != "3":
+        if num != "4":
             print(f" {UI.GRAY}│{UI.RESET}")
 
     print(f" {UI.MAGENTA}└───────────────────────────────────────────────────────────────────────┘{UI.RESET}")
 
     try:
-        choice = input(f"\n  {UI.BOLD}Select model [1-3, name, or Enter to cancel]{UI.RESET} › ").strip().lower()
+        choice = input(f"\n  {UI.BOLD}Select model [1-4, name, or Enter to cancel]{UI.RESET} › ").strip().lower()
         if not choice:
             print(f"  {UI.GRAY}[*] Model selection unchanged: {current.upper()}{UI.RESET}\n")
             return None
@@ -1385,13 +1411,14 @@ def cmd_model(args):
             return
 
         matched = None
-        for k in ("july", "gravity", "auto"):
+        for k in ("july", "gravity", "sree", "auto"):
             if target in (k, f"{k} llm", f"{k}_llm", f"mode_{k}"):
                 matched = k
                 break
         if target in ("1", "j"): matched = "july"
         elif target in ("2", "g"): matched = "gravity"
-        elif target in ("3", "a"): matched = "auto"
+        elif target in ("3", "s"): matched = "sree"
+        elif target in ("4", "a"): matched = "auto"
 
         if matched:
             cfg.selected_model = matched
@@ -1696,7 +1723,9 @@ def cmd_chat(args):
             cfg.selected_model = "july"
         elif m_norm in ("2", "g", "gravity"):
             cfg.selected_model = "gravity"
-        elif m_norm in ("3", "a", "auto"):
+        elif m_norm in ("3", "s", "sree"):
+            cfg.selected_model = "sree"
+        elif m_norm in ("4", "a", "auto"):
             cfg.selected_model = "auto"
         cfg.save()
 
@@ -2909,13 +2938,13 @@ def main():
     voice_p.add_argument("value", nargs="?", help="Parameter value for language, model, output, or speed")
 
     load_p = subparsers.add_parser("load", help="Retrieve GGUF into ephemeral RAM-backed storage")
-    load_p.add_argument("-M", "--model", help="Specific model to load: july or gravity")
+    load_p.add_argument("-M", "--model", help="Specific model to load: july, gravity, or sree")
 
     chat_p = subparsers.add_parser("chat", help="Start chat session running genuine local inference")
     chat_p.add_argument("prompt", nargs="?", help="One-off prompt to execute")
     chat_p.add_argument("-f", "--file", help="Path to text file containing a bulk or multi-line prompt")
     chat_p.add_argument("-m", "--mode", "--personality", dest="personality", help="Run chat with a specific personality")
-    chat_p.add_argument("-M", "--model", help="Foundation model to use: july, gravity, or auto")
+    chat_p.add_argument("-M", "--model", help="Foundation model to use: july, gravity, sree, or auto")
 
     pers_p = subparsers.add_parser("personality", help="Choose assistant personality profile")
     pers_p.add_argument("name", nargs="?", help="Optional personality name or number")
@@ -2937,7 +2966,7 @@ def main():
     sbx_p.add_argument("-n", "--network", action="store_true", help="Allow network access for this execution")
 
     live_p = subparsers.add_parser("live", help="Start real-time conversational voice AI session")
-    live_p.add_argument("-M", "--model", choices=["july", "gravity"], default=None, help="Foundation model to use")
+    live_p.add_argument("-M", "--model", choices=["july", "gravity", "sree"], default=None, help="Foundation model to use")
     live_p.add_argument("-S", "--style", choices=["natural", "friendly", "professional", "tutor", "companion"], default="natural", help="Voice style")
 
     # Native Linux / Tails OS & Diagnostics additions
@@ -2948,7 +2977,7 @@ def main():
     agent_p = subparsers.add_parser("agent", help="Launch JULY Autonomous Cognitive Agent with tool calling")
     agent_p.add_argument("task", nargs="?", help="Task or objective for the agent")
     agent_p.add_argument("-f", "--file", help="Path to text file containing task instructions")
-    agent_p.add_argument("-M", "--model", choices=["july", "gravity", "auto"], default="auto", help="Foundation model to use")
+    agent_p.add_argument("-M", "--model", choices=["july", "gravity", "sree", "auto"], default="auto", help="Foundation model to use")
 
     subparsers.add_parser("help", help="Display comprehensive help guide and command usage")
 

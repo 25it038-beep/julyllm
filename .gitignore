@@ -49,7 +49,9 @@ ephemeral_state.json
 *.safetensors
 *.pt
 *.pth
-models/
+models/**/*.gguf
+models/**/*.bin
+models/**/*.tmp
 
 # Logs
 *.log

@@ -251,16 +251,18 @@ if [ -z "$MODEL" ]; then
         echo -e " ${BOLD}${WHITE}Select Foundation Model / Interactive Mode:${RESET}"
         echo -e "   ${CYAN}[1]  🌟  July LLM (General Intelligence, Coding & Agentic Reasoning)${RESET}"
         echo -e "   ${YELLOW}[2]  🌌  Gravity LLM (Deep Mathematical Reasoning, Proofs & Physics)${RESET}"
-        echo -e "   ${MAGENTA}[3]  ⚡  Auto Router (Dynamic Query Routing to July or Gravity)${RESET}"
-        echo -e "   ${GREEN}[4]  🤖  JULY AGENT (Autonomous Cognitive Agent with Tool Calling)${RESET}"
-        echo -e "   ${CYAN}[5]  🎙️   JULY LIVE (Continuous Conversational Voice AI Mode)${RESET}"
+        echo -e "   ${CYAN}[3]  🧠  SREE LLM (Dense Cognitive Reasoning, Multi-Step Thinking & STEM)${RESET}"
+        echo -e "   ${MAGENTA}[4]  ⚡  Auto Router (Dynamic Query Routing across AI Family)${RESET}"
+        echo -e "   ${GREEN}[5]  🤖  JULY AGENT (Autonomous Cognitive Agent with Tool Calling)${RESET}"
+        echo -e "   ${CYAN}[6]  🎙️   JULY LIVE (Continuous Conversational Voice AI Mode)${RESET}"
         echo ""
-        read -p " Select Option [1-5] (Default: 1 - July): " m_choice </dev/tty || m_choice="1"
+        read -p " Select Option [1-6] (Default: 1 - July): " m_choice </dev/tty || m_choice="1"
         case "$m_choice" in
             2) MODEL="gravity" ;;
-            3) MODEL="auto" ;;
-            4) MODEL="agent" ;;
-            5) MODEL="july"; LIVE=true ;;
+            3) MODEL="sree" ;;
+            4) MODEL="auto" ;;
+            5) MODEL="agent" ;;
+            6) MODEL="july"; LIVE=true ;;
             *) MODEL="july" ;;
         esac
     fi

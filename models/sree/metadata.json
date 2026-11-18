@@ -1,0 +1,13 @@
+{
+  "model_id": "sree",
+  "title": "SREE LLM",
+  "family": "SREE AI Family",
+  "organization": "HS AI Solutions",
+  "founder": "Harshan Seliyan",
+  "parameters": "3.09B",
+  "architecture": "Dense Reasoning (Qwen2 / VibeThinker-3B)",
+  "layers": 36,
+  "quantization": "Q4_K_M",
+  "context_length": 32768,
+  "description": "Dense Cognitive & STEM Reasoning Specialist — Advanced Mathematics, Symbolic Verification, Algorithmic Analysis & Deep Chain-of-Thought"
+}

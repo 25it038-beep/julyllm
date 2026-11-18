@@ -1,0 +1,15 @@
+{
+  "model_id": "sree",
+  "name": "SREE LLM",
+  "family": "SREE AI Family",
+  "organization": "HS AI Solutions",
+  "founder": "Harshan Seliyan",
+  "architecture": "Dense Cognitive Reasoning (Qwen2 / VibeThinker-3B)",
+  "file_name": "model.gguf",
+  "size_bytes": 1929903232,
+  "sha256": "6b2d4e6983180dd2d02396686fb0bbeaecad2a47193ec78e011254ee6f7207cc",
+  "verified": true,
+  "storage_provider": "cloudflare_r2",
+  "r2_object_key": "sree-final.gguf",
+  "created_at": "2026-11-18T13:00:20Z"
+}
