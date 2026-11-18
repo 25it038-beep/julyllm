@@ -32,18 +32,52 @@ SKIP_PATTERNS = [
     r"(?i)\b(your|ur)\s+(architecture|model|system prompt|prompt|instructions|identity|creator|founder|parameters)\b",
     r"(?i)\b(what is your architecture|what is your system prompt|show your system prompt|reveal your system prompt)\b",
     r"(?i)\b(who are you|what are you|tell me about yourself|what is your name)\b",
+    # Coding and debugging requests - use LLM reasoning directly, avoid web search
+    r"(?i)\b(write\s+(a\s+)?(function|script|code|program|class|method|component|app|algorithm|test))\b",
+    r"(?i)\b(fix\s+(this\s+)?(error|bug|code|issue|exception|traceback|syntax))\b",
+    r"(?i)\b(implement|refactor|debug|compile|benchmark|optimize\s+code)\b",
+]
+
+# Conversational follow-up patterns referring to previously discussed context
+CONVERSATIONAL_FOLLOWUP_PATTERNS = [
+    r"(?i)\b(how\s+(it|this|that|they)\s+(look|looks|work|works|feel|feels|sound|sounds|function|functions|operate|operates|behave|behaves|compare|compares))\b",
+    r"(?i)\b(how\s+does\s+(it|this|that)\s+(look|work|feel|sound|operate|behave|function))\b",
+    r"(?i)\b(what\s+does\s+(it|this|that)\s+look\s+like)\b",
+    r"(?i)\b(what\s+(it|this|that)\s+looks?\s+like)\b",
+    r"(?i)\b(what\s+is\s+(it|this|that)\s+like)\b",
+    r"(?i)\b(tell\s+me\s+more(\s+about\s+(it|this|that|them))?)\b",
+    r"(?i)\b(explain\s+(it|this|that|further|more))\b",
+    r"(?i)\b(describe\s+(it|this|that|how\s+it\s+looks))\b",
+    r"(?i)\b(what\s+about\s+(it|this|that))\b",
+    r"(?i)\b(how\s+to\s+use\s+(it|this|that))\b",
+    r"(?i)\b(is\s+(it|this|that)\s+(good|bad|safe|fast|expensive|worth\s+it|real|possible))\b",
+    r"(?i)\b(why\s+is\s+(it|this|that))\b",
+    r"(?i)\b(how\s+(is|are)\s+(it|this|that|they))\b",
+    r"(?i)\b(how\s+it\s+looks)\b",
+    r"(?i)\b(can\s+you\s+(show|describe|explain)\s+(it|how\s+it\s+looks))\b",
+]
+
+PRONOUN_PATTERN = re.compile(r"\b(it|its|this|that|these|those|they|them|their)\b", re.IGNORECASE)
+
+# Keywords indicating genuine real-time / current live information requirements
+REALTIME_INDICATORS = [
+    r"\b(current|currently|latest|today|yesterday|tomorrow|tonight|recent|recently|now|live|news|updates?|fresh)\b",
+    r"\b(202[4-9]|203[0-9])\b",
+    r"\b(price|pricing|cost|costs|stock|stocks|market|valuation|net\s*worth|crypto|bitcoin|eth)\b",
+    r"\b(score|scores|match|winner|won|champion|championship|standings|election|elections|budget)\b",
+    r"\b(weather|temperature|forecast|flight\s*status|release\s*date|launch\s*date)\b",
 ]
 
 # Patterns that indicate factual queries, entities, or real-time info needs
 SEARCH_PATTERNS = [
     r"^(/search|/web|search:|google:|lookup:|browse:|--web)",
-    r"\b(who|what|where|when|why|how|which)\b",
-    r"\b(current|currently|latest|today|yesterday|tomorrow|tonight|recent|recently|now|update|updates|news)\b",
-    r"\b(2020|2021|2022|2023|2024|2025|2026|2027|2028|2029|2030)\b",
-    r"\b(cm|pm|chief minister|prime minister|president|ceo|cto|founder|governor|minister|chancellor|leader|mayor)\b",
-    r"\b(stock|price|market|score|scores|match|winner|won|champion|championship|election|elections|budget)\b",
-    r"\b(weather|temperature|forecast|flight|status|release|released|launch|launched)\b",
-    r"\b(tell me about|info on|details of|who is|what is|meaning of|definition of)\b",
+    r"\b(current|currently|latest|today|yesterday|tomorrow|tonight|recent|recently|now|live|news|updates?)\b",
+    r"\b(202[4-9]|203[0-9])\b",
+    r"\b(cm|pm|chief minister|prime minister|president of|ceo of|cto of|founder of|governor of|chancellor of|mayor of)\b",
+    r"\b(stock|stocks|price|pricing|market|score|scores|match|winner|won|champion|championship|election|elections|budget)\b",
+    r"\b(weather|temperature|forecast|flight\s*status|release\s*date|launch\s*date)\b",
+    r"\b(who is the|who won|what happened to|when was .* released|what is the price of|what is the score of)\b",
+    r"\b(tell me about|info on|details of)\b",
 ]
 
 EXPLICIT_SEARCH_TRIGGERS = [
@@ -51,36 +85,85 @@ EXPLICIT_SEARCH_TRIGGERS = [
 ]
 
 
-def should_trigger_web_search(prompt: str) -> bool:
-    """Detects whether a prompt requires live real-time web search grounding."""
+def extract_subject_from_history(history: Optional[List[Dict[str, Any]]]) -> str:
+    """Extracts the primary subject or entity discussed in recent conversation turns."""
+    if not history:
+        return ""
+
+    # 1. Inspect recent user queries in reverse chronological order
+    for msg in reversed(history):
+        if msg.get("role") == "user":
+            content = msg.get("content", "").strip()
+            # Clean common command triggers and prefixes
+            c = re.sub(r"(?i)^(/search|/web|search:|google:|lookup:|browse:|--web)\s*", "", content)
+            c = re.sub(r"(?i)^(please\s+)?(can\s+you\s+)?(tell\s+me\s+about|what\s+is|who\s+is|explain|describe|info\s+on|details\s+of|search\s+for|lookup)\s+", "", c)
+            c = re.sub(r"[?!.]+$", "", c).strip()
+            # If after stripping we have a clean candidate noun phrase (1 to 8 words)
+            words = c.split()
+            if 1 <= len(words) <= 8 and not any(p in c.lower() for p in ["how are you", "who are you", "hello", "hi"]):
+                return c
+
+    # 2. Inspect recent assistant responses for primary entity definitions
+    for msg in reversed(history):
+        if msg.get("role") == "assistant":
+            content = msg.get("content", "").strip()
+            # Strip think tags if any
+            content = re.sub(r"(?s)<think>.*?</think>", "", content).strip()
+            m = re.search(r"(?:The\s+)?([A-Z][a-zA-Z0-9\s]{2,35}?)\s+(?:is|was|refers\s+to|represents)\b", content)
+            if m:
+                cand = m.group(1).strip()
+                if len(cand.split()) <= 6:
+                    return cand
+
+    return ""
+
+
+def should_trigger_web_search(prompt: str, history: Optional[List[Dict[str, Any]]] = None) -> bool:
+    """Detects whether a prompt requires live real-time web search grounding.
+    
+    Prevents conversational follow-up questions ('how it looks', 'how does it work',
+    'tell me more') from hijacking web search when conversation history provides context.
+    """
     p_lower = prompt.strip().lower()
     if not p_lower:
         return False
 
-    # Check skip patterns (greetings / conversational filler / model identity inquiries)
+    # Check skip patterns (greetings / conversational filler / model identity inquiries / coding)
     for pat in SKIP_PATTERNS:
         if re.search(pat, p_lower):
             return False
 
-    # Check explicit triggers
+    # Check explicit triggers (user explicitly asked for /search or /web)
     for trig in EXPLICIT_SEARCH_TRIGGERS:
         if p_lower.startswith(trig):
             return True
+
+    # Check if this is a conversational follow-up in an ongoing multi-turn session
+    if history:
+        # Check explicit conversational follow-up patterns ("how it looks", "how does it work")
+        for pat in CONVERSATIONAL_FOLLOWUP_PATTERNS:
+            if re.search(pat, p_lower):
+                return False
+
+        # If short query (< 8 words) containing anaphoric pronouns and lacking real-time indicators
+        has_realtime = any(re.search(pat, p_lower) for pat in REALTIME_INDICATORS)
+        if not has_realtime and PRONOUN_PATTERN.search(p_lower) and len(p_lower.split()) <= 8:
+            return False
 
     # Check search patterns
     for pat in SEARCH_PATTERNS:
         if re.search(pat, p_lower):
             return True
 
-    # Questions ending with question mark and having > 2 words
-    if p_lower.endswith("?") and len(p_lower.split()) > 2:
-        return True
-
     return False
 
 
-def extract_search_query(prompt: str) -> str:
-    """Cleans up the user prompt into a focused web search query."""
+def extract_search_query(prompt: str, history: Optional[List[Dict[str, Any]]] = None) -> str:
+    """Cleans up the user prompt into a focused web search query.
+    
+    Resolves anaphoric pronouns ('it', 'its', 'this', 'that', 'they') using the subject
+    from conversation history so that follow-up searches are accurate.
+    """
     q = prompt.strip()
     for trig in EXPLICIT_SEARCH_TRIGGERS:
         if q.lower().startswith(trig):
@@ -90,6 +173,23 @@ def extract_search_query(prompt: str) -> str:
     # Strip conversational prefixes
     q = re.sub(r"^(please\s+)?(can\s+you\s+)?(tell\s+me\s+)?(search\s+for\s+|lookup\s+)?", "", q, flags=re.IGNORECASE).strip()
     q = re.sub(r"[?!.]+$", "", q).strip()
+
+    # Coreference / pronoun resolution using conversation history
+    if history:
+        subject = extract_subject_from_history(history)
+        if subject:
+            # Check if query contains anaphoric pronouns
+            if PRONOUN_PATTERN.search(q):
+                # Replace possessives ("its", "their") with subject's
+                q = re.sub(r"\b(its|their)\b", f"{subject}'s", q, flags=re.IGNORECASE)
+                # Replace pronouns ("it", "this", "that", "these", "those", "they", "them") with subject
+                q = re.sub(r"\b(it|this|that|these|those|they|them)\b", subject, q, flags=re.IGNORECASE)
+            elif len(q.split()) <= 4 and not any(w.lower() in q.lower() for w in subject.split()):
+                # Short follow-up without pronoun (e.g., "latest news", "price today")
+                q = f"{subject} {q}"
+
+    # Strip leftover question wrappers
+    q = re.sub(r"^(what is the|what is|how much is the|how much does|who is the)\s+", "", q, flags=re.IGNORECASE).strip()
     return q if len(q) > 2 else prompt.strip()
 
 

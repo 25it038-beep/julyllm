@@ -235,8 +235,8 @@ class ClientInferenceRuntime:
 
         # Autonomous Real-Time Web Search Grounding
         web_context = ""
-        if getattr(self.config, "enable_web_search", True) and should_trigger_web_search(prompt):
-            search_query = extract_search_query(prompt)
+        if getattr(self.config, "enable_web_search", True) and should_trigger_web_search(prompt, history=history):
+            search_query = extract_search_query(prompt, history=history)
             try:
                 sys.stdout.write(f"\n \033[93m🔍 [HS AI SEARCH]\033[0m Querying live web sources for: '\033[1m{search_query}\033[0m'...\n")
                 sys.stdout.flush()
