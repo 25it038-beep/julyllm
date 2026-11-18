@@ -40,21 +40,24 @@ def detect_client_hardware() -> Dict[str, Any]:
     except Exception:
         pass
 
-    # Recommended thread count: physical cores or min(cpu_count, 6)
-    recommended_threads = max(1, min(cpu_count, 6))
+    # Recommended thread count: physical cores for token generation (avoids cache thrashing)
+    physical_cores = psutil.cpu_count(logical=False) or cpu_count
+    recommended_threads = max(1, min(physical_cores, 8))
+    recommended_batch_threads = max(1, cpu_count)
 
-    # Recommended GPU layers: if GPU VRAM >= 4GB, offload 28 layers (entire 3B model)
+    # Recommended GPU layers: if GPU VRAM >= 4GB, offload ALL layers (-1)
     # If 2-3 GB, offload 16 layers. If CPU-only, 0 layers.
     if gpu_available and vram_total_mb >= 4000:
-        recommended_gpu_layers = 28
+        recommended_gpu_layers = -1  # Full GPU offload for July, Sree, and Gravity
     elif gpu_available and vram_total_mb >= 2000:
-        recommended_gpu_layers = 14
+        recommended_gpu_layers = 16
     else:
         recommended_gpu_layers = 0
 
     return {
         "cpu_threads": cpu_count,
         "recommended_threads": recommended_threads,
+        "recommended_batch_threads": recommended_batch_threads,
         "ram_total_gb": round(ram.total / (1024**3), 2),
         "ram_available_gb": round(ram.available / (1024**3), 2),
         "ram_used_percent": ram.percent,

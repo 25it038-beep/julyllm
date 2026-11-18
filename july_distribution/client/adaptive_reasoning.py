@@ -151,116 +151,151 @@ class AdaptiveReasoningEngine:
         return ThinkingLevel.CONVERSATIONAL, "Conversational / general knowledge / identity inquiry"
 
     @classmethod
-    def get_steering(cls, model_id: str, level: ThinkingLevel, rationale: str = "", is_first_turn: bool = True) -> AdaptiveSteeringConfig:
+    def generate_dynamic_thought(
+        cls,
+        prompt: str,
+        level: ThinkingLevel,
+        user_name: str = "Harshan",
+        opp_persona: str = "female"
+    ) -> str:
+        """
+        Synthesizes an ultra-concise, context-aware 1-line thought.
+        Prefilling this thought inside a CLOSED <think>...</think> block allows
+        the UI to render the thinking process cleanly in ~0.05s while instructing
+        llama.cpp to immediately start generating the answer with zero hidden token lag!
+        """
+        p_clean = (prompt or "").strip()
+        p_lower = p_clean.lower()
+
+        if level == ThinkingLevel.CONVERSATIONAL:
+            if any(w in p_lower for w in ["who is", "who created", "who made", "founder"]):
+                return "Founder & Creator query: State verified facts crediting creator Harshan Seliyan and HS AI Solutions."
+            elif any(w in p_lower for w in ["time", "clock", "date"]):
+                return f"Temporal inquiry: Retrieve verified local time/date and communicate in {opp_persona} tone."
+            elif any(w in p_lower for w in ["location", "where am i", "city", "country"]):
+                return "Geolocation inquiry: State accurate local coordinate and city context."
+            elif any(w in p_lower for w in ["who am i", "my name"]):
+                return f"User identity: Greet {user_name} respectfully with appropriate {opp_persona} persona."
+            else:
+                words = p_clean.split()
+                summary = " ".join(words[:6]) + ("..." if len(words) > 6 else "")
+                return f"Conversational query: '{summary}' -> Formulate direct, accurate, and articulate response."
+
+        elif level == ThinkingLevel.INSTANT:
+            words = p_clean.split()
+            summary = " ".join(words[:6]) + ("..." if len(words) > 6 else "")
+            return f"Instant execution: '{summary}' -> Deliver clean, production-ready code directly."
+
+        elif level == ThinkingLevel.BALANCED:
+            return "Multi-component task -> Structure solution cleanly with verified interfaces."
+
+        else:  # DEEP
+            return "Algorithmic analysis -> Verify invariants, edge cases, and computational bounds."
+
+    @classmethod
+    def get_steering(
+        cls,
+        model_id: str,
+        level: ThinkingLevel,
+        rationale: str = "",
+        is_first_turn: bool = True,
+        prompt: str = ""
+    ) -> AdaptiveSteeringConfig:
         """
         Produces optimal model steering, prefill tokens, and inference hyper-parameters.
+        Prefills a closed, dynamic 1-line thought for reasoning models so llama.cpp
+        begins generating the actual answer immediately without hidden token delay.
         """
         is_sree = "sree" in (model_id or "").lower()
 
-        if level == ThinkingLevel.CONVERSATIONAL:
-            try:
-                from .context_provider import RuntimeContextProvider
-                u = RuntimeContextProvider.get_user_context()
-                t = RuntimeContextProvider.get_temporal_context()
-                l = RuntimeContextProvider.get_location_context()
-                user_name = u.get("preferred_name", "Friend")
-                opp_persona = u.get("opposite_gender_persona", "female")
-                tone_summary = u.get("tone_summary", "Feminine, graceful, charming, warm, and deeply respectful")
-                time_str = t.get("time_short", t.get("time", "Now"))
-                date_str = t.get("date", "Today")
-                loc_str = f"{l.get('city')}, {l.get('region')}, {l.get('country')}"
-                greeting_pref = t.get("greeting", "Hello")
-            except Exception:
-                user_name = "Harshan"
-                opp_persona = "female"
-                tone_summary = "Feminine, graceful, charming, warm, and deeply respectful"
-                time_str = "Now"
-                date_str = "Today"
-                loc_str = "Chennai, Tamil Nadu, India"
-                greeting_pref = "Hello"
+        try:
+            from .context_provider import RuntimeContextProvider
+            u = RuntimeContextProvider.get_user_context()
+            t = RuntimeContextProvider.get_temporal_context()
+            l = RuntimeContextProvider.get_location_context()
+            user_name = u.get("preferred_name", "Friend")
+            opp_persona = u.get("opposite_gender_persona", "female")
+            tone_summary = u.get("tone_summary", "Feminine, graceful, charming, warm, and deeply respectful")
+            time_str = t.get("time_short", t.get("time", "Now"))
+            date_str = t.get("date", "Today")
+            loc_str = f"{l.get('city')}, {l.get('region')}, {l.get('country')}"
+            greeting_pref = t.get("greeting", "Hello")
+        except Exception:
+            user_name = "Harshan"
+            opp_persona = "female"
+            tone_summary = "Feminine, graceful, charming, warm, and deeply respectful"
+            time_str = "Now"
+            date_str = "Today"
+            loc_str = "Chennai, Tamil Nadu, India"
+            greeting_pref = "Hello"
 
+        thought = cls.generate_dynamic_thought(prompt, level, user_name=user_name, opp_persona=opp_persona)
+        closed_prefill = f"<think>\n{thought}\n</think>\n" if is_sree else None
+
+        if level == ThinkingLevel.CONVERSATIONAL:
             if is_first_turn:
                 sys_dir = (
-                    "[EXECUTION DIRECTIVE: CONVERSATIONAL VISIBLE MINIMAL-THINKING MODE]\n"
-                    f"- First Turn Greeting: Acknowledge the user warmly by name ('{user_name}') with an appropriate time-of-day greeting (e.g. '{greeting_pref} {user_name}!').\n"
-                    f"- Visible Minimal Thinking: Show your thinking inside <think>...</think>, keeping it strictly to 1 or 2 brief lines (under 20 tokens).\n"
-                    f"- Answer the User's Actual Question: Provide a direct, thorough, accurate, and high-quality response to the user's specific prompt.\n"
-                    f"- Opposite-Gender Tone Dynamic: You MUST speak in the {opp_persona.upper()} tone ({tone_summary}) based on user's name ({user_name}).\n"
-                    f"- Live Time, Date & Location: Weave in the live local time ({time_str}), date ({date_str}), and location ({loc_str}) if asked or relevant.\n"
-                    f"- Dialogue Style: Direct, intelligent, respectful, and articulate. Do NOT output code blocks unless explicitly requested."
+                    f"[DIRECTIVE: First turn: Greet {user_name} warmly ('{greeting_pref} {user_name}!') in {opp_persona} tone ({tone_summary}). State verified time/date/location if asked, then answer prompt directly.]"
                 )
             else:
                 sys_dir = (
-                    "[EXECUTION DIRECTIVE: CONVERSATIONAL MULTI-TURN CONTINUATION MODE]\n"
-                    f"- Ongoing Conversation: This is a continuation of an active session. You ALREADY greeted the user.\n"
-                    f"- Visible Minimal Thinking: Show your thinking inside <think>...</think>, keeping it strictly to 1 or 2 brief lines (under 20 tokens).\n"
-                    f"- STRICT NO-RE-GREETING INVARIANT: NEVER start your response with '{greeting_pref}', 'Hello', 'Hi', 'Hey', or any greeting phrase! Jump directly into answering the user's specific prompt.\n"
-                    f"- Opposite-Gender Tone Dynamic: Maintain the {opp_persona.upper()} tone ({tone_summary}) consistently.\n"
-                    f"- Live Time, Date & Location: State time ({time_str}), date ({date_str}), or location ({loc_str}) ONLY if the user explicitly asked for them.\n"
-                    f"- Dialogue Style: Direct, natural, and helpful. Do NOT output code blocks unless requested."
+                    f"[DIRECTIVE: Multi-turn continuation: NO RE-GREETINGS. Jump directly into answering the prompt in {opp_persona} tone. Switch topics cleanly.]"
                 )
-            prefill = "<think>\n" if is_sree else None
 
             return AdaptiveSteeringConfig(
                 level=level,
                 temperature=0.7,
-                top_p=0.95,
-                max_thinking_tokens=20,
-                prefill_assistant=prefill,
+                top_p=0.9,
+                max_thinking_tokens=15,
+                prefill_assistant=closed_prefill,
                 system_directive=sys_dir,
                 rationale=rationale or ("First-turn greeting with opposite-gender tone" if is_first_turn else "Multi-turn direct response without re-greeting")
             )
 
         elif level == ThinkingLevel.INSTANT:
             sys_dir = (
-                "[EXECUTION DIRECTIVE: INSTANT CODE-FIRST VISIBLE MINIMAL-THINKING MODE]\n"
-                "- Goal: Produce correct, functional, production-quality code with minimum reasoning overhead and maximum speed.\n"
-                "- Visible Minimal Thinking: Show a single concise line inside <think> stating the plan, then immediately close </think>.\n"
+                "[EXECUTION DIRECTIVE: INSTANT CODE-FIRST ZERO-OVERHEAD MODE]\n"
+                "- Goal: Produce correct, functional, production-quality code with maximum speed.\n"
                 "- Produce the required code blocks, modules, or fixes directly."
             )
-            prefill = "<think>\n" if is_sree else None
             return AdaptiveSteeringConfig(
                 level=level,
                 temperature=0.15,
-                top_p=0.95,
-                max_thinking_tokens=15,
-                prefill_assistant=prefill,
+                top_p=0.9,
+                max_thinking_tokens=10,
+                prefill_assistant=closed_prefill,
                 system_directive=sys_dir,
-                rationale=rationale or "Ultra-fast visible minimal thinking code delivery"
+                rationale=rationale or "Ultra-fast code delivery"
             )
 
         elif level == ThinkingLevel.BALANCED:
             sys_dir = (
-                "[EXECUTION DIRECTIVE: BALANCED VISIBLE FOCUSED-THINKING MODE]\n"
-                "- Goal: Execute multi-component implementation with concise, focused planning.\n"
-                "- Visible Minimal Thinking: Keep internal analysis strictly under 3 brief bullet points inside <think>.\n"
+                "[EXECUTION DIRECTIVE: BALANCED FOCUSED IMPLEMENTATION MODE]\n"
+                "- Goal: Execute multi-component implementation cleanly and directly.\n"
                 "- Jump directly into complete, robust code implementation without repetitive explanation."
             )
-            prefill = "<think>\n" if is_sree else None
             return AdaptiveSteeringConfig(
                 level=level,
                 temperature=0.25,
-                top_p=0.95,
-                max_thinking_tokens=40,
-                prefill_assistant=prefill,
+                top_p=0.9,
+                max_thinking_tokens=25,
+                prefill_assistant=closed_prefill,
                 system_directive=sys_dir,
-                rationale=rationale or "Focused reasoning with fast code generation"
+                rationale=rationale or "Focused reasoning with fast generation"
             )
 
         else:  # DEEP
             sys_dir = (
-                "[EXECUTION DIRECTIVE: DEEP REASONING & ACCURACY MODE]\n"
+                "[EXECUTION DIRECTIVE: DEEP ACCURACY MODE]\n"
                 "- Goal: Solve complex algorithmic, architectural, or security-sensitive challenges with verified correctness.\n"
-                "- Keep step-by-step thinking inside <think> focused and concise; avoid repetitive self-evaluation loops.\n"
                 "- Deliver complete, verified code with proofs and complexity analysis."
             )
-            prefill = "<think>\n" if is_sree else None
             return AdaptiveSteeringConfig(
                 level=level,
-                temperature=0.55,
-                top_p=0.95,
-                max_thinking_tokens=90,
-                prefill_assistant=prefill,
+                temperature=0.5,
+                top_p=0.9,
+                max_thinking_tokens=60,
+                prefill_assistant=closed_prefill,
                 system_directive=sys_dir,
                 rationale=rationale or "Full cognitive reasoning for complex algorithmic depth"
             )

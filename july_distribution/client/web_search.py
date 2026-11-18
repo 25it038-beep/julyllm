@@ -47,6 +47,10 @@ SKIP_PATTERNS = [
     r"(?i)\b(write\s+(a\s+)?(function|script|code|program|class|method|component|app|algorithm|test))\b",
     r"(?i)\b(fix\s+(this\s+)?(error|bug|code|issue|exception|traceback|syntax))\b",
     r"(?i)\b(implement|refactor|debug|compile|benchmark|optimize\s+code)\b",
+    # Math, arithmetic, logic, and calculation - resolve via local LLM / CAS
+    r"\b(\d+\s*[\+\-\*\/\^\=]\s*\d+)\b",
+    r"(?i)\b(what\s+is\s+\d+|calculate|solve\s+(the\s+)?(equation|integral|derivative|math|problem))\b",
+    r"(?i)\b(what\s+is\s+(a\s+)?(variable|function|pointer|array|loop|class|object|recursion|stack|heap|lambda|closure))\b",
 ]
 
 # Conversational follow-up patterns referring to previously discussed context
@@ -173,8 +177,8 @@ def should_trigger_web_search(prompt: str, history: Optional[List[Dict[str, Any]
         if re.search(pat, p_lower):
             return True
 
-    # Question ending with ? and having > 2 words (that wasn't skipped above)
-    if p_lower.endswith("?") and len(p_lower.split()) > 2:
+    # Question ending with ? only triggers web search if it includes real-time indicators
+    if p_lower.endswith("?") and any(re.search(pat, p_lower) for pat in REALTIME_INDICATORS):
         return True
 
     return False
@@ -453,9 +457,12 @@ def format_search_context(query: str, results: List[Dict[str, str]]) -> str:
         "Verified live facts from the web with source links:"
     ]
 
-    for idx, r in enumerate(results, 1):
+    for idx, r in enumerate(results[:3], 1):
         u = r.get("url", "").strip()
         url_part = f" | Source URL: {u}" if u else ""
-        lines.append(f"{idx}. {r['title']}: {r['snippet']}{url_part}")
+        snip = r.get('snippet', '').strip()
+        if len(snip) > 160:
+            snip = snip[:157] + "..."
+        lines.append(f"{idx}. {r.get('title', 'Source')}: {snip}{url_part}")
 
     return "\n".join(lines)

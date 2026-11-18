@@ -47,7 +47,7 @@ class ClientConfig:
     hardware_mode: str = "auto"  # auto, cuda, cpu
     context_length: int = 4096
     n_threads: int = 4
-    n_batch: int = 64
+    n_batch: int = 512
     n_gpu_layers: int = 0
     temperature: float = 0.7
     top_p: float = 0.9

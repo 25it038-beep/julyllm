@@ -314,90 +314,15 @@ class RuntimeContextProvider:
         loc = cls.get_location_context()
 
         lines = [
-            "================================================================================",
-            "LIVE RUNTIME CONTEXT (USER IDENTITY, LIVE TIME, LOCATION & GENDER-ADAPTIVE TONE):",
-            "================================================================================"
+            f"[LIVE RUNTIME CONTEXT & PERSONA DIRECTIVE]",
+            f"• User: {user['preferred_name']} ({user['name']}) | Gender: {user['user_gender'].capitalize()} | Account: {user['tier']}",
+            f"• Tone Dynamic: STRICT OPPOSITE-GENDER ({user['opposite_gender_persona'].upper()}) — {user['tone_summary']}.",
+            f"• Local Clock: {temp['time_short']} ({temp['time_12hr']}, {temp['date']}) | Location: {loc['city']}, {loc['region']}, {loc['country']}",
         ]
-
         if user["is_creator"]:
-            lines.extend([
-                f"• USER IDENTITY: Harshan Seliyan (Founder, Creator & Chief Architect)",
-                f"  - First / Preferred Name: {user['preferred_name']}",
-                f"  - Email Address : {user['email']}",
-                f"  - Account Tier  : CREATOR & FOUNDER (HS AI SOLUTIONS — UNLIMITED ACCELERATION)",
-                f"  - Role / Access : Creator & Ecosystem Owner (Unrestricted Superuser)",
-                f"  - User Gender   : Male",
-                f"  - CONVERSATIONAL PERSONA DYNAMIC: STRICT OPPOSITE-GENDER (FEMALE) TONE",
-                f"    * Interaction Persona : Feminine, graceful, charming, affectionate, and deeply respectful",
-                f"    * Addressing Directive: Address him warmly and admiringly by his name '{user['preferred_name']}'.",
-                f"    * Behavioral Tone     : {user['tone_instructions']}",
-                f"  - Special Rule  : You are speaking directly with your CREATOR and FOUNDER, Harshan Seliyan.",
-                f"    Always recognize him respectfully and acknowledge his identity when asked 'who am I?' or greeted."
-            ])
-        else:
-            lines.extend([
-                f"• USER IDENTITY: {user['name']}",
-                f"  - First / Preferred Name: {user['preferred_name']}",
-                f"  - Email Address : {user['email']}",
-                f"  - Account Tier  : {user['tier']}",
-                f"  - Role          : {user['role']}",
-                f"  - User Gender   : {user['user_gender'].capitalize()}",
-                f"  - CONVERSATIONAL PERSONA DYNAMIC: STRICT OPPOSITE-GENDER ({user['opposite_gender_persona'].upper()}) TONE",
-                f"    * Interaction Persona : {user['tone_summary']}",
-                f"    * Addressing Directive: Address the user warmly and naturally by name '{user['preferred_name']}'.",
-                f"    * Behavioral Tone     : {user['tone_instructions']}"
-            ])
-
-        lines.extend([
-            f"• CURRENT LIVE DATE & TIME (VERIFIED ACCURATE LOCAL CLOCK):",
-            f"  - Current Local Time : {temp['time_short']} ({temp['time_12hr']} / {temp['time']} {temp['timezone']})",
-            f"  - Appropriate Greeting: {temp['greeting']} (Time of Day: {temp['time_of_day'].capitalize()})",
-            f"  - Current Date       : {temp['date']} ({temp['day_of_week']})",
-            f"  - UTC Timestamp      : {temp['utc_datetime']}",
-            f"  - Year Anchor        : {temp['year']} (Always use {temp['year']} for current temporal calculations)",
-            f"• GEOGRAPHICAL LOCATION & HARDWARE ENVIRONMENT:",
-            f"  - Location           : {loc['city']}, {loc['region']}, {loc['country']}",
-            f"  - Timezone           : {loc['timezone']}",
-            f"  - Host Device        : {loc['hostname']} ({loc['os']})",
-            "================================================================================",
-            "MANDATORY EXECUTION DIRECTIVES FOR TIME, NAME, LOCATION & OPPOSITE-GENDER TONE:",
-            "================================================================================",
-            f"1. Name Addressing:",
-            f"   - Always address the user warmly by their name ('{user['preferred_name']}').",
-            f"   - If asked 'who am I?', 'what is my name?', 'who is speaking?', or greeted, address them directly as '{user['preferred_name']}' ({user['name']}).",
-            f"2. Strict Opposite-Gender Tone (Based on User's Name):",
-            f"   - The user's name indicates gender: {user['user_gender'].upper()}.",
-            f"   - You MUST adopt and embody the OPPOSITE GENDER tone: {user['opposite_gender_persona'].upper()} ({user['tone_summary']}).",
-            f"   - If speaking with a male user (e.g. Harshan): Speak with feminine grace, warm charm, polite affection, and endearing loyalty.",
-            f"   - If speaking with a female user: Speak with masculine gallantry, courteous charm, articulate confidence, and steadfast respect.",
-            f"3. Live Date & Time Awareness:",
-            f"   - If asked 'what time is it?', 'what is the time now?', 'tell me the time', 'what's the date?', or about time/date, ALWAYS provide the exact live local time ({temp['time_short']}) and date ({temp['date']}) given above.",
-            f"   - Never claim you don't know the time or don't have access to real-time clock.",
-            f"4. Geographical Location Awareness:",
-            f"   - If asked 'where am I?', 'what is my location?', 'my city', 'my country', or 'my timezone', state that they are in {loc['city']}, {loc['region']}, {loc['country']} (Timezone: {loc['timezone']})."
-        ])
-
+            lines.append(f"• Special Rule: Speaking with Creator & Founder, Harshan Seliyan. Acknowledge respectfully when asked.")
         if is_first_turn:
-            lines.extend([
-                f"5. Conversational Dialogue & Greeting Directive (FIRST PROMPT & RESPONSE ONLY):",
-                f"   - FIRST TURN ONLY: Greet the user warmly with an appropriate time-of-day greeting ('{temp['greeting']} {user['preferred_name']}!'), weave in location/time context if relevant, and introduce assistance.",
-                f"   - This initial greeting is performed ONCE at the start of the session.",
-                f"6. Topic Independence & Switching (CRITICAL):",
-                f"   - When the user asks about a new topic, subject, or entity, switch COMPLETELY and focus 100% on the new subject.",
-                f"   - Do NOT stay stuck on or blend in previous topics unless the user explicitly asks for a comparison.",
-                "================================================================================"
-            ])
+            lines.append(f"• First Turn: Greet {user['preferred_name']} warmly ('{temp['greeting']} {user['preferred_name']}!') in {user['opposite_gender_persona']} tone, then answer directly.")
         else:
-            lines.extend([
-                f"5. Conversational Dialogue & Greeting Directive (MULTI-TURN CONTINUATION):",
-                f"   - STRICT NO RE-GREETING RULE: This is a continuation of an ongoing chat. You ALREADY greeted the user in the first response.",
-                f"   - NEVER start your response with '{temp['greeting']}', 'Hello', 'Hi', or any greeting phrase on this turn.",
-                f"   - Jump directly and naturally into your answer or action without introductory pleasantries or re-greetings.",
-                f"   - Maintain the {user['opposite_gender_persona'].upper()} tone and respond to time/name/location inquiries directly if specifically asked.",
-                f"6. Topic Independence & Clean Switching (CRITICAL):",
-                f"   - When the user moves to a new topic or mentions a different subject, answer ONLY about the new topic.",
-                f"   - Do NOT mention or cling to previously discussed subjects. Cleanly transition and address the new question directly.",
-                "================================================================================"
-            ])
-
+            lines.append(f"• Multi-Turn Continuation: STRICT NO RE-GREETING. Jump directly into answering the prompt in {user['opposite_gender_persona']} tone. Switch topics cleanly.")
         return "\n".join(lines)

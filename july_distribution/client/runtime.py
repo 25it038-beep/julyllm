@@ -17,6 +17,7 @@ import os
 import re
 import sys
 import time
+import psutil
 from pathlib import Path
 from typing import Optional, Dict, Any, Generator
 
@@ -148,14 +149,26 @@ class ClientInferenceRuntime:
         tag = getattr(self, "current_model_id", "july").upper()
         print(f"[{tag} RUNTIME] Initializing llama.cpp engine on: {device_desc}...")
 
+        physical_cores = psutil.cpu_count(logical=False) or os.cpu_count() or 4
+        logical_cores = os.cpu_count() or physical_cores
+        gen_threads = getattr(self.config, "n_threads", None)
+        if not gen_threads or gen_threads <= 0:
+            gen_threads = max(1, min(physical_cores, 8))
+        batch_threads = max(1, logical_cores)
+        batch_size = max(512, getattr(self.config, "n_batch", 512) or 512)
+
         try:
             use_flash = bool(n_gpu > 0 and getattr(self.config, "flash_attention", True))
             self.llm = llama_cpp.Llama(
                 model_path=str(model_path),
-                n_ctx=4096,
+                n_ctx=min(getattr(self.config, "context_length", 4096) or 4096, 4096),
                 n_gpu_layers=n_gpu,
-                n_threads=budget["recommended_threads"],
-                n_batch=512,
+                n_threads=gen_threads,
+                n_threads_batch=batch_threads,
+                n_batch=batch_size,
+                n_ubatch=512,
+                use_mmap=True,
+                use_mlock=False,
                 flash_attn=use_flash,
                 logits_all=False,
                 verbose=False
@@ -168,10 +181,14 @@ class ClientInferenceRuntime:
                 print(f"[{tag} RUNTIME] GPU offload encountered issue ({e}). Falling back to pure CPU...")
                 self.llm = llama_cpp.Llama(
                     model_path=str(model_path),
-                    n_ctx=4096,
+                    n_ctx=min(getattr(self.config, "context_length", 4096) or 4096, 4096),
                     n_gpu_layers=0,
-                    n_threads=budget["recommended_threads"],
-                    n_batch=512,
+                    n_threads=gen_threads,
+                    n_threads_batch=batch_threads,
+                    n_batch=batch_size,
+                    n_ubatch=512,
+                    use_mmap=True,
+                    use_mlock=False,
                     logits_all=False,
                     verbose=False
                 )
@@ -278,11 +295,11 @@ class ClientInferenceRuntime:
             user_think_override = None
         active_level, level_rationale = AdaptiveReasoningEngine.classify_task(prompt, user_override=user_think_override)
         steering = AdaptiveReasoningEngine.get_steering(
-            self.current_model_id, active_level, level_rationale, is_first_turn=is_first_turn
+            self.current_model_id, active_level, level_rationale, is_first_turn=is_first_turn, prompt=prompt
         )
 
-        # Reasoning Orchestration Invariants Pre-pass (Skip in INSTANT and CONVERSATIONAL modes)
-        if active_level not in (ThinkingLevel.INSTANT, ThinkingLevel.CONVERSATIONAL):
+        # Reasoning Orchestration Invariants Pre-pass (Only in DEEP mode for zero latency)
+        if active_level == ThinkingLevel.DEEP:
             guidance = self.orchestrator.prepare_reasoning_guidance(prompt)
         else:
             guidance = None
@@ -358,21 +375,20 @@ class ClientInferenceRuntime:
             max_tokens=tokens_to_gen,
             temperature=eff_temp,
             top_p=eff_top_p,
+            top_k=40,
+            min_p=0.05,
             stop=model_stops,
             stream=True
         )
 
         full_response = []
-        max_think = getattr(steering, "max_thinking_tokens", None)
-        in_think = False
-        think_token_count = 0
-        suppress_thinking = False
 
-        # If assistant prompt was prefilled with an open <think> tag, emit it so the UI shows the thinking process
-        if steering.prefill_assistant and "<think>" in steering.prefill_assistant and "</think>" not in steering.prefill_assistant:
-            in_think = True
-            full_response.append("<think>\n")
-            yield "<think>\n"
+        # If assistant prompt was prefilled (e.g. closed minimal <think> for SREE),
+        # emit it to the stream immediately so the UI highlights the thinking box
+        # and immediately streams the result tokens without delay!
+        if steering.prefill_assistant:
+            full_response.append(steering.prefill_assistant)
+            yield steering.prefill_assistant
 
         for chunk in stream:
             if cancel_event and cancel_event.is_set():
@@ -380,53 +396,14 @@ class ClientInferenceRuntime:
             choices = chunk.get("choices", [])
             if choices:
                 delta = choices[0].get("text", "")
-                if not delta:
-                    continue
-
-                # Detect <think> opening tag
-                if "<think>" in delta:
-                    in_think = True
-                    think_token_count = 0
-                    suppress_thinking = False
-
-                if in_think:
-                    if "</think>" in delta:
-                        in_think = False
-                        suppress_thinking = False
-                        full_response.append(delta)
-                        yield delta
-                        continue
-
-                    if suppress_thinking:
-                        # Suppress excessive thinking tokens beyond max_think
-                        continue
-
-                    think_token_count += 1
-                    if max_think is not None and think_token_count >= max_think:
-                        # Enforce minimal thinking: immediately close think block and transition to direct output
-                        close_marker = "\n</think>\n"
-                        full_response.append(close_marker)
-                        yield close_marker
-                        in_think = False
-                        suppress_thinking = True
-                        continue
-
-                    full_response.append(delta)
-                    yield delta
-                else:
-                    if suppress_thinking:
-                        if "</think>" in delta:
-                            suppress_thinking = False
-                        continue
+                if delta:
                     full_response.append(delta)
                     yield delta
 
         raw_text = "".join(full_response)
 
-        # Post-stream verification & validation check (Skip in INSTANT and CONVERSATIONAL modes for zero-overhead speed)
-        if active_level in (ThinkingLevel.INSTANT, ThinkingLevel.CONVERSATIONAL):
-            logged_text = raw_text
-        else:
+        # Post-stream verification & validation check (Only run in DEEP mode for zero latency)
+        if active_level == ThinkingLevel.DEEP:
             verified_res = self.orchestrator.validate_and_synthesize_response(prompt, raw_text)
             if verified_res.corrections_applied and verified_res.verified_final_response != raw_text:
                 # Yield post-validation synthesis note
@@ -434,6 +411,8 @@ class ClientInferenceRuntime:
                 logged_text = verified_res.verified_final_response
             else:
                 logged_text = raw_text
+        else:
+            logged_text = raw_text
 
         # Record to history with model attribution
         self.customizer.log_message(session_id, "user", prompt, model=self.current_model_id)

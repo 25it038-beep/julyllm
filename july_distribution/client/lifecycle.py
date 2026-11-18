@@ -181,7 +181,9 @@ class HardwareMemoryBudgeter:
                 pass
 
         cpu_threads = os.cpu_count() or 4
-        recommended_threads = max(1, min(cpu_threads, 6))
+        physical_cores = psutil.cpu_count(logical=False) or cpu_threads
+        recommended_threads = max(1, min(physical_cores, 8))
+        recommended_batch_threads = max(1, cpu_threads)
 
         # 3. Dynamic Memory-Aware GPU Layer Allocation (Partial Offload)
         model_mb = model_size_bytes / (1024 * 1024)
@@ -217,6 +219,7 @@ class HardwareMemoryBudgeter:
             "total_layers": total_layers,
             "recommended_gpu_layers": recommended_gpu_layers,
             "recommended_threads": recommended_threads,
+            "recommended_batch_threads": recommended_batch_threads,
             "target_context": target_context,
             "offload_strategy": offload_strategy,
             "mb_per_layer": round(mb_per_layer, 2)
@@ -497,7 +500,11 @@ class ModelLifecyclePipeline:
                 n_ctx=4096,
                 n_gpu_layers=n_gpu,
                 n_threads=budget["recommended_threads"],
-                n_batch=512,
+                n_threads_batch=budget.get("recommended_batch_threads", budget["recommended_threads"]),
+                n_batch=1024,
+                n_ubatch=512,
+                use_mmap=True,
+                use_mlock=False,
                 flash_attn=bool(n_gpu > 0),
                 logits_all=False,
                 verbose=False
@@ -511,7 +518,11 @@ class ModelLifecyclePipeline:
                         n_ctx=4096,
                         n_gpu_layers=0,
                         n_threads=budget["recommended_threads"],
-                        n_batch=512,
+                        n_threads_batch=budget.get("recommended_batch_threads", budget["recommended_threads"]),
+                        n_batch=1024,
+                        n_ubatch=512,
+                        use_mmap=True,
+                        use_mlock=False,
                         logits_all=False,
                         verbose=False
                     )
