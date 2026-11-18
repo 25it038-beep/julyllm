@@ -1982,6 +1982,7 @@ def cmd_chat(args):
                     print(f"\n {UI.BOLD}{UI.CYAN}Available Commands:{UI.RESET}")
                     print(f"   {UI.CYAN}/whoami{UI.RESET}         - View active authenticated identity, tier & creator badge")
                     print(f"   {UI.CYAN}/context{UI.RESET}        - View live runtime context (Date, Time, Location & Host)")
+                    print(f"   {UI.CYAN}/search <query>{UI.RESET} - Ground response with live real-time web facts & internet data")
                     print(f"   {UI.CYAN}/model <july|gravity|download|cancel|status>{UI.RESET} - Select or background-download model")
                     print(f"   {UI.CYAN}/models{UI.RESET}                 - List all registered models and specifications")
                     print(f"   {UI.CYAN}/hardware{UI.RESET}               - Real-time CPU, RAM, GPU, VRAM & utilization telemetry")
@@ -2139,6 +2140,14 @@ def cmd_chat(args):
                             continue
                     else:
                         print(f" {UI.YELLOW}Usage:{UI.RESET} /file <path_to_text_file>\n")
+                        continue
+
+                if c in ("/search", "/web", "/google", "/lookup"):
+                    if len(cmd_parts) > 1:
+                        target_query = " ".join(cmd_parts[1:]).strip()
+                        user_input = f"Search the web for: {target_query}"
+                    else:
+                        print(f"\n  {UI.YELLOW}Usage:{UI.RESET} {UI.CYAN}/search <query>{UI.RESET} - Search live web sources\n")
                         continue
 
                 if c in ("/visual", "/view", "/preview"):

@@ -382,6 +382,9 @@ class RuntimeContextProvider:
                 f"5. Conversational Dialogue & Greeting Directive (FIRST PROMPT & RESPONSE ONLY):",
                 f"   - FIRST TURN ONLY: Greet the user warmly with an appropriate time-of-day greeting ('{temp['greeting']} {user['preferred_name']}!'), weave in location/time context if relevant, and introduce assistance.",
                 f"   - This initial greeting is performed ONCE at the start of the session.",
+                f"6. Topic Independence & Switching (CRITICAL):",
+                f"   - When the user asks about a new topic, subject, or entity, switch COMPLETELY and focus 100% on the new subject.",
+                f"   - Do NOT stay stuck on or blend in previous topics unless the user explicitly asks for a comparison.",
                 "================================================================================"
             ])
         else:
@@ -391,6 +394,9 @@ class RuntimeContextProvider:
                 f"   - NEVER start your response with '{temp['greeting']}', 'Hello', 'Hi', or any greeting phrase on this turn.",
                 f"   - Jump directly and naturally into your answer or action without introductory pleasantries or re-greetings.",
                 f"   - Maintain the {user['opposite_gender_persona'].upper()} tone and respond to time/name/location inquiries directly if specifically asked.",
+                f"6. Topic Independence & Clean Switching (CRITICAL):",
+                f"   - When the user moves to a new topic or mentions a different subject, answer ONLY about the new topic.",
+                f"   - Do NOT mention or cling to previously discussed subjects. Cleanly transition and address the new question directly.",
                 "================================================================================"
             ])
 

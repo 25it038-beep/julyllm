@@ -301,7 +301,12 @@ class ClientInferenceRuntime:
             formatted += "<|im_end|>\n"
 
             for msg in history:
-                formatted += f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
+                m_role = msg.get("role", "user")
+                m_content = msg.get("content", "").strip()
+                # Clean thinking scratchpads from previous turns to prevent topic inertia
+                if m_role == "assistant":
+                    m_content = re.sub(r"(?s)<think>.*?</think>", "", m_content).strip()
+                formatted += f"<|im_start|>{m_role}\n{m_content}<|im_end|>\n"
 
             formatted += "<|im_start|>user\n"
             if web_context:
@@ -329,7 +334,11 @@ class ClientInferenceRuntime:
             formatted += "<|eot_id|>"
 
             for msg in history:
-                formatted += f"<|start_header_id|>{msg['role']}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"
+                m_role = msg.get("role", "user")
+                m_content = msg.get("content", "").strip()
+                if m_role == "assistant":
+                    m_content = re.sub(r"(?s)<think>.*?</think>", "", m_content).strip()
+                formatted += f"<|start_header_id|>{m_role}<|end_header_id|>\n\n{m_content}<|eot_id|>"
 
             formatted += "<|start_header_id|>user<|end_header_id|>\n\n"
             if web_context:

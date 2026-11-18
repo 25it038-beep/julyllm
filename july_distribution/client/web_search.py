@@ -76,18 +76,25 @@ REALTIME_INDICATORS = [
 
 # Patterns that indicate factual queries, entities, or real-time info needs
 SEARCH_PATTERNS = [
-    r"^(/search|/web|search:|google:|lookup:|browse:|--web)",
+    r"^(/search|search\b|search:|web\s+search\b|/web\b|google\b|google:|lookup\b|lookup:|browse\b|browse:|--web)",
     r"\b(current|currently|latest|today|yesterday|tomorrow|tonight|recent|recently|now|live|news|updates?)\b",
-    r"\b(202[4-9]|203[0-9])\b",
-    r"\b(cm|pm|chief minister|prime minister|president of|ceo of|cto of|founder of|governor of|chancellor of|mayor of)\b",
-    r"\b(stock|stocks|price|pricing|market|score|scores|match|winner|won|champion|championship|election|elections|budget)\b",
-    r"\b(weather|temperature|forecast|flight\s*status|release\s*date|launch\s*date)\b",
-    r"\b(who is the|who won|what happened to|when was .* released|what is the price of|what is the score of)\b",
-    r"\b(tell me about|info on|details of)\b",
+    r"\b(202[0-9]|203[0-9])\b",
+    r"\b(cm|pm|chief minister|prime minister|president|ceo|cto|founder|governor|minister|chancellor|leader|mayor)\b",
+    r"\b(stock|stocks|price|pricing|cost|market|score|scores|match|winner|won|champion|championship|election|elections|budget)\b",
+    r"\b(weather|temperature|forecast|flight\s*status|release\s*date|launch\s*date|released|launched)\b",
+    r"\b(who\s+is|who\s+was|who\s+are|who\s+won|who\s+founded|who\s+created)\b",
+    r"\b(what\s+is|what\s+was|what\s+are|what\s+happened|what\s+does.*mean|meaning\s+of|definition\s+of)\b",
+    r"\b(where\s+is|where\s+are|where\s+was|when\s+was|when\s+is|when\s+did)\b",
+    r"\b(tell\s+me\s+about|info\s+on|details\s+of|information\s+about)\b",
+    r"\b(how\s+much\s+is|how\s+many.*in\s+the\s+world|capital\s+of|population\s+of)\b",
 ]
 
 EXPLICIT_SEARCH_TRIGGERS = [
-    "/search", "/web", "search:", "google:", "lookup:", "browse:", "--web"
+    r"^(/search|search\b|search:|web\s+search\b|/web\b|google\b|google:|lookup\b|lookup:|browse\b|browse:|--web)",
+    r"\b(search\s+(the\s+|on\s+)?(web|internet|online|google))\b",
+    r"\b(do\s+a\s+web\s+search|perform\s+a\s+web\s+search|look\s*up\s+on\s+the\s+web)\b",
+    r"\b(look\s*up\s+online|search\s+online|find\s+online)\b",
+    r"\b(search\s+for|search\s+about|look\s*up)\b",
 ]
 
 
@@ -101,7 +108,7 @@ def extract_subject_from_history(history: Optional[List[Dict[str, Any]]]) -> str
         if msg.get("role") == "user":
             content = msg.get("content", "").strip()
             # Clean common command triggers and prefixes
-            c = re.sub(r"(?i)^(/search|/web|search:|google:|lookup:|browse:|--web)\s*", "", content)
+            c = re.sub(r"(?i)^(/search|search\b|search:|web\s+search\b|/web\b|google\b|google:|lookup\b|browse\b|--web)\s*", "", content)
             c = re.sub(r"(?i)^(please\s+)?(can\s+you\s+)?(tell\s+me\s+about|what\s+is|who\s+is|explain|describe|info\s+on|details\s+of|search\s+for|lookup)\s+", "", c)
             c = re.sub(r"[?!.]+$", "", c).strip()
             # If after stripping we have a clean candidate noun phrase (1 to 8 words)
@@ -139,9 +146,9 @@ def should_trigger_web_search(prompt: str, history: Optional[List[Dict[str, Any]
         if re.search(pat, p_lower):
             return False
 
-    # Check explicit triggers (user explicitly asked for /search or /web)
-    for trig in EXPLICIT_SEARCH_TRIGGERS:
-        if p_lower.startswith(trig):
+    # Check explicit triggers (e.g. "search python", "/web", "web search")
+    for pat in EXPLICIT_SEARCH_TRIGGERS:
+        if re.search(pat, p_lower):
             return True
 
     # Check if this is a conversational follow-up in an ongoing multi-turn session
@@ -161,61 +168,103 @@ def should_trigger_web_search(prompt: str, history: Optional[List[Dict[str, Any]
         if re.search(pat, p_lower):
             return True
 
+    # Question ending with ? and having > 2 words (that wasn't skipped above)
+    if p_lower.endswith("?") and len(p_lower.split()) > 2:
+        return True
+
     return False
+
+
+# Strict elliptical attribute follow-up patterns (e.g. user asks "latest news" or "price today" without naming entity)
+ELLIPTICAL_ATTRIBUTE_QUERIES = [
+    r"^(latest\s+news|news|updates?)$",
+    r"^(current\s+)?(price|cost|pricing|valuation|stock(\s+price)?|net\s*worth)$",
+    r"^(specs|specifications|features|details)$",
+    r"^(release\s*date|launch\s*date)$",
+    r"^(who\s+is\s+the\s+ceo|who\s+founded|who\s+is\s+the\s+founder)$",
+]
+
+
+def is_elliptical_attribute_query(q: str) -> bool:
+    """Checks whether a short query is an attribute-only lookup lacking a subject noun."""
+    clean = q.strip().lower()
+    clean = re.sub(r"[?!.]+$", "", clean).strip()
+    return any(re.search(pat, clean) for pat in ELLIPTICAL_ATTRIBUTE_QUERIES)
 
 
 def extract_search_query(prompt: str, history: Optional[List[Dict[str, Any]]] = None) -> str:
     """Cleans up the user prompt into a focused web search query.
     
     Resolves anaphoric pronouns ('it', 'its', 'this', 'that', 'they') using the subject
-    from conversation history so that follow-up searches are accurate.
+    from conversation history only when referring to the existing subject.
+    Never pollutes new topic inquiries with previous subjects.
     """
-    q = prompt.strip()
-    for trig in EXPLICIT_SEARCH_TRIGGERS:
-        if q.lower().startswith(trig):
-            q = q[len(trig):].strip()
-            break
+    original = prompt.strip()
+    c = original
 
-    # Strip conversational prefixes
-    q = re.sub(r"^(please\s+)?(can\s+you\s+)?(tell\s+me\s+)?(search\s+for\s+|lookup\s+)?", "", q, flags=re.IGNORECASE).strip()
-    q = re.sub(r"[?!.]+$", "", q).strip()
+    # Strip slash commands: /search, /web, /google, /lookup
+    c = re.sub(r"^/(search|web|google|lookup)\s*", "", c, flags=re.IGNORECASE).strip()
 
-    # Coreference / pronoun resolution using conversation history
+    # Strip explicit search prefixes and conversational preambles
+    pattern = (
+        r"^(?:(?:can|could|would)\s+you\s+|please\s+)?(?:do\s+a\s+|perform\s+a\s+)?"
+        r"(?:search\s+(?:the\s+|on\s+)?(?:web|internet|online|google)\s+(?:for|about|on)?|"
+        r"web\s+search\s+(?:for|about|on)?|"
+        r"search\s+(?:for|about|on)?|"
+        r"look\s*up\s+(?:for|about|on)?|"
+        r"google\s+(?:for|about|on)?|"
+        r"browse\s+(?:for|about|on)?|"
+        r"find\s+(?:me\s+)?(?:info\s+on|details\s+about|information\s+about)?)\s*"
+    )
+    c = re.sub(pattern, "", c, flags=re.IGNORECASE).strip()
+
+    # Strip conversational wrappers
+    c = re.sub(r"^(?:please\s+)?(?:can\s+you\s+)?(?:tell\s+me\s+about|tell\s+me|info\s+on|details\s+of|explain|describe|what\s+about)\s+", "", c, flags=re.IGNORECASE).strip()
+    c = re.sub(r"[?!.]+$", "", c).strip()
+
+    # Coreference resolution using conversation history ONLY when pronouns or elliptical queries are present
     if history:
         subject = extract_subject_from_history(history)
         if subject:
-            # Check if query contains anaphoric pronouns
-            if PRONOUN_PATTERN.search(q):
+            # Case A: Explicit anaphoric pronouns referring to the ongoing topic
+            if PRONOUN_PATTERN.search(c):
                 # Replace possessives ("its", "their") with subject's
-                q = re.sub(r"\b(its|their)\b", f"{subject}'s", q, flags=re.IGNORECASE)
+                c = re.sub(r"\b(its|their)\b", f"{subject}'s", c, flags=re.IGNORECASE)
                 # Replace pronouns ("it", "this", "that", "these", "those", "they", "them") with subject
-                q = re.sub(r"\b(it|this|that|these|those|they|them)\b", subject, q, flags=re.IGNORECASE)
-            elif len(q.split()) <= 4 and not any(w.lower() in q.lower() for w in subject.split()):
-                # Short follow-up without pronoun (e.g., "latest news", "price today")
-                q = f"{subject} {q}"
+                c = re.sub(r"\b(it|this|that|these|those|they|them)\b", subject, c, flags=re.IGNORECASE)
+            # Case B: Elliptical queries with NO entity (e.g., "latest news", "current price")
+            elif is_elliptical_attribute_query(c):
+                c = f"{subject} {c}"
 
     # Strip leftover question wrappers
-    q = re.sub(r"^(what is the|what is|how much is the|how much does|who is the)\s+", "", q, flags=re.IGNORECASE).strip()
-    return q if len(q) > 2 else prompt.strip()
+    c = re.sub(r"^(?:what\s+is\s+the|what\s+is|what\s+are|who\s+is\s+the|who\s+is|who\s+was|where\s+is|when\s+was|how\s+much\s+is\s+the|how\s+much\s+does)\s+", "", c, flags=re.IGNORECASE).strip()
+    return c if len(c) > 1 else original
 
 
 def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, str]]:
-    """Performs live web search without requiring third-party API keys."""
-    results = []
+    """Performs multi-tier resilient live web search without requiring third-party API keys.
+    
+    Tiers:
+    1. DuckDuckGo HTML Search
+    2. Bing Web Search scraping fallback
+    3. DuckDuckGo Lite Search fallback
+    4. Wikipedia REST Summary & OpenSearch fallback
+    5. DuckDuckGo Instant Answer API fallback
+    """
+    results: List[Dict[str, str]] = []
     encoded_query = urllib.parse.quote(query)
 
     # Strategy 1: Primary DuckDuckGo HTML Search
-    url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Referer": "https://html.duckduckgo.com/",
-    }
-    req = urllib.request.Request(url, headers=headers)
-
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Referer": "https://html.duckduckgo.com/",
+        }
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=6) as resp:
             content = resp.read().decode("utf-8", errors="ignore")
             snippet_matches = re.findall(r'<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</a>', content, re.DOTALL)
             title_matches = re.findall(r'<a[^>]+class="[^"]*result__a[^"]*"[^>]*>(.*?)</a>', content, re.DOTALL)
@@ -228,7 +277,32 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
     except Exception:
         pass
 
-    # Strategy 2: Fallback DuckDuckGo Lite Search
+    # Strategy 2: Bing Web Search Fallback
+    if len(results) < 2:
+        try:
+            bing_url = f"https://www.bing.com/search?q={encoded_query}"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
+            }
+            req = urllib.request.Request(bing_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                body = resp.read().decode("utf-8", errors="ignore")
+                blocks = re.findall(r'<li class="b_algo"[^>]*>(.*?)</li>', body, re.DOTALL)
+                for b in blocks:
+                    t_match = re.search(r'<h2[^>]*><a[^>]*>(.*?)</a>', b, re.DOTALL)
+                    s_match = re.search(r'<p[^>]*>(.*?)</p>', b, re.DOTALL)
+                    if t_match and s_match:
+                        t = html.unescape(re.sub(r"<[^>]+>", "", t_match.group(1)).strip())
+                        s = html.unescape(re.sub(r"<[^>]+>", "", s_match.group(1)).strip())
+                        if s and len(s) > 15:
+                            results.append({"title": t, "snippet": s})
+                            if len(results) >= max_results:
+                                break
+        except Exception:
+            pass
+
+    # Strategy 3: Fallback DuckDuckGo Lite Search
     if len(results) < 2:
         try:
             lite_url = "https://lite.duckduckgo.com/lite/"
@@ -237,7 +311,7 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 "Content-Type": "application/x-www-form-urlencoded"
             })
-            with urllib.request.urlopen(lite_req, timeout=8) as resp:
+            with urllib.request.urlopen(lite_req, timeout=6) as resp:
                 body = resp.read().decode("utf-8", errors="ignore")
                 snippets = re.findall(r'class=[\"\']result-snippet[\"\']>(.*?)</td>', body, re.DOTALL | re.IGNORECASE)
                 titles = re.findall(r'class=[\"\']result-link[\"\'][^>]*>(.*?)</a>', body, re.DOTALL | re.IGNORECASE)
@@ -249,12 +323,34 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
         except Exception:
             pass
 
-    # Strategy 3: Tertiary Fallback DuckDuckGo Instant Answer API
+    # Strategy 4: Wikipedia REST Summary API (Authoritative Entity/Fact Grounding)
+    if len(results) < 2:
+        try:
+            wiki_search_url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={encoded_query}&limit=2&namespace=0&format=json"
+            req = urllib.request.Request(wiki_search_url, headers={"User-Agent": "JulySearch/1.0 (contact@hs-ai.solutions)"})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                titles = data[1] if len(data) > 1 else []
+                for t in titles[:2]:
+                    sum_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(t)}"
+                    sum_req = urllib.request.Request(sum_url, headers={"User-Agent": "JulySearch/1.0 (contact@hs-ai.solutions)"})
+                    try:
+                        with urllib.request.urlopen(sum_req, timeout=3) as s_resp:
+                            s_data = json.loads(s_resp.read().decode("utf-8"))
+                            ext = s_data.get("extract")
+                            if ext:
+                                results.append({"title": f"Wikipedia: {t}", "snippet": ext})
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    # Strategy 5: Tertiary Fallback DuckDuckGo Instant Answer API
     if len(results) < 2:
         try:
             api_url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1&skip_disambig=1"
             api_req = urllib.request.Request(api_url, headers={"User-Agent": "JulyLLM/1.0"})
-            with urllib.request.urlopen(api_req, timeout=6) as resp:
+            with urllib.request.urlopen(api_req, timeout=5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 abstract = data.get("AbstractText")
                 heading = data.get("Heading")
@@ -268,7 +364,20 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
         except Exception:
             pass
 
-    return results[:max_results]
+    # Deduplicate results by snippet prefix
+    seen = set()
+    deduped = []
+    for r in results:
+        key = r.get("snippet", "")[:40].lower()
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(r)
+
+    return deduped[:max_results]
+
+
+# Alias for general live web search
+live_web_search = live_duckduckgo_search
 
 
 def format_search_context(query: str, results: List[Dict[str, str]]) -> str:
