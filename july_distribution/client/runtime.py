@@ -13,6 +13,8 @@ Implements Requirement 4 & 6:
 
 from __future__ import annotations
 import gc
+import os
+import re
 import sys
 import time
 from pathlib import Path
