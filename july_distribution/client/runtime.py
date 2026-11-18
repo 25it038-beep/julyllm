@@ -143,7 +143,8 @@ class ClientInferenceRuntime:
         else:
             device_desc = f"CPU Execution ({budget['recommended_threads']} threads, AVX2 RAM mode)"
 
-        print(f"[JULY RUNTIME] Initializing llama.cpp engine on: {device_desc}...")
+        tag = getattr(self, "current_model_id", "july").upper()
+        print(f"[{tag} RUNTIME] Initializing llama.cpp engine on: {device_desc}...")
 
         try:
             self.llm = llama_cpp.Llama(
@@ -157,10 +158,10 @@ class ClientInferenceRuntime:
             )
             self._is_loaded = True
             self.active_model_path = model_path
-            print(f"[JULY RUNTIME] Model successfully initialized in active memory!")
+            print(f"[{tag} RUNTIME] Model successfully initialized in active memory!")
         except Exception as e:
             if n_gpu > 0:
-                print(f"[JULY RUNTIME] GPU offload encountered issue ({e}). Falling back to pure CPU...")
+                print(f"[{tag} RUNTIME] GPU offload encountered issue ({e}). Falling back to pure CPU...")
                 self.llm = llama_cpp.Llama(
                     model_path=str(model_path),
                     n_ctx=4096,
@@ -172,7 +173,7 @@ class ClientInferenceRuntime:
                 )
                 self._is_loaded = True
                 self.active_model_path = model_path
-                print(f"[JULY RUNTIME] Model loaded successfully on pure CPU fallback.")
+                print(f"[{tag} RUNTIME] Model loaded successfully on pure CPU fallback.")
             else:
                 raise RuntimeError(f"Failed to load model: {e}")
 
@@ -392,7 +393,8 @@ class ClientInferenceRuntime:
             self.storage.wipe_and_unlink(self.active_model_path, allow_permanent_deletion=False)
 
         self.storage.reclaim_os_memory()
-        print(f"[JULY RUNTIME] Model ({self.current_model_id}) safely unloaded from active RAM/VRAM.")
+        tag = getattr(self, "current_model_id", "july").upper()
+        print(f"[{tag} RUNTIME] Model ({self.current_model_id}) safely unloaded from active RAM/VRAM.")
 
     def is_loaded(self) -> bool:
         return self._is_loaded

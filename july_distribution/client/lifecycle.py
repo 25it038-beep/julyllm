@@ -250,7 +250,12 @@ class ModelLifecyclePipeline:
         Returns: (initialized_llama_llm, gguf_metadata, budget_dict)
         """
         mid = model_id.lower().strip()
-        model_title = "GRAVITY LLM" if mid == "gravity" else "JULY LLM"
+        if mid == "sree":
+            model_title = "SREE LLM"
+        elif mid == "gravity":
+            model_title = "GRAVITY LLM"
+        else:
+            model_title = "JULY LLM"
 
         print(f"\n{UI.BOLD}{UI.CYAN}{'═'*78}{UI.RESET}")
         print(f" {UI.BOLD}HS AI SOLUTIONS — AUTONOMOUS MODEL LIFECYCLE PIPELINE{UI.RESET}")

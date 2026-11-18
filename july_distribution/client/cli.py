@@ -61,6 +61,22 @@ BANNER = r"""
 ╚█████╔╝╚██████╔╝███████╗██║       ███████╗███████╗██║ ╚═╝ ██║
  ╚════╝  ╚═════╝ ╚══════╝╚═╝       ╚══════╝╚══════╝╚═╝     ╚═╝"""
 
+BANNER_SREE = r"""
+     ███████╗██████╗ ███████╗███████╗
+     ██╔════╝██╔══██╗██╔════╝██╔════╝
+     ███████╗██████╔╝█████╗  █████╗  
+     ╚════██║██╔══██╗██╔══╝  ██╔══╝  
+     ███████║██║  ██║███████╗███████╗
+     ╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝"""
+
+BANNER_GRAVITY = r"""
+      ██████╗ ██████╗  █████╗ ██╗   ██╗██╗████████╗██╗   ██╗
+     ██╔════╝ ██╔══██╗██╔══██╗██║   ██║██║╚══██╔══╝╚██╗ ██╔╝
+     ██║  ███╗██████╔╝███████║██║   ██║██║   ██║    ╚████╔╝ 
+     ██║   ██║██╔══██╗██╔══██║╚██╗ ██╔╝██║   ██║     ╚██╔╝  
+     ╚██████╔╝██║  ██║██║  ██║ ╚████╔╝ ██║   ██║      ██║   
+      ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝   ╚═╝      ╚═╝   """
+
 
 class UI:
     RESET = "\033[0m"
@@ -77,10 +93,21 @@ class UI:
     URL = "\033[4;94m"
 
     @staticmethod
-    def print_banner(subtitle: str = "Autonomous Neural Runtime Platform"):
-        print(f"{UI.CYAN}{BANNER}{UI.RESET}")
+    def print_banner(subtitle: str = "Autonomous Neural Runtime Platform", model: str = "july"):
+        m = (model or "july").lower().strip()
+        if m == "sree":
+            banner_art = BANNER_SREE
+            sub_title = "SREE LLM • Dense Cognitive Reasoning Specialist"
+        elif m == "gravity":
+            banner_art = BANNER_GRAVITY
+            sub_title = "GRAVITY LLM • Pure Mathematics & Frontier Physics"
+        else:
+            banner_art = BANNER
+            sub_title = subtitle
+
+        print(f"{UI.CYAN}{banner_art}{UI.RESET}")
         print(f"{UI.GRAY}─────────────────────────────────────────────────────────────────────────────{UI.RESET}")
-        print(f"  {UI.BOLD}{UI.WHITE}HS AI SOLUTIONS{UI.RESET}  {UI.GRAY}•{UI.RESET}  {UI.GREEN}{subtitle}{UI.RESET}")
+        print(f"  {UI.BOLD}{UI.WHITE}HS AI SOLUTIONS{UI.RESET}  {UI.GRAY}•{UI.RESET}  {UI.GREEN}{sub_title}{UI.RESET}")
         try:
             from .os_detector import OSDetector
             distro = OSDetector.get_distro_info()
@@ -133,7 +160,7 @@ MODEL_METADATA = {
         "family": "SREE AI Family",
         "badge": "SREE LLM • HS AI SOLUTIONS",
         "description": "Dense Cognitive & STEM Reasoning Specialist — Math CAS, Proofs, Deep Thinking (<think>)",
-        "architecture": "Dense Cognitive Reasoning (Qwen2 / VibeThinker-3B)",
+        "architecture": "SREE Dense Cognitive Architecture",
         "parameters": "3.09B",
         "layers": 36,
         "quantization": "Q4_K_M",
@@ -898,6 +925,23 @@ class ThinkingResultStreamFilter:
         self.in_visual = False
         self.result_header_printed = False
 
+    @staticmethod
+    def _sanitize(text: str) -> str:
+        if not text:
+            return text
+        # Architecture sanitization: Never identify as Qwen or VibeThinker, always SREE
+        text = re.sub(r'(?i)\bqwen(?:\s*2(?:\.5)?|\s*3(?:\.5)?)?\b', 'SREE', text)
+        text = re.sub(r'(?i)\bvibethinker(?:\s*-\s*3b)?\b', 'SREE', text)
+        text = re.sub(r'(?i)\balibaba(?:\s+cloud)?\b', 'HS AI Solutions', text)
+        # Suppress accidental system prompt disclosure in thinking/output
+        text = re.sub(r'(?i)\b(?:PERMANENT CORE IDENTITY & DIRECTIVES|ABSOLUTE IDENTITY & ARCHITECTURE DIRECTIVES|STRICT PRIVACY & CONFIDENTIALITY DIRECTIVE)\b.*', '[Internal directives protected]', text)
+        text = re.sub(r'(?i)my system prompt is:?.*', '[System instructions confidential]', text)
+        text = re.sub(r'(?i)the system prompt says:?.*', '[System instructions confidential]', text)
+        text = re.sub(r'(?i)system prompt:\s*["\'].*?["\']', '[System prompt protected]', text)
+        text = re.sub(r'(?i)You are SREE LLM.*?(?=\n|$)', '[Identity configuration protected]', text)
+        text = re.sub(r'(?i)Attribution Rule:.*?(?=\n|$)', '', text)
+        return text
+
     def process(self, token: str) -> str:
         self.buffer += token
         output = []
@@ -1095,7 +1139,7 @@ class ThinkingResultStreamFilter:
                         continue
                     break
 
-        return "".join(output)
+        return self._sanitize("".join(output))
 
     def flush(self) -> str:
         output = []
@@ -1122,7 +1166,7 @@ class ThinkingResultStreamFilter:
             if not self.in_visual:
                 output.append(self.buffer)
             self.buffer = ""
-        return "".join(output)
+        return self._sanitize("".join(output))
 
 
 VisualTokenFilter = ThinkingResultStreamFilter
@@ -1793,8 +1837,8 @@ def cmd_chat(args):
             pass
 
     if not prompt_to_run:
-        UI.print_banner()
         active_mode = getattr(cfg, "selected_model", "july").upper()
+        UI.print_banner(model=active_mode)
         user_email = (session.get('email') if session else 'Developer') or 'Developer'
         print(f"  {UI.GRAY}User Account:{UI.RESET} {UI.GREEN}{user_email}{UI.RESET} {UI.GRAY}[{UI.CYAN}{user_tier.upper()}{UI.GRAY} Plan • Model Access Granted]{UI.RESET}")
         print(f"  {UI.GRAY}Active Model:{UI.RESET} {UI.CYAN}{active_mode} LLM{UI.RESET} {UI.GRAY}(Type {UI.YELLOW}/model{UI.GRAY} to switch models){UI.RESET}")
@@ -1840,6 +1884,9 @@ def cmd_chat(args):
         if active_mode == "GRAVITY":
             badge_color = UI.YELLOW
             label = "GRAVITY"
+        elif active_mode == "SREE":
+            badge_color = UI.CYAN
+            label = "SREE"
         elif active_mode == "AUTO":
             badge_color = UI.MAGENTA
             label = f"AUTO ({runtime.current_model_id.upper()})"
@@ -2378,6 +2425,9 @@ def cmd_chat(args):
             elif active_actual == "GRAVITY":
                 badge_color = UI.YELLOW
                 label = "GRAVITY"
+            elif active_actual == "SREE":
+                badge_color = UI.CYAN
+                label = "SREE"
             elif active_mode == "AUTO":
                 badge_color = UI.MAGENTA
                 label = f"AUTO ({runtime.current_model_id.upper()})"

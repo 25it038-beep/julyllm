@@ -59,13 +59,17 @@ def render_cli_status_box(
         pad_right = inner_width - len(title) - pad_left
         return "│" + " " * pad_left + title + " " * pad_right + "│"
 
+    card_title = f"{active_model.upper()} AI CLI" if active_model.lower() in ("sree", "gravity") else "JULY AI CLI"
     lines = [
         top,
-        center_row("JULY AI CLI"),
+        center_row(card_title),
         "│" + " " * inner_width + "│",
         format_row(f"Active Model: {active_model.upper()}"),
-        format_row(f"Gravity: {gravity_status}"),
     ]
+    if active_model.lower() == "sree":
+        lines.append(format_row("Specialization: Dense Cognitive / STEM"))
+    else:
+        lines.append(format_row(f"Gravity: {gravity_status}"))
 
     # Show download metrics if Gravity is downloading
     if "download" in gravity_status.lower() or download_pct > 0.0 and download_pct < 100.0:

@@ -40,7 +40,7 @@ Write-Host "██   ██║██║   ██║██║    ╚██╔╝ 
 Write-Host "╚█████╔╝╚██████╔╝███████╗██║       ███████╗███████╗██║ ╚═╝ ██║" -ForegroundColor Cyan
 Write-Host " ╚════╝  ╚═════╝ ╚══════╝╚═╝       ╚══════╝╚══════╝╚═╝     ╚═╝" -ForegroundColor Cyan
 Write-Host "─────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
-Write-Host "  HS AI SOLUTIONS  •  JULY LLM & GRAVITY LLM RUNTIME PLATFORM" -ForegroundColor White
+Write-Host "  HS AI SOLUTIONS  •  JULY AI FAMILY (JULY • GRAVITY • SREE) RUNTIME" -ForegroundColor White
 Write-Host "  Founder & Architect: Harshan Seliyan  •  Studio Portal: " -NoNewline -ForegroundColor Gray
 Write-Host "$StudioUrl" -ForegroundColor Yellow
 Write-Host "─────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
