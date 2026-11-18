@@ -147,12 +147,14 @@ class ClientInferenceRuntime:
         print(f"[{tag} RUNTIME] Initializing llama.cpp engine on: {device_desc}...")
 
         try:
+            use_flash = bool(n_gpu > 0 and getattr(self.config, "flash_attention", True))
             self.llm = llama_cpp.Llama(
                 model_path=str(model_path),
                 n_ctx=4096,
                 n_gpu_layers=n_gpu,
                 n_threads=budget["recommended_threads"],
                 n_batch=512,
+                flash_attn=use_flash,
                 logits_all=False,
                 verbose=False
             )
@@ -250,14 +252,25 @@ class ClientInferenceRuntime:
                 sys.stdout.write(f" \033[90m[*] Web search unavailable ({e}); relying on neural weights.\033[0m\n\n")
                 sys.stdout.flush()
 
-        # Reasoning Orchestration Invariants Pre-pass
-        guidance = self.orchestrator.prepare_reasoning_guidance(prompt)
+        # Adaptive Reasoning & Coding Speed Optimization (Requirement 3 & 4)
+        from .adaptive_reasoning import AdaptiveReasoningEngine, ThinkingLevel
+        user_think_override = getattr(self.config, "thinking_level", None) or os.getenv("JULY_THINKING_LEVEL")
+        if user_think_override == "auto":
+            user_think_override = None
+        active_level, level_rationale = AdaptiveReasoningEngine.classify_task(prompt, user_override=user_think_override)
+        steering = AdaptiveReasoningEngine.get_steering(self.current_model_id, active_level, level_rationale)
+
+        # Reasoning Orchestration Invariants Pre-pass (Skip in INSTANT mode for maximum coding speed)
+        if active_level != ThinkingLevel.INSTANT:
+            guidance = self.orchestrator.prepare_reasoning_guidance(prompt)
+        else:
+            guidance = None
 
         # Build chat format
         is_sree = "sree" in getattr(self, "current_model_id", "july").lower()
         if is_sree:
             # Sree uses ChatML format and native <think> tags for dense reasoning
-            formatted = f"<|im_start|>system\n{sys_prompt}"
+            formatted = f"<|im_start|>system\n{sys_prompt}\n\n{steering.system_directive}"
             if custom_kn:
                 formatted += f"\n\nReference Knowledge:\n{custom_kn}"
             if guidance:
@@ -281,9 +294,11 @@ class ClientInferenceRuntime:
             else:
                 formatted += f"{prompt}<|im_end|>\n"
             formatted += "<|im_start|>assistant\n"
+            if steering.prefill_assistant:
+                formatted += steering.prefill_assistant
             model_stops = ["<|im_end|>", "<|im_start|>", "<|endoftext|>"]
         else:
-            formatted = f"<|start_header_id|>system<|end_header_id|>\n\n{sys_prompt}"
+            formatted = f"<|start_header_id|>system<|end_header_id|>\n\n{sys_prompt}\n\n{steering.system_directive}"
             if custom_kn:
                 formatted += f"\n\nReference Knowledge:\n{custom_kn}"
             if guidance:
@@ -313,11 +328,14 @@ class ClientInferenceRuntime:
         requested_max = max_tokens if max_tokens is not None else self.config.max_tokens
         tokens_to_gen = None if (requested_max is None or requested_max <= 0) else requested_max
 
+        eff_temp = steering.temperature if getattr(self.config, "adaptive_temperature", True) else self.config.temperature
+        eff_top_p = steering.top_p if getattr(self.config, "adaptive_temperature", True) else self.config.top_p
+
         stream = self.llm(
             formatted,
             max_tokens=tokens_to_gen,
-            temperature=self.config.temperature,
-            top_p=self.config.top_p,
+            temperature=eff_temp,
+            top_p=eff_top_p,
             stop=model_stops,
             stream=True
         )
@@ -335,14 +353,17 @@ class ClientInferenceRuntime:
 
         raw_text = "".join(full_response)
 
-        # Post-stream verification & validation check
-        verified_res = self.orchestrator.validate_and_synthesize_response(prompt, raw_text)
-        if verified_res.corrections_applied and verified_res.verified_final_response != raw_text:
-            # Yield post-validation synthesis note
-            yield f"\n\n\033[93m[HS AI REASONING VERIFIER: Applied {len(verified_res.corrections_applied)} verified formal corrections]:\033[0m\n{verified_res.verified_final_response}"
-            logged_text = verified_res.verified_final_response
-        else:
+        # Post-stream verification & validation check (Skip in INSTANT mode for zero-overhead speed)
+        if active_level == ThinkingLevel.INSTANT:
             logged_text = raw_text
+        else:
+            verified_res = self.orchestrator.validate_and_synthesize_response(prompt, raw_text)
+            if verified_res.corrections_applied and verified_res.verified_final_response != raw_text:
+                # Yield post-validation synthesis note
+                yield f"\n\n\033[93m[HS AI REASONING VERIFIER: Applied {len(verified_res.corrections_applied)} verified formal corrections]:\033[0m\n{verified_res.verified_final_response}"
+                logged_text = verified_res.verified_final_response
+            else:
+                logged_text = raw_text
 
         # Record to history with model attribution
         self.customizer.log_message(session_id, "user", prompt, model=self.current_model_id)

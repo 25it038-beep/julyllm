@@ -498,6 +498,7 @@ class ModelLifecyclePipeline:
                 n_gpu_layers=n_gpu,
                 n_threads=budget["recommended_threads"],
                 n_batch=512,
+                flash_attn=bool(n_gpu > 0),
                 logits_all=False,
                 verbose=False
             )

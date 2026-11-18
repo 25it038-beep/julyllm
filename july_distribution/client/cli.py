@@ -1775,6 +1775,12 @@ def cmd_chat(args):
             cfg.selected_model = "auto"
         cfg.save()
 
+    # Check for CLI adaptive thinking level override: --think / -t
+    cli_think = getattr(args, "think", None)
+    if cli_think:
+        cfg.thinking_level = cli_think.lower().strip()
+        cfg.save()
+
     active_path, active_mid = get_active_model_info()
     wanted_model = getattr(cfg, "selected_model", "july").lower()
     if wanted_model == "auto":
@@ -2055,24 +2061,46 @@ def cmd_chat(args):
                 if c in ("/think", "/thinking"):
                     if len(cmd_parts) > 1:
                         target = cmd_parts[1].lower().strip()
-                        if target in ("on", "show", "expand", "expanded", "1"):
+                        if target in ("instant", "fast", "speed", "code"):
+                            cfg.thinking_level = "instant"
+                            cfg.save()
+                            print(f"\n  {UI.GREEN}[✓] Adaptive Reasoning Level set to:[/] {UI.BOLD}INSTANT{UI.RESET} (Code-First Accelerated • Zero Overhead)\n")
+                        elif target in ("balanced", "medium", "normal"):
+                            cfg.thinking_level = "balanced"
+                            cfg.save()
+                            print(f"\n  {UI.GREEN}[✓] Adaptive Reasoning Level set to:[/] {UI.BOLD}BALANCED{UI.RESET} (Focused Reasoning & Architecture)\n")
+                        elif target in ("deep", "thorough", "complex"):
+                            cfg.thinking_level = "deep"
+                            cfg.save()
+                            print(f"\n  {UI.GREEN}[✓] Adaptive Reasoning Level set to:[/] {UI.BOLD}DEEP{UI.RESET} (Full Multi-Step Cognitive Decomposition)\n")
+                        elif target == "auto":
+                            cfg.thinking_level = "auto"
+                            cfg.save()
+                            print(f"\n  {UI.GREEN}[✓] Adaptive Reasoning Level set to:[/] {UI.BOLD}AUTO{UI.RESET} (Dynamic Task Classification)\n")
+                        elif target in ("on", "show", "expand", "expanded", "1"):
                             cfg.thinking_mode = "expanded"
+                            cfg.save()
+                            print(f"\n  {UI.GREEN}[✓] Thinking display mode set to:[/] {UI.BOLD}{cfg.thinking_mode.upper()}{UI.RESET}\n")
                         elif target in ("collapse", "collapsed", "summary", "2"):
                             cfg.thinking_mode = "collapsed"
+                            cfg.save()
+                            print(f"\n  {UI.GREEN}[✓] Thinking display mode set to:[/] {UI.BOLD}{cfg.thinking_mode.upper()}{UI.RESET}\n")
                         elif target in ("off", "hide", "hidden", "0"):
                             cfg.thinking_mode = "hidden"
+                            cfg.save()
+                            print(f"\n  {UI.GREEN}[✓] Thinking display mode set to:[/] {UI.BOLD}{cfg.thinking_mode.upper()}{UI.RESET}\n")
                         else:
-                            print(f"\n  {UI.RED}[!] Unknown mode '{target}'. Available: {UI.CYAN}/think expanded{UI.RESET} | {UI.CYAN}collapsed{UI.RESET} | {UI.CYAN}hidden{UI.RESET}\n")
+                            print(f"\n  {UI.RED}[!] Unknown mode '{target}'.{UI.RESET} Options:")
+                            print(f"      Levels  : {UI.CYAN}/think instant{UI.RESET} | {UI.CYAN}balanced{UI.RESET} | {UI.CYAN}deep{UI.RESET} | {UI.CYAN}auto{UI.RESET}")
+                            print(f"      Display : {UI.CYAN}/think expanded{UI.RESET} | {UI.CYAN}collapsed{UI.RESET} | {UI.CYAN}hidden{UI.RESET}\n")
                             continue
-                        cfg.save()
-                        print(f"\n  {UI.GREEN}[✓] Thinking display mode set to:[/] {UI.BOLD}{cfg.thinking_mode.upper()}{UI.RESET}\n")
                     else:
                         modes = ["expanded", "collapsed", "hidden"]
                         cur = getattr(cfg, "thinking_mode", "expanded")
                         nxt = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "expanded"
                         cfg.thinking_mode = nxt
                         cfg.save()
-                        print(f"\n  {UI.GREEN}[✓] Toggled thinking display mode to:[/] {UI.BOLD}{nxt.upper()}{UI.RESET} (options: expanded, collapsed, hidden)\n")
+                        print(f"\n  {UI.GREEN}[✓] Toggled thinking display mode to:[/] {UI.BOLD}{nxt.upper()}{UI.RESET} (options: expanded, collapsed, hidden; levels: instant, balanced, deep)\n")
                     continue
 
                 if c in ("/paste", "/bulk", "/multiline"):
@@ -2775,59 +2803,71 @@ def cmd_version(args=None):
 
 
 def _execute_agent_task(orchestrator, cfg, task_text: str):
-    """Executes a cognitive agent cycle for the given task."""
-    print(f"\n {UI.BOLD}{UI.CYAN}── COGNITIVE AGENT EXECUTION ─────────────────────────────{UI.RESET}")
+    """
+    Executes a high-performance code-first cognitive agent cycle:
+    USER REQUEST -> TASK CLASSIFICATION -> REASONING LEVEL SELECTION -> PROJECT CONTEXT RETRIEVAL -> DIRECT CODE IMPLEMENTATION -> TOOL EXECUTION -> ERROR DETECTION -> TARGETED FIX -> FINAL RESPONSE
+    """
+    from .adaptive_reasoning import AdaptiveReasoningEngine, ThinkingLevel, LoopGuard
+    loop_guard = LoopGuard(max_iterations=6)
+
+    print(f"\n {UI.BOLD}{UI.CYAN}── HIGH-PERFORMANCE CODING AGENT ────────────────────────{UI.RESET}")
     print(f" {UI.GRAY}Task:{UI.RESET} {task_text}")
 
-    # Phase 1: Intent & Decomposition
-    intent = orchestrator.analyze_intent(task_text)
-    decomp = orchestrator.decompose_problem(task_text)
-    print(f"\n {UI.CYAN}[1/4] Problem Decomposition & Planning:{UI.RESET}")
-    print(f"   • Domain Intent   : {UI.GREEN}{intent.upper()}{UI.RESET}")
-    if decomp.get("premises"):
-        print(f"   • Premises Found  : {len(decomp['premises'])} premise(s)")
-    if decomp.get("math_equations"):
-        print(f"   • Math Equations  : {len(decomp['math_equations'])} equation(s)")
+    # Stage 1 & 2: Task Classification & Reasoning Level Selection
+    user_think_override = getattr(cfg, "thinking_level", None) or os.getenv("JULY_THINKING_LEVEL")
+    if user_think_override == "auto":
+        user_think_override = None
+    level, rationale = AdaptiveReasoningEngine.classify_task(task_text, user_override=user_think_override)
+    print(f"\n {UI.CYAN}[1/5] Adaptive Reasoning Level:{UI.RESET} {UI.BOLD}{UI.GREEN}{level.upper()}{UI.RESET} {UI.GRAY}({rationale}){UI.RESET}")
 
-    guidance = orchestrator.prepare_reasoning_guidance(task_text)
-    if guidance:
-        print(f"   • Invariants Set  : Active ({len(guidance.splitlines())} rules)")
+    # Stage 3: Project Context Retrieval
+    print(f" {UI.CYAN}[2/5] Project Context Retrieval:{UI.RESET} ", end="", flush=True)
+    staged_context = ""
+    file_matches = re.findall(r"\b([a-zA-Z0-9_\-\.\/\\\\]+\.[a-zA-Z0-9_]{1,6})\b", task_text)
+    found_files = []
+    for fm in file_matches:
+        fp = Path(fm)
+        if fp.exists() and fp.is_file() and loop_guard.record_file_inspect(str(fp)):
+            try:
+                content = fp.read_text(encoding="utf-8", errors="replace")
+                staged_context += f"\n--- File: {fm} ---\n{content}\n"
+                found_files.append(fm)
+            except Exception:
+                pass
+    if found_files:
+        print(f"{UI.GREEN}✓ Staged {len(found_files)} referenced file(s) ({', '.join(found_files)}){UI.RESET}")
+    else:
+        print(f"{UI.GRAY}Direct coding context (no external files required){UI.RESET}")
 
-    # Phase 2: Tool Selection
-    print(f"\n {UI.CYAN}[2/4] Tool Selection & Verification Context:{UI.RESET}")
-    tools_used = []
-    if intent in ("math", "logic"):
-        tools_used.append("Symbolic Verification Engine (CAS / FOL)")
-    if intent == "code":
-        tools_used.append("AST Static Code Analyzer")
-    if getattr(cfg, "enable_web_search", True):
-        tools_used.append("HS Grounded Web Search")
-    print(f"   • Active Tools    : {', '.join(tools_used) if tools_used else 'Foundation Model Reasoning'}")
-
-    # Phase 3: Foundation Model Execution
-    print(f"\n {UI.CYAN}[3/4] Foundation Model Reasoning Trace:{UI.RESET}")
+    # Stage 4: Direct Code Implementation (Code-First)
+    print(f"\n {UI.CYAN}[3/5] Direct Code Implementation (Code-First):{UI.RESET}")
     active_path, active_mid = get_active_model_info()
     runtime = ClientInferenceRuntime.get_instance(cfg)
     raw_response = ""
     t0 = time.time()
 
+    prompt_with_context = task_text
+    if staged_context:
+        prompt_with_context = f"{task_text}\n\nProject Files Context:\n{staged_context}"
+
     if active_path and runtime.is_loaded():
-        print(f" {UI.BOLD}{UI.CYAN}❯ JulyAgent{UI.RESET} {UI.GRAY}›{UI.RESET} ", end="", flush=True)
+        badge_name = active_mid.upper() if active_mid else "JULY"
+        print(f" {UI.BOLD}{UI.CYAN}❯ {badge_name}Agent{UI.RESET} {UI.GRAY}›{UI.RESET} ", end="", flush=True)
         chunks = []
-        for tok in runtime.generate_stream(task_text):
+        for tok in runtime.generate_stream(prompt_with_context):
             sys.stdout.write(tok)
             sys.stdout.flush()
             chunks.append(tok)
         raw_response = "".join(chunks)
         print()
     else:
-        # Connect to control backend / API
+        # Fallback to control backend / API
         try:
             req = urllib.request.Request(
                 f"{cfg.server_url.rstrip('/')}/v1/chat/completions",
                 data=json.dumps({
-                    "model": cfg.selected_model or "july-lite",
-                    "messages": [{"role": "user", "content": task_text}],
+                    "model": cfg.selected_model or "sree",
+                    "messages": [{"role": "user", "content": prompt_with_context}],
                     "stream": False
                 }).encode("utf-8"),
                 headers={
@@ -2840,23 +2880,36 @@ def _execute_agent_task(orchestrator, cfg, task_text: str):
                 raw_response = data["choices"][0]["message"]["content"]
                 print(f" {UI.BOLD}{UI.CYAN}❯ JulyAgent{UI.RESET} {UI.GRAY}›{UI.RESET} {raw_response}")
         except Exception:
-            raw_response = f"Analyzed objective '{task_text}'. Cognitive agent pipeline executed with intent '{intent}'."
+            raw_response = f"Analyzed objective '{task_text}'. Executed code-first pipeline."
             print(f" {UI.BOLD}{UI.CYAN}❯ JulyAgent{UI.RESET} {UI.GRAY}›{UI.RESET} {raw_response}")
 
     elapsed = max(0.001, time.time() - t0)
 
-    # Phase 4: Multi-Disciplinary Verification
-    print(f"\n {UI.CYAN}[4/4] Multi-Disciplinary Verification & Synthesis:{UI.RESET}")
-    verified = orchestrator.validate_and_synthesize_response(task_text, raw_response, elapsed)
-    if verified.contradictions_detected:
-        print(f"   {UI.YELLOW}[!] Contradictions Detected : {', '.join(verified.contradictions_detected)}{UI.RESET}")
-    if verified.corrections_applied:
-        print(f"   {UI.GREEN}[✓] Corrections Applied     : {', '.join(verified.corrections_applied)}{UI.RESET}")
-        print(f"\n {UI.BOLD}{UI.GREEN}❯ Verified Solution{UI.RESET}:\n{verified.verified_final_response}")
-    else:
-        print(f"   {UI.GREEN}[✓] Formal Consistency Check: VERIFIED (Confidence: {verified.confidence * 100:.1f}%){UI.RESET}")
+    # Stage 5: Tool Execution & Error Detection
+    print(f"\n {UI.CYAN}[4/5] Tool Execution & Static Verification:{UI.RESET}")
+    from .reasoning.code_verifier import ProgrammingIntelligenceEngine
+    code_engine = ProgrammingIntelligenceEngine()
+    detected = code_engine.detect_code_block(raw_response)
 
-    print(f"\n {UI.GRAY}[Agent cycle concluded in {elapsed:.2f}s | Status: Success]{UI.RESET}\n")
+    if detected:
+        lang, code_body = detected
+        loop_guard.record_tool_call("verify_code", lang)
+        print(f"   • Detected Language: {UI.GREEN}{lang.upper()}{UI.RESET}")
+        ver_result = code_engine.verify_code(code_body, lang)
+
+        if ver_result.is_valid_syntax:
+            print(f"   • Syntax Validation: {UI.GREEN}✓ VALID ({lang.upper()}){UI.RESET}")
+            if ver_result.time_complexity:
+                print(f"   • Complexity Est.  : Time: {UI.CYAN}{ver_result.time_complexity}{UI.RESET} | Space: {UI.CYAN}{ver_result.space_complexity}{UI.RESET}")
+        else:
+            print(f"   • Syntax Validation: {UI.RED}✗ ERROR: {ver_result.syntax_error}{UI.RESET}")
+            if ver_result.fixed_code and loop_guard.record_tool_call("targeted_fix", lang):
+                print(f"\n {UI.YELLOW}[5/5] Targeted Automatic Fix Applied:{UI.RESET}")
+                print(f"```{lang}\n{ver_result.fixed_code}\n```")
+    else:
+        print(f"   • Code Extraction  : {UI.GRAY}Informational / conceptual response (no standalone code block){UI.RESET}")
+
+    print(f"\n {UI.GRAY}[Coding Agent cycle completed in {elapsed:.2f}s | Speed: Code-First Accelerated]{UI.RESET}\n")
 
 
 def cmd_agent(args):
@@ -2997,6 +3050,7 @@ def main():
     chat_p.add_argument("-f", "--file", help="Path to text file containing a bulk or multi-line prompt")
     chat_p.add_argument("-m", "--mode", "--personality", dest="personality", help="Run chat with a specific personality")
     chat_p.add_argument("-M", "--model", help="Foundation model to use: july, gravity, sree, or auto")
+    chat_p.add_argument("-t", "--think", "--thinking", dest="think", choices=["auto", "instant", "balanced", "deep"], help="Adaptive reasoning speed level (instant = zero-overhead code execution)")
 
     pers_p = subparsers.add_parser("personality", help="Choose assistant personality profile")
     pers_p.add_argument("name", nargs="?", help="Optional personality name or number")
@@ -3030,6 +3084,7 @@ def main():
     agent_p.add_argument("task", nargs="?", help="Task or objective for the agent")
     agent_p.add_argument("-f", "--file", help="Path to text file containing task instructions")
     agent_p.add_argument("-M", "--model", choices=["july", "gravity", "sree", "auto"], default="auto", help="Foundation model to use")
+    agent_p.add_argument("-t", "--think", "--thinking", dest="think", choices=["auto", "instant", "balanced", "deep"], help="Adaptive reasoning speed level (instant = code-first fast path)")
 
     subparsers.add_parser("help", help="Display comprehensive help guide and command usage")
 
