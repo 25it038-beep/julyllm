@@ -1,0 +1,158 @@
+[
+  {
+    "task_id": "1_simple_python_function",
+    "task_name": "1. Simple Python Function",
+    "level": "instant",
+    "baseline": {
+      "ttft_s": 0.377,
+      "ttfc_s": 28.991,
+      "total_time_s": 28.991,
+      "thinking_tokens": 300,
+      "total_tokens": 300,
+      "llm_calls": 1,
+      "tool_calls": 0,
+      "is_correct": true
+    },
+    "optimized": {
+      "ttft_s": 0.77,
+      "ttfc_s": 1.48,
+      "total_time_s": 30.488,
+      "thinking_tokens": 0,
+      "total_tokens": 300,
+      "llm_calls": 1,
+      "tool_calls": 1,
+      "is_correct": false,
+      "speedup_ratio": 19.59
+    }
+  },
+  {
+    "task_id": "2_react_component",
+    "task_name": "2. Complete React Component",
+    "level": "instant",
+    "baseline": {
+      "ttft_s": 0.365,
+      "ttfc_s": 29.855,
+      "total_time_s": 29.855,
+      "thinking_tokens": 300,
+      "total_tokens": 300,
+      "llm_calls": 1,
+      "tool_calls": 0,
+      "is_correct": true
+    },
+    "optimized": {
+      "ttft_s": 0.933,
+      "ttfc_s": 0.933,
+      "total_time_s": 30.278,
+      "thinking_tokens": 0,
+      "total_tokens": 300,
+      "llm_calls": 1,
+      "tool_calls": 1,
+      "is_correct": false,
+      "speedup_ratio": 31.99
+    }
+  },
+  {
+    "task_id": "3_multi_file_app",
+    "task_name": "3. Multi-File Application",
+    "level": "balanced",
+    "baseline": {
+      "ttft_s": 0.346,
+      "ttfc_s": 30.543,
+      "total_time_s": 30.543,
+      "thinking_tokens": 300,
+      "total_tokens": 300,
+      "llm_calls": 1,
+      "tool_calls": 0,
+      "is_correct": true
+    },
+    "optimized": {
+      "ttft_s": 2.744,
+      "ttfc_s": 73.938,
+      "total_time_s": 73.938,
+      "thinking_tokens": 300,
+      "total_tokens": 300,
+      "llm_calls": 1,
+      "tool_calls": 0,
+      "is_correct": true,
+      "speedup_ratio": 0.41
+    }
+  },
+  {
+    "task_id": "4_complex_debugging",
+    "task_name": "4. Complex Debugging",
+    "level": "instant",
+    "baseline": {
+      "ttft_s": 0.714,
+      "ttfc_s": 33.131,
+      "total_time_s": 33.131,
+      "thinking_tokens": 300,
+      "total_tokens": 300,
+      "llm_calls": 1,
+      "tool_calls": 0,
+      "is_correct": false
+    },
+    "optimized": {
+      "ttft_s": 1.213,
+      "ttfc_s": 1.213,
+      "total_time_s": 29.287,
+      "thinking_tokens": 0,
+      "total_tokens": 300,
+      "llm_calls": 1,
+      "tool_calls": 1,
+      "is_correct": false,
+      "speedup_ratio": 27.32
+    }
+  },
+  {
+    "task_id": "5_api_integration",
+    "task_name": "5. API Integration",
+    "level": "instant",
+    "baseline": {
+      "ttft_s": 0.306,
+      "ttfc_s": 28.228,
+      "total_time_s": 28.228,
+      "thinking_tokens": 300,
+      "total_tokens": 300,
+      "llm_calls": 1,
+      "tool_calls": 0,
+      "is_correct": true
+    },
+    "optimized": {
+      "ttft_s": 0.805,
+      "ttfc_s": 1.514,
+      "total_time_s": 28.534,
+      "thinking_tokens": 0,
+      "total_tokens": 300,
+      "llm_calls": 1,
+      "tool_calls": 0,
+      "is_correct": true,
+      "speedup_ratio": 18.64
+    }
+  },
+  {
+    "task_id": "6_algorithm_implementation",
+    "task_name": "6. Algorithm Implementation",
+    "level": "instant",
+    "baseline": {
+      "ttft_s": 0.396,
+      "ttfc_s": 28.034,
+      "total_time_s": 28.034,
+      "thinking_tokens": 300,
+      "total_tokens": 300,
+      "llm_calls": 1,
+      "tool_calls": 0,
+      "is_correct": false
+    },
+    "optimized": {
+      "ttft_s": 0.903,
+      "ttfc_s": 8.287,
+      "total_time_s": 29.954,
+      "thinking_tokens": 0,
+      "total_tokens": 300,
+      "llm_calls": 1,
+      "tool_calls": 0,
+      "is_correct": false,
+      "speedup_ratio": 3.38
+    }
+  }
+]
