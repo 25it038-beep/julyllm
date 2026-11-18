@@ -246,6 +246,35 @@ def extract_search_query(prompt: str, history: Optional[List[Dict[str, Any]]] = 
     return c if len(c) > 1 else original
 
 
+def clean_ddg_url(raw_href: str) -> str:
+    """Extracts and unquotes real web destination from DuckDuckGo redirect URLs."""
+    if not raw_href:
+        return ""
+    if "uddg=" in raw_href:
+        m = re.search(r"uddg=([^&\"']+)", raw_href)
+        if m:
+            return urllib.parse.unquote(m.group(1))
+    if raw_href.startswith("//"):
+        return "https:" + raw_href
+    return raw_href
+
+
+def decode_bing_u(url: str) -> str:
+    """Decodes Bing redirect parameter '&u=a1...' to extract the canonical target URL."""
+    m = re.search(r"[?&]u=a1([a-zA-Z0-9+/=]+)", url)
+    if m:
+        b64 = m.group(1)
+        b64 += "=" * ((4 - len(b64) % 4) % 4)
+        try:
+            import base64
+            decoded = base64.b64decode(b64).decode("utf-8", errors="ignore")
+            if decoded.startswith("http"):
+                return decoded
+        except Exception:
+            pass
+    return url
+
+
 def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, str]]:
     """Performs multi-tier resilient live web search without requiring third-party API keys.
     
@@ -271,14 +300,16 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=6) as resp:
             content = resp.read().decode("utf-8", errors="ignore")
-            snippet_matches = re.findall(r'<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</a>', content, re.DOTALL)
+            snippet_matches = re.findall(r'<a[^>]+class="[^"]*result__snippet[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', content, re.DOTALL)
             title_matches = re.findall(r'<a[^>]+class="[^"]*result__a[^"]*"[^>]*>(.*?)</a>', content, re.DOTALL)
 
             for i in range(min(len(snippet_matches), len(title_matches), max_results)):
+                href, raw_s = snippet_matches[i]
                 t = html.unescape(re.sub(r"<[^>]+>", "", title_matches[i]).strip())
-                s = html.unescape(re.sub(r"<[^>]+>", "", snippet_matches[i]).strip())
+                s = html.unescape(re.sub(r"<[^>]+>", "", raw_s).strip())
+                u = clean_ddg_url(href)
                 if s and len(s) > 10:
-                    results.append({"title": t, "snippet": s})
+                    results.append({"title": t, "snippet": s, "url": u})
     except Exception:
         pass
 
@@ -295,13 +326,15 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
                 body = resp.read().decode("utf-8", errors="ignore")
                 blocks = re.findall(r'<li class="b_algo"[^>]*>(.*?)</li>', body, re.DOTALL)
                 for b in blocks:
-                    t_match = re.search(r'<h2[^>]*><a[^>]*>(.*?)</a>', b, re.DOTALL)
+                    t_match = re.search(r'<h2[^>]*><a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', b, re.DOTALL)
                     s_match = re.search(r'<p[^>]*>(.*?)</p>', b, re.DOTALL)
                     if t_match and s_match:
-                        t = html.unescape(re.sub(r"<[^>]+>", "", t_match.group(1)).strip())
+                        raw_u = t_match.group(1)
+                        u = decode_bing_u(raw_u)
+                        t = html.unescape(re.sub(r"<[^>]+>", "", t_match.group(2)).strip())
                         s = html.unescape(re.sub(r"<[^>]+>", "", s_match.group(1)).strip())
                         if s and len(s) > 15:
-                            results.append({"title": t, "snippet": s})
+                            results.append({"title": t, "snippet": s, "url": u})
                             if len(results) >= max_results:
                                 break
         except Exception:
@@ -319,12 +352,14 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
             with urllib.request.urlopen(lite_req, timeout=6) as resp:
                 body = resp.read().decode("utf-8", errors="ignore")
                 snippets = re.findall(r'class=[\"\']result-snippet[\"\']>(.*?)</td>', body, re.DOTALL | re.IGNORECASE)
-                titles = re.findall(r'class=[\"\']result-link[\"\'][^>]*>(.*?)</a>', body, re.DOTALL | re.IGNORECASE)
+                titles = re.findall(r'class=[\"\']result-link[\"\'][^>]+href=[\"\']([^\"\']+)[\"\'][^>]*>(.*?)</a>', body, re.DOTALL | re.IGNORECASE)
                 for i in range(min(len(snippets), len(titles), max_results)):
-                    t = html.unescape(re.sub(r"<[^>]+>", "", titles[i]).strip())
+                    raw_href, raw_t = titles[i]
+                    t = html.unescape(re.sub(r"<[^>]+>", "", raw_t).strip())
                     s = html.unescape(re.sub(r"<[^>]+>", "", snippets[i]).strip())
+                    u = clean_ddg_url(raw_href)
                     if s and len(s) > 10:
-                        results.append({"title": t, "snippet": s})
+                        results.append({"title": t, "snippet": s, "url": u})
         except Exception:
             pass
 
@@ -337,14 +372,16 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
                 data = json.loads(resp.read().decode("utf-8"))
                 titles = data[1] if len(data) > 1 else []
                 for t in titles[:2]:
+                    wiki_page_url = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(t.replace(' ', '_'))}"
                     sum_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(t)}"
                     sum_req = urllib.request.Request(sum_url, headers={"User-Agent": "JulySearch/1.0 (contact@hs-ai.solutions)"})
                     try:
                         with urllib.request.urlopen(sum_req, timeout=3) as s_resp:
                             s_data = json.loads(s_resp.read().decode("utf-8"))
                             ext = s_data.get("extract")
+                            desk_url = s_data.get("content_urls", {}).get("desktop", {}).get("page", wiki_page_url)
                             if ext:
-                                results.append({"title": f"Wikipedia: {t}", "snippet": ext})
+                                results.append({"title": f"Wikipedia: {t}", "snippet": ext, "url": desk_url})
                     except Exception:
                         pass
         except Exception:
@@ -359,11 +396,16 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
                 data = json.loads(resp.read().decode("utf-8"))
                 abstract = data.get("AbstractText")
                 heading = data.get("Heading")
+                abs_url = data.get("AbstractURL", "")
                 if abstract and heading:
-                    results.insert(0, {"title": heading, "snippet": abstract})
+                    results.insert(0, {"title": heading, "snippet": abstract, "url": abs_url})
                 for topic in data.get("RelatedTopics", []):
                     if isinstance(topic, dict) and "Text" in topic:
-                        results.append({"title": "Related Fact", "snippet": topic["Text"]})
+                        results.append({
+                            "title": "Related Fact",
+                            "snippet": topic["Text"],
+                            "url": topic.get("FirstURL", "")
+                        })
                         if len(results) >= max_results:
                             break
         except Exception:
@@ -400,7 +442,7 @@ live_web_search = live_duckduckgo_search
 
 
 def format_search_context(query: str, results: List[Dict[str, str]]) -> str:
-    """Formats retrieved live web snippets for LLM context grounding."""
+    """Formats retrieved live web snippets for LLM context grounding with clickable URLs."""
     if not results:
         return ""
 
@@ -408,10 +450,12 @@ def format_search_context(query: str, results: List[Dict[str, str]]) -> str:
     lines = [
         f"[REAL-TIME LIVE WEB SEARCH DATA - Retrieved: {current_date}]",
         f'Search Query: "{query}"',
-        "Verified live facts from the web:"
+        "Verified live facts from the web with source links:"
     ]
 
     for idx, r in enumerate(results, 1):
-        lines.append(f"{idx}. {r['title']}: {r['snippet']}")
+        u = r.get("url", "").strip()
+        url_part = f" | Source URL: {u}" if u else ""
+        lines.append(f"{idx}. {r['title']}: {r['snippet']}{url_part}")
 
     return "\n".join(lines)

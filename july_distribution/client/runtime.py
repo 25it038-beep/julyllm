@@ -258,7 +258,11 @@ class ClientInferenceRuntime:
                 results = live_duckduckgo_search(search_query)
                 if results:
                     web_context = format_search_context(search_query, results)
-                    sys.stdout.write(f" \033[92m[✓]\033[0m Grounded with {len(results)} live source snippets from web.\n\n")
+                    sys.stdout.write(f" \033[92m[✓]\033[0m Grounded with {len(results)} live source snippets from web:\n")
+                    for r in results[:4]:
+                        if r.get("url"):
+                            sys.stdout.write(f"     \033[90m• {r['title']}: \033[36m\033[4m{r['url']}\033[0m\n")
+                    sys.stdout.write("\n")
                     sys.stdout.flush()
                 else:
                     sys.stdout.write(f" \033[90m[*] Live web search returned 0 matches; relying on neural weights.\033[0m\n\n")
@@ -295,9 +299,10 @@ class ClientInferenceRuntime:
             if web_context:
                 formatted += (
                     f"\n\n{web_context}\n\n"
-                    f"[REAL-TIME WEB GROUNDING CONTEXT]:\n"
-                    f"- The verified live facts above were retrieved from the real-time internet.\n"
-                    f"- Use them to ground and inform your response accurately when answering questions about current events, people, prices, or live facts."
+                    f"[REAL-TIME WEB GROUNDING & CITATION DIRECTIVE]:\n"
+                    f"- The verified live facts above were retrieved from the real-time internet with their source URLs.\n"
+                    f"- Use them to ground and inform your response accurately when answering questions about current events, people, prices, or live facts.\n"
+                    f"- MANDATORY SOURCE CITATION: At the end of your response, you MUST include a 'Sources:' section providing the clickable markdown links [Source Title](URL) for the sources cited above."
                 )
             formatted += "<|im_end|>\n"
 
@@ -323,9 +328,10 @@ class ClientInferenceRuntime:
             if web_context:
                 formatted += (
                     f"\n\n{web_context}\n\n"
-                    f"[REAL-TIME WEB GROUNDING CONTEXT]:\n"
-                    f"- The verified live facts above were retrieved from the real-time internet.\n"
-                    f"- Use them to ground and inform your response accurately when answering questions about current events, people, prices, or live facts."
+                    f"[REAL-TIME WEB GROUNDING & CITATION DIRECTIVE]:\n"
+                    f"- The verified live facts above were retrieved from the real-time internet with their source URLs.\n"
+                    f"- Use them to ground and inform your response accurately when answering questions about current events, people, prices, or live facts.\n"
+                    f"- MANDATORY SOURCE CITATION: At the end of your response, you MUST include a 'Sources:' section providing the clickable markdown links [Source Title](URL) for the sources cited above."
                 )
             formatted += "<|eot_id|>"
 
