@@ -225,7 +225,7 @@ class LiveConversationManager:
         runtime: ClientInferenceRuntime,
         active_model: str = "july",
         style: str = "natural",
-        vad_silence_duration: float = 0.8,
+        vad_silence_duration: float = 0.65,
     ):
         self.runtime = runtime
         self.active_model = active_model.lower().strip()

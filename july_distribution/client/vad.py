@@ -35,11 +35,11 @@ class RealtimeVAD:
         self,
         sample_rate: int = 16000,
         frame_duration_ms: int = 30,
-        speech_start_threshold: float = 0.022,
-        speech_end_threshold: float = 0.012,
-        silence_duration_seconds: float = 0.42,
+        speech_start_threshold: float = 0.015,
+        speech_end_threshold: float = 0.008,
+        silence_duration_seconds: float = 0.65,
         min_speech_duration_seconds: float = 0.25,
-        pre_speech_buffer_seconds: float = 0.25,
+        pre_speech_buffer_seconds: float = 0.45,
         echo_suppression_multiplier: float = 3.2,
     ):
         self.sample_rate = sample_rate

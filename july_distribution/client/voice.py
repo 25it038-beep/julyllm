@@ -456,8 +456,8 @@ class WhisperVoiceInput:
             cache_dir = Path.home() / ".cache" / "whisper"
             if (cache_dir / "base.pt").exists() and (cache_dir / "base.pt").stat().st_size > 100_000_000:
                 return "base"
-            if (cache_dir / "tiny.pt").exists():
-                return "tiny"
+            if (cache_dir / "base.en.pt").exists() and (cache_dir / "base.en.pt").stat().st_size > 100_000_000:
+                return "base.en"
 
             if not hardware_info:
                 from .hardware import detect_client_hardware
@@ -467,12 +467,13 @@ class WhisperVoiceInput:
             vram_mb = hardware_info.get("vram_total_mb", 0.0)
             ram_gb = hardware_info.get("ram_total_gb", 8.0)
 
-            if gpu_avail and vram_mb >= 4000 and ram_gb >= 12.0:
+            # Modern systems with GPU (>= 2GB VRAM) or >= 8GB RAM should always use base for high accuracy
+            if (gpu_avail and vram_mb >= 2000) or ram_gb >= 8.0:
                 return "base"
             else:
                 return "tiny"
         except Exception:
-            return "tiny"
+            return "base"
 
     def get_model(self):
         """Loads and caches the Whisper model instance thread-safely."""
@@ -530,7 +531,7 @@ class WhisperVoiceInput:
             raise RuntimeError(f"Microphone capture error: {e}")
 
     def transcribe_audio(self, audio_data: Any) -> Tuple[str, str]:
-        """Transcribes PCM float32 audio data into text using Whisper."""
+        """Transcribes PCM float32 audio data into text using Whisper with high precision."""
         try:
             import numpy as np
             import torch
@@ -542,8 +543,23 @@ class WhisperVoiceInput:
             if audio_data.dtype != np.float32:
                 audio_data = audio_data.astype(np.float32)
 
-            lang_param = None if self.language == "auto" else self.language
+            # Filter out near-silent audio clicks (< 150ms at 16kHz)
+            if len(audio_data) < 2400:
+                return "", self.language
+
+            # 1. DC offset correction (eliminates microphone electrical hum & bias)
+            audio_data = audio_data - np.mean(audio_data)
+
+            # 2. Peak amplitude normalization (Whisper expects optimal signal ~0.85-0.95 peak)
+            peak = float(np.max(np.abs(audio_data)))
+            if peak > 1e-4:
+                audio_data = (audio_data / peak) * 0.92
+
+            lang_param = None if self.language in ("auto", "", "none") else self.language
             use_fp16 = torch.cuda.is_available() and getattr(model, "device", "cpu") != "cpu"
+
+            # 3. Contextual initial prompt anchors English vocabulary, contractions, and punctuation
+            initial_prompt = "Conversational assistant. Clean, fluent English speech without background noise or filler words."
 
             result = model.transcribe(
                 audio_data,
@@ -554,11 +570,24 @@ class WhisperVoiceInput:
                 best_of=1,
                 condition_on_previous_text=False,
                 without_timestamps=True,
+                initial_prompt=initial_prompt,
             )
 
-            text = (result.get("text") or "").strip()
+            raw_text = (result.get("text") or "").strip()
             detected_lang = result.get("language", self.language)
-            return text, detected_lang
+
+            # 4. Filter known Whisper hallucinations on silent/breathing frames
+            HALLUCINATIONS = {
+                "thank you", "thank you.", "thanks for watching", "thanks for watching.",
+                "bye", "bye.", "see you next time", "subtitles by", "amara.org",
+                "subscribe", "please subscribe", "[music]", "[applause]", "[blank_audio]",
+                "you", "thank you very much.", "thanks"
+            }
+            norm_check = raw_text.lower().strip(" .,!?")
+            if norm_check in HALLUCINATIONS or any(norm_check == h.strip(" .") for h in HALLUCINATIONS):
+                return "", detected_lang
+
+            return raw_text, detected_lang
         except Exception as e:
             logger.error(f"Whisper transcription failed: {e}")
             raise RuntimeError(f"Whisper transcription error: {e}")
