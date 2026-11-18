@@ -247,7 +247,7 @@ class AdaptiveReasoningEngine:
                 level=level,
                 temperature=0.7,
                 top_p=0.9,
-                max_thinking_tokens=25,
+                max_thinking_tokens=40,
                 prefill_assistant=prefill_assistant,
                 system_directive=sys_dir,
                 rationale=rationale or ("First-turn greeting with opposite-gender tone" if is_first_turn else "Multi-turn direct response without re-greeting")
@@ -263,7 +263,7 @@ class AdaptiveReasoningEngine:
                 level=level,
                 temperature=0.15,
                 top_p=0.9,
-                max_thinking_tokens=20,
+                max_thinking_tokens=35,
                 prefill_assistant=prefill_assistant,
                 system_directive=sys_dir,
                 rationale=rationale or "Ultra-fast code delivery"
@@ -279,7 +279,7 @@ class AdaptiveReasoningEngine:
                 level=level,
                 temperature=0.25,
                 top_p=0.9,
-                max_thinking_tokens=40,
+                max_thinking_tokens=50,
                 prefill_assistant=prefill_assistant,
                 system_directive=sys_dir,
                 rationale=rationale or "Focused reasoning with fast generation"
@@ -295,7 +295,7 @@ class AdaptiveReasoningEngine:
                 level=level,
                 temperature=0.5,
                 top_p=0.9,
-                max_thinking_tokens=70,
+                max_thinking_tokens=80,
                 prefill_assistant=prefill_assistant,
                 system_directive=sys_dir,
                 rationale=rationale or "Full cognitive reasoning for complex algorithmic depth"
