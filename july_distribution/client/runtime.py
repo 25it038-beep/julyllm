@@ -307,9 +307,11 @@ class ClientInferenceRuntime:
             guidance = None
 
         # Build chat format
-        is_sree = "sree" in getattr(self, "current_model_id", "july").lower()
-        if is_sree:
-            # Sree uses ChatML format and native <think> tags for dense reasoning
+        mid_lower = getattr(self, "current_model_id", "july").lower()
+        is_chatml = any(x in mid_lower for x in ("sree", "gravity", "qwen", "mini-omni"))
+        is_reasoning_model = any(x in mid_lower for x in ("sree", "gravity", "qwen"))
+        if is_chatml:
+            # Sree & Gravity use ChatML format and native <think> tags for dense reasoning
             formatted = f"<|im_start|>system\n{sys_prompt}\n\n{steering.system_directive}"
             if custom_kn:
                 formatted += f"\n\nReference Knowledge:\n{custom_kn}"
@@ -342,8 +344,9 @@ class ClientInferenceRuntime:
             formatted += "<|im_start|>assistant\n"
             if steering.prefill_assistant:
                 formatted += steering.prefill_assistant
-            model_stops = ["<|im_end|>", "<|im_start|>", "<|endoftext|>"]
+            model_stops = ["<|im_end|>", "<|im_start|>", "<|endoftext|>", "<|eot_id|>", "<|end_of_text|>"]
         else:
+            # July uses Llama-3 format
             formatted = f"<|start_header_id|>system<|end_header_id|>\n\n{sys_prompt}\n\n{steering.system_directive}"
             if custom_kn:
                 formatted += f"\n\nReference Knowledge:\n{custom_kn}"
@@ -373,7 +376,7 @@ class ClientInferenceRuntime:
 
             formatted += f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|>"
             formatted += "<|start_header_id|>assistant<|end_header_id|>\n\n"
-            model_stops = ["<|eot_id|>", "<|end_of_text|>", "<|endoftext|>"]
+            model_stops = ["<|eot_id|>", "<|end_of_text|>", "<|endoftext|>", "<|im_end|>", "<|im_start|>"]
 
         # Unlimited tokens: if requested_max <= 0 or None, llama.cpp generates until EOS
         requested_max = max_tokens if max_tokens is not None else self.config.max_tokens
@@ -384,8 +387,8 @@ class ClientInferenceRuntime:
 
         full_response = []
 
-        if is_sree:
-            # SREE Dynamic Bounded Thinking Pipeline
+        if is_reasoning_model:
+            # Dynamic Bounded Thinking Pipeline (Sree & Gravity)
             # 1. Immediately yield opening think tag so UI initiates thinking container with zero delay
             yield "<think>\n"
             full_response.append("<think>\n")

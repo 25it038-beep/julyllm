@@ -206,7 +206,7 @@ class AdaptiveReasoningEngine:
         Prefills a closed, dynamic 1-line thought for reasoning models so llama.cpp
         begins generating the actual answer immediately without hidden token delay.
         """
-        is_sree = "sree" in (model_id or "").lower()
+        is_reasoning_model = any(x in (model_id or "").lower() for x in ("sree", "gravity", "qwen"))
 
         try:
             from .context_provider import RuntimeContextProvider
@@ -230,8 +230,8 @@ class AdaptiveReasoningEngine:
             greeting_pref = "Hello"
 
         thought = cls.generate_dynamic_thought(prompt, level, user_name=user_name, opp_persona=opp_persona)
-        # SREE Dynamic Reasoning: Prompt with open <think> so SREE formulates real thoughts dynamically, bounded by max_thinking_tokens
-        prefill_assistant = "<think>\n" if is_sree else None
+        # SREE & Gravity Dynamic Reasoning: Prompt with open <think> so models formulate real thoughts dynamically
+        prefill_assistant = "<think>\n" if is_reasoning_model else None
 
         if level == ThinkingLevel.CONVERSATIONAL:
             if is_first_turn:

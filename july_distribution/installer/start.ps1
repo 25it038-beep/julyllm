@@ -82,7 +82,15 @@ if (Test-Path $CliFile) {
     }
 }
 
-$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or -not (Test-Path $LiveEngineFile) -or -not (Test-Path $VadFile) -or -not $HasGetInstance -or -not $HasCliThreading -or -not $HasMiniOmni -or $Update)
+$HasChatMlFix = $false
+if (Test-Path $RuntimeFile) {
+    $runtimeContent = Get-Content $RuntimeFile -Raw -ErrorAction SilentlyContinue
+    if ($runtimeContent -and $runtimeContent.Contains("is_chatml")) {
+        $HasChatMlFix = $true
+    }
+}
+
+$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or -not (Test-Path $LiveEngineFile) -or -not (Test-Path $VadFile) -or -not $HasGetInstance -or -not $HasCliThreading -or -not $HasMiniOmni -or -not $HasChatMlFix -or $Update)
 if ($NeedsUpdate) {
     Write-Host " [⚡] [1/4] Synchronizing latest July & Gravity live conversational voice runtime from repository..." -ForegroundColor Yellow
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
