@@ -2493,12 +2493,13 @@ def cmd_chat(args):
             except Exception:
                 pass
 
+            # Autonomous Visual Representation Rendering & Speech Synthesis
+            full_text = "".join(full_response)
+
             # Multilingual TTS Speech Synthesis
             if voice_coord.tts.is_enabled:
-                voice_coord.tts.speak(full_text, non_blocking=True)
-
-            # Autonomous Visual Representation Rendering
-            full_text = "".join(full_response)
+                tts_text = re.sub(r'(?i)<think>[\s\S]*?</think>', '', full_text).strip() or full_text
+                voice_coord.tts.speak(tts_text, non_blocking=True)
             try:
                 from .visual import VisualResponseEngine
                 engine = VisualResponseEngine()
