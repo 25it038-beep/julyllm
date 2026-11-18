@@ -169,9 +169,11 @@ class TestJulyGravityFullAcceptance(unittest.TestCase):
         self.assertTrue(manifest.get("verified", False))
 
         state_mgr = DualModelStateManager()
+        for m in ("july", "sree", "mini-omni"):
+            if m in state_mgr.SUPPORTED_MODELS:
+                state_mgr.set_model_state(m, ModelStatus.UNLOADED)
         state_mgr.selectedModel = "gravity"
         state_mgr.set_model_state("gravity", ModelStatus.READY)
-        state_mgr.set_model_state("july", ModelStatus.UNLOADED)
 
         self.assertEqual(state_mgr.activeModel, "gravity")
         self.assertEqual(len(state_mgr.loadedModels), 1)

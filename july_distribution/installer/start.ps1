@@ -1,4 +1,4 @@
-# ================================================================================
+﻿# ================================================================================
 # HS AI SOLUTIONS — JULY LLM ALL-IN-ONE AUTONOMOUS RUNTIME
 # Founder & Chief Architect: Harshan Seliyan | Organization: HS AI Solutions
 # Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
@@ -285,8 +285,9 @@ if (-not $Model) {
         Write-Host "   [3]  🧠  SREE LLM (Dense Cognitive Reasoning, Multi-Step Thinking & STEM)" -ForegroundColor Cyan
         Write-Host "   [4]  ⚡  Auto Router (Dynamic Query Routing to July, Gravity, or Sree)" -ForegroundColor Magenta
         Write-Host "   [5]  🎙️   JULY LIVE (Continuous Conversational Voice AI Mode)" -ForegroundColor Green
+        Write-Host "   [6]  🤖  MINI-OMNI LIVE (End-to-End Multimodal Conversational Speech AI)" -ForegroundColor Cyan
         Write-Host ""
-        $mChoice = Read-Host " Select Option [1, 2, 3, 4, or 5] (Default: 1 - July)"
+        $mChoice = Read-Host " Select Option [1, 2, 3, 4, 5, or 6] (Default: 1 - July)"
         if ($mChoice -eq '2') {
             $Model = "gravity"
         } elseif ($mChoice -eq '3') {
@@ -295,6 +296,9 @@ if (-not $Model) {
             $Model = "auto"
         } elseif ($mChoice -eq '5') {
             $Model = "july"
+            $Live = $true
+        } elseif ($mChoice -eq '6') {
+            $Model = "mini-omni"
             $Live = $true
         } else {
             $Model = "july"

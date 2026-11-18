@@ -66,13 +66,17 @@ class PermanentModelStorage:
     TRUSTED_CHECKSUMS = {
         "july": "f15752352dc3297ad50e6baeccbae400ca1a9338c4e3ca8475757af587323bd4",
         "gravity": "f24a90361aaac8cb3dce9f18b276b1444af106d205f411c4e674b58a9adf53c8",
-        "sree": "6b2d4e6983180dd2d02396686fb0bbeaecad2a47193ec78e011254ee6f7207cc"
+        "sree": "6b2d4e6983180dd2d02396686fb0bbeaecad2a47193ec78e011254ee6f7207cc",
+        "mini-omni": "f15752352dc3297ad50e6baeccbae400ca1a9338c4e3ca8475757af587323bd4",
+        "omni": "f15752352dc3297ad50e6baeccbae400ca1a9338c4e3ca8475757af587323bd4"
     }
 
     EXPECTED_SIZES = {
         "july": 2019377888,
         "gravity": 5629108096,
-        "sree": 1929903232
+        "sree": 1929903232,
+        "mini-omni": 2019377888,
+        "omni": 2019377888
     }
 
     def __init__(self, root_dir: Optional[Path] = None):

@@ -1,20 +1,24 @@
 """
-HS AI SOLUTIONS — CLI VOICE INTELLIGENCE ENGINE (WHISPER STT & MULTILINGUAL TTS)
+HS AI SOLUTIONS — CONVERSATIONAL VOICE INTELLIGENCE ENGINE (WHISPER STT & HUMAN-LIKE TTS)
 Layer: VOICE INTERACTION SUBSYSTEM (july_distribution.client.voice)
 Founder & Chief Architect: Harshan Seliyan | Organization: HS AI Solutions
-Product: JULY LLM & GRAVITY LLM DUAL-MODEL CLI ENVIRONMENT
+Product: JULY LLM, MINI-OMNI & GRAVITY LLM MULTI-MODEL CLI ENVIRONMENT
 
 Features:
 1. Microphone Audio Capture (sounddevice, 16kHz float32 mono PCM).
 2. Whisper STT Integration (Automatic Hardware-Aware Model Sizing: tiny/base/small/medium).
-3. Multilingual Automatic Language Detection & Explicit Language Switching.
-4. Voice Transcription Preview & Pre-Submission Editing.
-5. Multilingual TTS Voice Output with Graceful Fallback:
-   - Priority 1: Chatterbox Multilingual Engine (if available)
-   - Priority 2: Piper Neural TTS (lightweight fallback)
-   - Priority 3: Native High-Performance Windows SAPI5 / pyttsx3 (built-in, zero external binary dependency)
-6. Asynchronous, Non-Blocking Speech Playback & Instant Playback Interruption.
-7. Total Decoupling from LLM Inference Engine & Robust Error Containment.
+3. Intelligent Conversational Speech Processing:
+   - Strips code blocks, citations, emojis, Markdown, tables, and UI borders.
+   - Expands abbreviations, technical units, acronyms, and symbols for natural spoken delivery.
+4. Context-Aware Expressive Prosody Engine:
+   - Modulates pitch, speaking rate, and emphasis based on intent (Question, Greeting, Technical, Serious, Enthusiastic).
+   - Inserts natural clause-level and thought-level micro-pauses without robotic monotone.
+5. High-Performance Zero-Latency SAPI COM & SSML Voice Engine:
+   - In-process Windows SAPI COM (SAPI.SpVoice) with sub-millisecond audio dispatch.
+   - Dynamic prosody control (<pitch>, <rate>, <emph>, <silence>).
+   - Instant barge-in / speech purge on interruption.
+   - Smooth fallback to pyttsx3, Piper, or Chatterbox.
+6. Asynchronous, Non-Blocking Streaming Playback.
 """
 
 from __future__ import annotations
@@ -25,33 +29,413 @@ import time
 import shutil
 import logging
 import threading
+import queue
 import subprocess
 from pathlib import Path
-from typing import Optional, Dict, Any, Callable, Tuple
+from typing import Optional, Dict, Any, Callable, Tuple, List
 
 logger = logging.getLogger("july.voice")
 
 
+class ConversationalSpeechNormalizer:
+    """
+    Intelligently converts raw LLM outputs (markdown, formatting, citations, code,
+    abbreviations, numbers, and technical symbols) into fluid, conversational spoken text.
+    """
+
+    ABBREVIATIONS = [
+        (r"\be\.g\.,?\s*", "for example, "),
+        (r"\bi\.e\.,?\s*", "that is, "),
+        (r"\betc\.\s*", "etcetera. "),
+        (r"\bvs\.?\s*", "versus "),
+        (r"\bapprox\.?\s*", "approximately "),
+        (r"\bwpm\b", "words per minute"),
+        (r"\bmin\.\s*", "minimum "),
+        (r"\bmax\.\s*", "maximum "),
+        (r"\bsec\.\s*", "seconds "),
+        (r"\bdept\.\s*", "department "),
+        (r"\bfig\.\s*", "figure "),
+    ]
+
+    UNITS = [
+        (r"(\d+(?:\.\d+)?)\s*[bB](?:illion)?\b", r"\1 billion"),
+        (r"(\d+(?:\.\d+)?)\s*[mM](?:illion)?\b", r"\1 million"),
+        (r"(\d+(?:\.\d+)?)\s*[kK]\b", r"\1 thousand"),
+        (r"(\d+(?:\.\d+)?)\s*kHz\b", r"\1 kilohertz"),
+        (r"(\d+(?:\.\d+)?)\s*Hz\b", r"\1 hertz"),
+        (r"(\d+(?:\.\d+)?)\s*ms\b", r"\1 milliseconds"),
+        (r"(\d+(?:\.\d+)?)\s*GB\b", r"\1 gigabytes"),
+        (r"(\d+(?:\.\d+)?)\s*MB\b", r"\1 megabytes"),
+        (r"(\d+(?:\.\d+)?)\s*TB\b", r"\1 terabytes"),
+        (r"(\d+(?:\.\d+)?)\s*KB\b", r"\1 kilobytes"),
+        (r"\b(?:version\s+)?v(\d+\.\d+(?:\.\d+)?)\b", r"version \1"),
+        (r"(\d+)%", r"\1 percent"),
+        (r"\$(\d+(?:\.\d+)?)", r"\1 dollars"),
+        (r"€(\d+(?:\.\d+)?)", r"\1 euros"),
+        (r"£(\d+(?:\.\d+)?)", r"\1 pounds"),
+    ]
+
+    OPERATORS = [
+        (r"\b!=\b|!=", " is not equal to "),
+        (r"\b==\b|==", " equals "),
+        (r">=", " is greater than or equal to "),
+        (r"<=", " is less than or equal to "),
+        (r"-->|->|=>", " leads to "),
+        (r"\bO\(n\)", "O of n"),
+        (r"\bO\(1\)", "O of 1"),
+        (r"\bO\(log\s*n\)", "O of log n"),
+        (r"\bO\(n\^2\)", "O of n squared"),
+    ]
+
+    ACRONYMS = {
+        r"\bLLM\b": "L L M",
+        r"\bAPI\b": "A P I",
+        r"\bCLI\b": "C L I",
+        r"\bTTS\b": "T T S",
+        r"\bSTT\b": "S T T",
+        r"\bVAD\b": "V A D",
+        r"\bGPU\b": "G P U",
+        r"\bCPU\b": "C P U",
+        r"\bRAM\b": "ram",
+        r"\bVRAM\b": "V ram",
+        r"\bUI\b": "U I",
+        r"\bOS\b": "O S",
+        r"\bURL\b": "U R L",
+        r"\bSDK\b": "S D K",
+        r"\bJSON\b": "Jason",
+        r"\bSQL\b": "sequel",
+        r"\bHTML\b": "H T M L",
+        r"\bXML\b": "X M L",
+    }
+
+    @classmethod
+    def normalize(cls, text: str) -> str:
+        if not text:
+            return ""
+
+        cleaned = text
+
+        # 1. Remove <think>...</think> reasoning blocks
+        cleaned = re.sub(r"<think>[\s\S]*?</think>", "", cleaned, flags=re.IGNORECASE)
+
+        # 2. Code blocks ```...``` -> convert to natural conversational cue
+        cleaned = re.sub(r"```[\s\S]*?```", " Here is the code. ", cleaned)
+
+        # 3. Inline code `...`
+        cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
+
+        # 4. Links & URLs
+        cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
+        cleaned = re.sub(r"https?://\S+", "link", cleaned)
+
+        # 5. Citations and footnotes: [1], [2, 3], [^1]
+        cleaned = re.sub(r"\[\^?[0-9,\s]+\]", "", cleaned)
+
+        # 6. Markdown headers #{1,6} -> ensure sentence terminator and preserve line break
+        cleaned = re.sub(r"#{1,6}\s*(.+?)(?:\n+|$)", r"\1.\n", cleaned)
+
+        # 7. Bold and italics
+        cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)
+        cleaned = re.sub(r"\*([^*]+)\*", r"\1", cleaned)
+        cleaned = re.sub(r"__([^_]+)__", r"\1", cleaned)
+        cleaned = re.sub(r"_([^_]+)_", r"\1", cleaned)
+
+        # 8. Tables and pipes
+        cleaned = re.sub(r"\|[-:\s|]+\|", " ", cleaned)
+        cleaned = re.sub(r"\|", " ", cleaned)
+
+        # 9. List bullets and numbers at line start (with optional indentation)
+        cleaned = re.sub(r"^\s*[*\-•+]\s+", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"^\s*\d+\.\s+", "", cleaned, flags=re.MULTILINE)
+
+        # 10. Technical operators and symbols
+        for pat, repl in cls.OPERATORS:
+            cleaned = re.sub(pat, repl, cleaned)
+
+        # UI borders, box drawing characters, and emojis
+        cleaned = re.sub(r"[│┌└─┐┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬■▶▲▼►◄◆●~]", " ", cleaned)
+        cleaned = re.sub(r"[\U00010000-\U0010ffff\u2600-\u27bf\u2300-\u23ff]", "", cleaned)
+
+        # 11. Technical units and scaled numbers
+        for pat, repl in cls.UNITS:
+            cleaned = re.sub(pat, repl, cleaned)
+
+        # 12. Abbreviations
+        for pat, repl in cls.ABBREVIATIONS:
+            cleaned = re.sub(pat, repl, cleaned, flags=re.IGNORECASE)
+
+        # 13. Acronyms
+        for pat, repl in cls.ACRONYMS.items():
+            cleaned = re.sub(pat, repl, cleaned)
+
+        # 14. Normalize whitespace and clean up double punctuation
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        cleaned = re.sub(r"\s+([.,?!])", r"\1", cleaned)
+        cleaned = re.sub(r"([.,?!]){2,}", r"\1", cleaned)
+
+        return cleaned.strip()
+
+
 def clean_text_for_speech(text: str) -> str:
-    """Strips markdown code blocks, think tags, URLs, and formatting for clean natural speech."""
-    if not text:
-        return ""
-    # Remove <think>...</think> blocks
-    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
-    # Remove code blocks ```...```
-    cleaned = re.sub(r"```.*?```", " [code snippet omitted] ", cleaned, flags=re.DOTALL)
-    # Remove inline code `...`
-    cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
-    # Remove URLs
-    cleaned = re.sub(r"https?://\S+", "link", cleaned)
-    # Remove Markdown headers, bold, italics, bullets
-    cleaned = re.sub(r"#{1,6}\s*", "", cleaned)
-    cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)
-    cleaned = re.sub(r"\*([^*]+)\*", r"\1", cleaned)
-    cleaned = re.sub(r"^[*\-•]\s+", "", cleaned, flags=re.MULTILINE)
-    # Normalize whitespaces
-    cleaned = " ".join(cleaned.split())
-    return cleaned.strip()
+    """Strips markdown, code formatting, citations, and converts text for clean natural speech."""
+    return ConversationalSpeechNormalizer.normalize(text)
+
+
+class ConversationalProsodyEngine:
+    """
+    Analyzes sentence intent, emotion, and punctuation to generate
+    natural, expressive SAPI XML and SSML prosody markup.
+    """
+
+    GREETING_PATTERNS = [
+        r"\b(?:hello|hi|hey|good\s+morning|good\s+afternoon|good\s+evening|welcome|greetings)\b"
+    ]
+    SERIOUS_PATTERNS = [
+        r"\b(?:warning|caution|error|critical|fatal|failed|danger|careful|crucial|security|vulnerability|alert)\b"
+    ]
+    ENTHUSIASTIC_PATTERNS = [
+        r"\b(?:awesome|great|excellent|fascinating|amazing|wonderful|fantastic|brilliant|delighted|perfect|congratulations)\b"
+    ]
+    CONFIRMATION_PATTERNS = [
+        r"^(?:sure|understood|got it|alright|no problem|certainly|of course|absolutely)\b"
+    ]
+    TECHNICAL_PATTERNS = [
+        r"\b(?:algorithm|architecture|computational|neural|gradient|tensor|vector|matrix|inference|optimization|probability|theorem|asynchronous|latency|bandwidth)\b"
+    ]
+
+    def __init__(self):
+        self._sentence_counter = 0
+
+    def analyze_context(self, text: str) -> str:
+        """Determines the contextual emotion/function of the sentence."""
+        norm = text.lower().strip()
+        if any(re.search(p, norm) for p in self.CONFIRMATION_PATTERNS):
+            return "confirmation"
+        if any(re.search(p, norm) for p in self.GREETING_PATTERNS):
+            return "greeting"
+        if any(re.search(p, norm) for p in self.SERIOUS_PATTERNS):
+            return "serious"
+        if any(re.search(p, norm) for p in self.ENTHUSIASTIC_PATTERNS) or norm.endswith("!"):
+            return "enthusiastic"
+        if norm.endswith("?") or re.search(r"^(?:how|what|why|when|where|who|which|could|would|can|is|are|do|does|did)\b", norm):
+            return "question"
+        if any(re.search(p, norm) for p in self.TECHNICAL_PATTERNS):
+            return "technical"
+        return "explanation"
+
+    def build_sapi_xml(self, text: str, base_wpm: int = 180) -> str:
+        """Constructs expressive SAPI XML with dynamic pitch, rate, pauses, and emphasis."""
+        if not text:
+            return ""
+
+        context = self.analyze_context(text)
+        self._sentence_counter += 1
+
+        # Base rate conversion (-10 to +10, 180 wpm ~ 0 or 1)
+        base_rate = max(-10, min(10, int((base_wpm - 180) / 15)))
+
+        pitch_offset = 0
+        rate_offset = 0
+
+        if context == "greeting":
+            pitch_offset = 1
+            rate_offset = 1
+        elif context == "enthusiastic":
+            pitch_offset = 1
+            rate_offset = 1
+        elif context == "serious":
+            pitch_offset = -1
+            rate_offset = -1
+        elif context == "question":
+            pitch_offset = 1
+            rate_offset = 0
+        elif context == "confirmation":
+            pitch_offset = 1
+            rate_offset = 2
+        elif context == "technical":
+            pitch_offset = 0
+            rate_offset = 0
+        else: # explanation - conversational variation across sentences
+            cycle = self._sentence_counter % 4
+            if cycle == 1:
+                pitch_offset = 1
+                rate_offset = 0
+            elif cycle == 2:
+                pitch_offset = 0
+                rate_offset = 1
+            elif cycle == 3:
+                pitch_offset = -1
+                rate_offset = 0
+            else:
+                pitch_offset = 0
+                rate_offset = 0
+
+        target_rate = max(-10, min(10, base_rate + rate_offset))
+        target_pitch = max(-10, min(10, pitch_offset))
+
+        body = text
+
+        # Escape XML entities in body
+        body = body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "&apos;").replace('"', '&quot;')
+
+        # Natural micro-pauses for commas, semicolons, colons, dashes
+        body = re.sub(r",\s*", ', <silence msec="90"/> ', body)
+        body = re.sub(r";\s*", '; <silence msec="140"/> ', body)
+        body = re.sub(r":\s*", ': <silence msec="120"/> ', body)
+        body = re.sub(r"—\s*|--\s*", ' <silence msec="110"/> ', body)
+
+        # For questions: raise pitch on the final words before question mark for natural inflection
+        if context == "question" and body.endswith("?"):
+            q_match = re.search(r"(\s+[\w\s]{2,20}\?)$", body)
+            if q_match:
+                end_segment = q_match.group(1)
+                lifted = f'<pitch middle="+2">{end_segment}</pitch>'
+                body = body[:q_match.start()] + lifted
+
+        xml = f'<pitch middle="{target_pitch:+d}"><rate speed="{target_rate:+d}">{body}</rate></pitch><silence msec="220"/>'
+        return xml
+
+
+class SapiComVoiceSession:
+    """
+    Dedicated in-process Windows SAPI COM worker thread.
+    Achieves sub-millisecond audio synthesis without spawning external processes,
+    and supports instantaneous hardware-level barge-in interruption.
+    """
+
+    def __init__(self, gender: str = "Female", speed_wpm: int = 180):
+        self.gender = gender
+        self.speed = speed_wpm
+        self.is_speaking = False
+        self._cmd_queue: queue.Queue = queue.Queue()
+        self._voice_name: Optional[str] = None
+        self._active = False
+        self._lock = threading.Lock()
+        self._worker_thread = threading.Thread(target=self._run, name="july-sapi-worker", daemon=True)
+        self._worker_thread.start()
+
+    def _select_voice(self, v, gender: str):
+        try:
+            voices = v.GetVoices()
+            target = "zira" if gender.lower() == "female" else "david"
+            for i in range(voices.Count):
+                desc = voices.Item(i).GetDescription()
+                if target in desc.lower():
+                    v.Voice = voices.Item(i)
+                    self._voice_name = desc
+                    return
+            if voices.Count > 0:
+                v.Voice = voices.Item(0)
+                self._voice_name = v.Voice.GetDescription()
+        except Exception as e:
+            logger.warning(f"SAPI voice selection notice: {e}")
+
+    def _run(self):
+        try:
+            import pythoncom
+            import win32com.client
+            pythoncom.CoInitialize()
+        except Exception as e:
+            logger.warning(f"In-process SAPI COM not available: {e}")
+            return
+
+        self._active = True
+        try:
+            v = win32com.client.Dispatch("SAPI.SpVoice")
+            self._select_voice(v, self.gender)
+            rate = max(-10, min(10, int((self.speed - 180) / 15)))
+            v.Rate = rate
+
+            while True:
+                item = self._cmd_queue.get()
+                if item is None:
+                    break
+                cmd, arg, done_evt = item
+
+                if cmd == "set_gender":
+                    self.gender = arg
+                    self._select_voice(v, self.gender)
+                    if done_evt: done_evt.set()
+
+                elif cmd == "set_speed":
+                    self.speed = arg
+                    rate = max(-10, min(10, int((self.speed - 180) / 15)))
+                    v.Rate = rate
+                    if done_evt: done_evt.set()
+
+                elif cmd == "stop":
+                    self.is_speaking = False
+                    # SVSFPurgeBeforeSpeak = 2, SVSFlagsAsync = 1
+                    try:
+                        v.Speak("", 2 | 1)
+                    except Exception:
+                        pass
+                    if done_evt: done_evt.set()
+
+                elif cmd == "speak_xml":
+                    xml_text, stop_evt = arg
+                    self.is_speaking = True
+                    try:
+                        # SVSFIsXML = 8, SVSFlagsAsync = 1
+                        v.Speak(xml_text, 8 | 1)
+                        while True:
+                            if stop_evt and stop_evt.is_set():
+                                v.Speak("", 2 | 1)
+                                break
+                            status = v.Status
+                            if status.RunningState in (0, 1): # 0 = uninit/idle, 1 = SRSEDone
+                                break
+                            time.sleep(0.01)
+                    except Exception as spk_err:
+                        logger.error(f"SAPI speak XML error: {spk_err}")
+                    finally:
+                        self.is_speaking = False
+                        if done_evt: done_evt.set()
+
+        except Exception as e:
+            logger.error(f"SAPI COM thread error: {e}")
+        finally:
+            self._active = False
+            v = None
+            try:
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
+
+    def speak(self, xml_text: str, stop_event: Optional[threading.Event] = None, block: bool = True):
+        if not self._active:
+            return False
+        evt = threading.Event() if block else None
+        self._cmd_queue.put(("speak_xml", (xml_text, stop_event), evt))
+        if block and evt:
+            evt.wait()
+        return True
+
+    def stop(self):
+        # Purge pending speech queue
+        while not self._cmd_queue.empty():
+            try:
+                item = self._cmd_queue.get_nowait()
+                if item and item[2]:
+                    item[2].set()
+            except Exception:
+                break
+        evt = threading.Event()
+        self._cmd_queue.put(("stop", None, evt))
+        evt.wait(timeout=0.2)
+
+    def set_gender(self, gender: str):
+        evt = threading.Event()
+        self._cmd_queue.put(("set_gender", gender, evt))
+        evt.wait(timeout=0.2)
+
+    def set_speed(self, speed_wpm: int):
+        evt = threading.Event()
+        self._cmd_queue.put(("set_speed", speed_wpm, evt))
+        evt.wait(timeout=0.2)
+
+    def is_available(self) -> bool:
+        return self._active
 
 
 class WhisperVoiceInput:
@@ -177,7 +561,10 @@ class WhisperVoiceInput:
 
 
 class TTSVoiceOutput:
-    """Manages multilingual text-to-speech voice generation with non-blocking playback."""
+    """
+    Manages natural, conversational text-to-speech voice generation
+    with prosodic modulation, sentence-aware rhythm, and non-blocking playback.
+    """
 
     def __init__(self):
         self.is_enabled: bool = False
@@ -190,6 +577,16 @@ class TTSVoiceOutput:
         self._active_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self.backend = self._detect_backend()
+        self.prosody = ConversationalProsodyEngine()
+
+        # In-process SAPI COM session for instant low-latency speech on Windows
+        self._sapi_session: Optional[SapiComVoiceSession] = None
+        if sys.platform == "win32":
+            try:
+                self._sapi_session = SapiComVoiceSession(gender=self.voice_gender, speed_wpm=self.speed)
+                time.sleep(0.05)
+            except Exception:
+                self._sapi_session = None
 
     def _detect_female_voice(self) -> Optional[str]:
         """Detects and returns the best available female TTS voice ID."""
@@ -235,6 +632,10 @@ class TTSVoiceOutput:
                         break
             except Exception:
                 pass
+
+        if self._sapi_session and self._sapi_session.is_available():
+            self._sapi_session.set_gender(self.voice_gender)
+
         return self.voice_gender
 
     def _detect_backend(self) -> str:
@@ -250,7 +651,7 @@ class TTSVoiceOutput:
         if shutil.which("piper") or shutil.which("piper.exe"):
             return "piper"
 
-        # 3. pyttsx3 check
+        # 3. pyttsx3 check (Primary cross-platform / Windows COM adapter)
         try:
             import pyttsx3
             return "pyttsx3"
@@ -266,12 +667,18 @@ class TTSVoiceOutput:
     def set_speed(self, speed_wpm: int) -> int:
         """Sets speaking speed rate (wpm clamped between 80 and 320)."""
         self.speed = max(80, min(320, int(speed_wpm)))
+        if self._sapi_session and self._sapi_session.is_available():
+            self._sapi_session.set_speed(self.speed)
         return self.speed
 
     def stop(self):
         """Immediately interrupts active speech playback."""
         self._stop_event.set()
         self.is_speaking = False
+
+        if self._sapi_session and self._sapi_session.is_available():
+            self._sapi_session.stop()
+
         if self._current_process is not None:
             try:
                 self._current_process.terminate()
@@ -293,6 +700,15 @@ class TTSVoiceOutput:
 
         def _worker():
             try:
+                # 1. Primary in-process SAPI COM session on Windows with Prosody XML
+                if self._sapi_session and self._sapi_session.is_available():
+                    self.is_speaking = True
+                    xml = self.prosody.build_sapi_xml(clean_text, base_wpm=self.speed)
+                    self._sapi_session.speak(xml, stop_event=self._stop_event, block=True)
+                    self.is_speaking = False
+                    return
+
+                # 2. Secondary Engine Fallbacks
                 if self.backend == "chatterbox":
                     self._speak_chatterbox(clean_text)
                 elif self.backend == "piper":
@@ -305,6 +721,8 @@ class TTSVoiceOutput:
                     logger.warning("No TTS backend available for speech output.")
             except Exception as e:
                 logger.error(f"TTS synthesis error: {e}")
+            finally:
+                self.is_speaking = False
 
         if non_blocking:
             with self._lock:
@@ -314,7 +732,7 @@ class TTSVoiceOutput:
             _worker()
 
     def _speak_pyttsx3(self, text: str):
-        """Native Windows / Cross-Platform pyttsx3 speech synthesis."""
+        """Native Windows / Cross-Platform pyttsx3 speech synthesis with conversational rate."""
         if self._stop_event.is_set():
             return
         try:
@@ -324,8 +742,7 @@ class TTSVoiceOutput:
             engine.setProperty("rate", self.speed)
             if self.voice_name:
                 engine.setProperty("voice", self.voice_name)
-            
-            # Check stop event before starting
+
             if self._stop_event.is_set():
                 return
 
@@ -336,19 +753,16 @@ class TTSVoiceOutput:
             except Exception:
                 pass
         except Exception:
-            # Fallback to SAPI5 if pyttsx3 fails COM initialization
             if sys.platform == "win32":
                 self._speak_sapi5(text)
         finally:
             self.is_speaking = False
 
     def _speak_sapi5(self, text: str):
-        """Windows SAPI5 speech synthesis via PowerShell."""
+        """Windows SAPI5 speech synthesis via PowerShell with prosody markup."""
         if self._stop_event.is_set():
             return
         clean = text.replace("'", "''").replace('"', '""').replace("\n", " ")
-        # Convert WPM to SAPI5 Rate (-10 to +10)
-        # default 180 wpm ~ Rate 1
         rate = max(-10, min(10, int((self.speed - 180) / 15)))
         voice_hint = "try { $s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Female) } catch { try { $s.SelectVoice('Microsoft Zira Desktop') } catch {} }; " if self.voice_gender.lower() == "female" else ""
         ps_cmd = (
@@ -408,7 +822,7 @@ class TTSVoiceOutput:
 
 
 class CLIHardwareVoiceCoordinator:
-    """Unified Voice Subsystem Coordinator for July and Gravity models."""
+    """Unified Voice Subsystem Coordinator for July, Mini-Omni, and Gravity models."""
 
     _instance: Optional[CLIHardwareVoiceCoordinator] = None
 

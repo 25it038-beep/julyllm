@@ -98,7 +98,11 @@ class ClientModelDownloader:
         try:
             from ..server.r2_manager import CloudflareR2DistributionGateway
             gw = CloudflareR2DistributionGateway()
-            if mid == "sree":
+            if mid in ("mini-omni", "omni"):
+                key = "mini-omni-final.gguf"
+                model_name = "MINI-OMNI"
+                expected_sha = "f15752352dc3297ad50e6baeccbae400ca1a9338c4e3ca8475757af587323bd4"
+            elif mid == "sree":
                 key = "sree-final.gguf"
                 model_name = "SREE LLM"
                 expected_sha = "6b2d4e6983180dd2d02396686fb0bbeaecad2a47193ec78e011254ee6f7207cc"

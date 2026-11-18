@@ -35,6 +35,7 @@ from .runtime import ClientInferenceRuntime
 from .state_manager import DualModelStateManager
 from .storage import PermanentModelStorage
 from .ui_renderer import render_live_box, make_audio_waveform
+from .web_search import should_trigger_web_search, extract_search_query, live_duckduckgo_search, format_search_context, SKIP_PATTERNS
 
 logger = logging.getLogger("july.live")
 
@@ -50,6 +51,17 @@ class LiveState(str, Enum):
 
 
 VOICE_STYLES: Dict[str, Dict[str, str]] = {
+    "mini-omni": {
+        "title": "Mini-Omni",
+        "description": "Ultra-fast end-to-end conversational voice, natural interactive dialogue",
+        "system_directive": (
+            "You are in LIVE REAL-TIME VOICE CONVERSATION mode powered by the MINI-OMNI conversational speech engine. "
+            "Speak as a spontaneous, intelligent, articulate human conversationalist in real time. "
+            "Deliver natural, concise spoken responses (1 to 2 spoken sentences per turn). "
+            "Never recite essays, lists, bullet points, numbers, or markdown formatting. "
+            "Engage directly with the user's intent with warmth, confidence, and natural conversational rhythm."
+        ),
+    },
     "natural": {
         "title": "Natural",
         "description": "Everyday companion, balanced, concise, conversational",
@@ -106,6 +118,11 @@ VOICE_STYLES: Dict[str, Dict[str, str]] = {
 class SpeechChunker:
     """Splits streaming LLM tokens into sentence-level chunks for incremental low-latency TTS."""
 
+    ABBREVIATIONS = (
+        "e.g.", "i.e.", "etc.", "vs.", "approx.", "dr.", "mr.", "mrs.", "ms.", "prof.",
+        "v1.", "v2.", "v3.", "al.", "inc.", "ltd.", "fig.", "no.", "dept."
+    )
+
     def __init__(self, min_words_first_clause: int = 5):
         self.buffer: str = ""
         self.min_words_first_clause = min_words_first_clause
@@ -115,6 +132,34 @@ class SpeechChunker:
         self.buffer = ""
         self.is_first_chunk = True
 
+    def _is_safe_sentence_boundary(self, text: str, match_start: int, match_end: int) -> bool:
+        punct = text[match_start:match_end].strip()
+        prefix = text[:match_start].strip()
+
+        if "." in punct:
+            # 1. Decimal number (e.g. 3.14)
+            if match_start > 0 and text[match_start - 1].isdigit():
+                after = text[match_end:]
+                if after and after[0].isdigit():
+                    return False
+
+            # 2. Ellipsis (...)
+            if match_start > 0 and text[match_start - 1] == ".":
+                return False
+            if len(punct) > 1 and "..." in punct:
+                return False
+
+            # 3. Known abbreviation
+            words = prefix.split()
+            if words:
+                last_word = (words[-1] + ".").lower()
+                if last_word in self.ABBREVIATIONS or any(words[-1].lower().endswith(a.rstrip(".")) for a in self.ABBREVIATIONS):
+                    return False
+                if len(words[-1]) == 1 and words[-1].isalpha():
+                    return False
+
+        return True
+
     def add_token(self, token: str) -> List[str]:
         self.buffer += token
         ready_chunks = []
@@ -122,23 +167,37 @@ class SpeechChunker:
         while True:
             # 1. Match complete sentence terminators (. ? ! \n)
             m = re.search(r"([.?!:\n]+)(\s+|$)", self.buffer)
-            if m:
-                end_pos = m.end()
-                raw_chunk = self.buffer[:end_pos].strip()
-                self.buffer = self.buffer[end_pos:]
-                clean = clean_text_for_speech(raw_chunk)
-                if clean:
-                    ready_chunks.append(clean)
-                    self.is_first_chunk = False
-                continue
+            if not m:
+                break
 
-            # 2. For the first chunk, allow early clause boundary (comma, semicolon) for sub-second TTFA
-            if self.is_first_chunk:
-                words = self.buffer.split()
-                if len(words) >= self.min_words_first_clause:
-                    for punct in (",", ";", "—", "-"):
-                        p_idx = self.buffer.find(punct)
-                        if p_idx != -1 and len(self.buffer[:p_idx].split()) >= self.min_words_first_clause:
+            start, end = m.start(), m.end()
+            if not self._is_safe_sentence_boundary(self.buffer, start, end):
+                next_part = self.buffer[end:]
+                m2 = re.search(r"([.?!:\n]+)(\s+|$)", next_part)
+                if not m2:
+                    break
+                start = end + m2.start()
+                end = end + m2.end()
+                if not self._is_safe_sentence_boundary(self.buffer, start, end):
+                    break
+
+            raw_chunk = self.buffer[:end].strip()
+            self.buffer = self.buffer[end:]
+            clean = clean_text_for_speech(raw_chunk)
+            if clean:
+                ready_chunks.append(clean)
+                self.is_first_chunk = False
+            continue
+
+        # 2. For the first chunk, allow early clause boundary (comma, semicolon) for sub-second TTFA
+        if self.is_first_chunk and not ready_chunks:
+            words = self.buffer.split()
+            if len(words) >= self.min_words_first_clause:
+                for punct in (",", ";", "—", "-"):
+                    p_idx = self.buffer.find(punct)
+                    if p_idx != -1:
+                        clause_words = self.buffer[:p_idx].split()
+                        if len(clause_words) >= self.min_words_first_clause:
                             raw_chunk = self.buffer[:p_idx + 1].strip()
                             self.buffer = self.buffer[p_idx + 1:]
                             clean = clean_text_for_speech(raw_chunk)
@@ -146,7 +205,6 @@ class SpeechChunker:
                                 ready_chunks.append(clean)
                                 self.is_first_chunk = False
                             break
-            break
 
         return ready_chunks
 
@@ -171,7 +229,10 @@ class LiveConversationManager:
     ):
         self.runtime = runtime
         self.active_model = active_model.lower().strip()
-        self.current_style = style.lower().strip() if style.lower().strip() in VOICE_STYLES else "natural"
+        if self.active_model in ("mini-omni", "omni") and style == "natural":
+            self.current_style = "mini-omni"
+        else:
+            self.current_style = style.lower().strip() if style.lower().strip() in VOICE_STYLES else "natural"
 
         # Voice & Audio Subsystems
         v_coord = CLIHardwareVoiceCoordinator.get_instance()
@@ -224,7 +285,9 @@ class LiveConversationManager:
     def switch_model(self, model_id: str) -> str:
         """Switches active reasoning model during live voice session."""
         target = model_id.lower().strip()
-        if target not in ("july", "gravity"):
+        if target in ("mini-omni", "omni"):
+            target = "mini-omni"
+        if target not in ("july", "gravity", "sree", "mini-omni"):
             return self.active_model
 
         if target == self.active_model:
@@ -240,7 +303,7 @@ class LiveConversationManager:
             from .dual_engine import DualModelCoordinator
             coord = DualModelCoordinator(runtime=self.runtime, storage=p_stor)
             coord._launch_background_download(target, auto_activate=False)
-            self.last_ai_response = f"Gravity is downloading in the background. I'll stay as July until it's ready."
+            self.last_ai_response = f"{target.title()} is downloading in the background. I'll stay as {self.active_model.title()} until it's ready."
             self.enqueue_speech(self.last_ai_response)
             return self.active_model
 
@@ -249,6 +312,8 @@ class LiveConversationManager:
             f = p_stor.get_model_file(target)
             self.runtime.switch_model(target, f)
             self.active_model = target
+            if target == "mini-omni":
+                self.current_style = "mini-omni"
             logger.info(f"Switched live model to {target.upper()}")
         except Exception as e:
             logger.error(f"Error switching model in live session: {e}")
@@ -345,6 +410,18 @@ class LiveConversationManager:
             self.is_running = False
             return
 
+        if any(w in norm for w in ("switch to mini-omni", "switch to mini omni", "switch to omni", "use mini-omni", "use mini omni")):
+            self.switch_model("mini-omni")
+            self.last_ai_response = "Switched to Mini-Omni conversational voice model. Ready to talk!"
+            self.enqueue_speech(self.last_ai_response)
+            return
+
+        if any(w in norm for w in ("switch to sree", "use sree")):
+            self.switch_model("sree")
+            self.last_ai_response = "Switched to SREE reasoning model. How can I help?"
+            self.enqueue_speech(self.last_ai_response)
+            return
+
         if "switch to gravity" in norm:
             self.switch_model("gravity")
             self.last_ai_response = "Switched to Gravity reasoning model. How can I help?"
@@ -366,12 +443,38 @@ class LiveConversationManager:
         first_token_received = False
         first_audio_dispatched = False
 
+        # Check if query needs real-time live web search grounding (e.g. who/what questions or live facts)
+        search_grounding = ""
+        try:
+            is_who_or_what = bool(re.search(r"\b(who|what|where|when)\b", norm))
+            needs_search = should_trigger_web_search(self.last_user_prompt, self.recent_history)
+            if not needs_search and is_who_or_what:
+                if not any(re.search(p, norm) for p in SKIP_PATTERNS):
+                    needs_search = True
+
+            if needs_search:
+                search_q = extract_search_query(self.last_user_prompt, self.recent_history)
+                logger.info(f"Live voice web search triggered for: '{search_q}'")
+                results = live_duckduckgo_search(search_q, max_results=3)
+                valid = [r for r in results if r.get("title") and r.get("snippet")]
+                if valid:
+                    search_grounding = format_search_context(search_q, valid)
+        except Exception as search_err:
+            logger.warning(f"Live search grounding notice: {search_err}")
+
         # Build style-adapted voice prompt
         style_dir = VOICE_STYLES.get(self.current_style, VOICE_STYLES["natural"])["system_directive"]
         session_id = f"live_session_{self.active_model}"
 
-        # Prepend voice directive to system prompt
-        effective_prompt = f"[SYSTEM VOICE INSTRUCTION: {style_dir}]\nUser said aloud: {self.last_user_prompt}"
+        if search_grounding:
+            effective_prompt = (
+                f"[SYSTEM VOICE INSTRUCTION: {style_dir}]\n"
+                f"REAL-TIME LIVE WEB SEARCH DATA for inquiry:\n{search_grounding}\n\n"
+                f"Instructions: You are in a live voice conversation. In 1 to 2 spoken sentences, directly answer the user's question using this live web search data. Avoid URLs, citations, or formatting.\n"
+                f"User said aloud: {self.last_user_prompt}"
+            )
+        else:
+            effective_prompt = f"[SYSTEM VOICE INSTRUCTION: {style_dir}]\nUser said aloud: {self.last_user_prompt}"
 
         full_response_parts: List[str] = []
 
@@ -414,6 +517,12 @@ class LiveConversationManager:
                         self.metrics["first_audio_sec"] = round(now - t_prompt_submit, 3)
                         self.metrics["total_latency_sec"] = round(now - t_detect_end, 3)
                     self.enqueue_speech(c)
+
+                if self.last_user_prompt and self.last_ai_response:
+                    self.recent_history.append({"role": "user", "content": self.last_user_prompt})
+                    self.recent_history.append({"role": "assistant", "content": self.last_ai_response})
+                    if len(self.recent_history) > 10:
+                        self.recent_history = self.recent_history[-10:]
 
         except Exception as gen_err:
             logger.error(f"Error during streaming generation: {gen_err}")

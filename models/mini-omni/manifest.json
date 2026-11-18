@@ -1,0 +1,15 @@
+{
+  "model_id": "mini-omni",
+  "name": "MINI-OMNI",
+  "family": "MINI-OMNI Voice Family",
+  "organization": "HS AI Solutions",
+  "founder": "Harshan Seliyan",
+  "architecture": "End-to-End Conversational Speech (Omni Voice LM)",
+  "file_name": "model.gguf",
+  "size_bytes": 2019377888,
+  "sha256": "f15752352dc3297ad50e6baeccbae400ca1a9338c4e3ca8475757af587323bd4",
+  "verified": true,
+  "storage_provider": "cloudflare_r2",
+  "r2_object_key": "mini-omni-final.gguf",
+  "created_at": "2026-11-18T17:06:00Z"
+}

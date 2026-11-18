@@ -77,6 +77,14 @@ BANNER_GRAVITY = r"""
      ╚██████╔╝██║  ██║██║  ██║ ╚████╔╝ ██║   ██║      ██║   
       ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝   ╚═╝      ╚═╝   """
 
+BANNER_MINI_OMNI = r"""
+ ███╗   ███╗██╗███╗   ██╗██╗       ██████╗ ███╗   ███╗███╗   ██╗██╗
+ ████╗ ████║██║████╗  ██║██║      ██╔═══██╗████╗ ████║████╗  ██║██║
+ ██╔████╔██║██║██╔██╗ ██║██║█████╗██║   ██║██╔████╔██║██╔██╗ ██║██║
+ ██║╚██╔╝██║██║██║╚██╗██║██║╚════╝██║   ██║██║╚██╔╝██║██║╚██╗██║██║
+ ██║ ╚═╝ ██║██║██║ ╚████║██║      ╚██████╔╝██║ ╚═╝ ██║██║ ╚████║██║
+ ╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝       ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═══╝╚═╝"""
+
 
 class UI:
     RESET = "\033[0m"
@@ -101,6 +109,9 @@ class UI:
         elif m == "gravity":
             banner_art = BANNER_GRAVITY
             sub_title = "GRAVITY LLM • Pure Mathematics & Frontier Physics"
+        elif m in ("mini-omni", "omni"):
+            banner_art = BANNER
+            sub_title = "JULY LLM • Real-Time End-to-End Conversational Voice Engine"
         else:
             banner_art = BANNER
             sub_title = subtitle
@@ -165,6 +176,32 @@ MODEL_METADATA = {
         "layers": 36,
         "quantization": "Q4_K_M",
         "context_length": 32768,
+        "default_file": "model.gguf",
+    },
+    "mini-omni": {
+        "title": "JULY LLM (Live Voice Engine)",
+        "name": "july",
+        "family": "JULY AI Family",
+        "badge": "JULY • END-TO-END CONVERSATIONAL VOICE",
+        "description": "JULY Real-Time End-to-End Multimodal Conversational Speech Model — Simultaneous Speech Synthesis & Streaming",
+        "architecture": "JULY Omni Speech LM (Qwen2 + Continuous Audio Latents)",
+        "parameters": "2.8B Conversational Voice",
+        "layers": 28,
+        "quantization": "Q4_K_M (File Type 15)",
+        "context_length": 8192,
+        "default_file": "model.gguf",
+    },
+    "omni": {
+        "title": "JULY LLM (Live Voice Engine)",
+        "name": "july",
+        "family": "JULY AI Family",
+        "badge": "JULY • END-TO-END CONVERSATIONAL VOICE",
+        "description": "JULY Real-Time End-to-End Multimodal Conversational Speech Model — Simultaneous Speech Synthesis & Streaming",
+        "architecture": "JULY Omni Speech LM (Qwen2 + Continuous Audio Latents)",
+        "parameters": "2.8B Conversational Voice",
+        "layers": 28,
+        "quantization": "Q4_K_M (File Type 15)",
+        "context_length": 8192,
         "default_file": "model.gguf",
     },
     "auto": {
@@ -1621,6 +1658,8 @@ def enter_live_mode(
     """Enters real-time conversational AI voice mode with continuous listening, streaming VAD and instant TTS."""
     perm_storage = PermanentModelStorage()
     model_name = (active_model or getattr(runtime, "current_model_id", None) or "july").lower().strip()
+    if model_name in ("mini-omni", "omni"):
+        model_name = "mini-omni"
 
     if not runtime.is_loaded():
         f = perm_storage.get_model_file(model_name)
@@ -1737,7 +1776,11 @@ def cmd_live(args=None):
         runtime = ClientInferenceRuntime(config=cfg)
 
     req_model = getattr(args, "model", None) or cfg.selected_model or "july"
+    if req_model and req_model.lower().strip() in ("mini-omni", "omni"):
+        req_model = "mini-omni"
     req_style = getattr(args, "style", "natural") or "natural"
+    if req_model == "mini-omni" and req_style == "natural":
+        req_style = "mini-omni"
 
     enter_live_mode(
         runtime=runtime,

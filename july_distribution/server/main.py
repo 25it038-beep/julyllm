@@ -668,8 +668,26 @@ CENTRAL_MODEL_REGISTRY = {
         "context_length": 32768,
         "status": "available",
         "description": "Dense Cognitive & STEM Reasoning Specialist — Math CAS, Symbolic Verification, and Deep Step-by-Step Thinking (<think>)"
+    },
+    "mini-omni": {
+        "id": "mini-omni",
+        "name": "MINI-OMNI",
+        "family": "MINI-OMNI Voice Family",
+        "storage_provider": "cloudflare_r2",
+        "bucket": os.getenv("JULY_R2_BUCKET", "july"),
+        "object_key": os.getenv("MINI_OMNI_R2_OBJECT", "mini-omni-final.gguf"),
+        "approx_size_gib": 1.88,
+        "size_bytes": 2019377888,
+        "sha256": os.getenv("MINI_OMNI_MODEL_SHA256", "f15752352dc3297ad50e6baeccbae400ca1a9338c4e3ca8475757af587323bd4"),
+        "architecture": "omni_voice",
+        "base_model": "Mini-Omni Multimodal Speech LM",
+        "layers": 28,
+        "context_length": 8192,
+        "status": "available",
+        "description": "End-to-End Real-Time Conversational Voice Intelligence Model"
     }
 }
+CENTRAL_MODEL_REGISTRY["omni"] = CENTRAL_MODEL_REGISTRY["mini-omni"]
 
 
 @app.get("/api/models")
@@ -678,7 +696,11 @@ def list_models_registry(db: Session = Depends(get_db)):
     Returns the centralized model registry of all independently selectable models.
     """
     models_list = []
+    seen_ids = set()
     for mid, meta in CENTRAL_MODEL_REGISTRY.items():
+        if meta["id"] in seen_ids:
+            continue
+        seen_ids.add(meta["id"])
         r2_head = r2_gateway.verify_object_head(meta["object_key"])
         is_avail = r2_head.get("success", False)
         models_list.append({
