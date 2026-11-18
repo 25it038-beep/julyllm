@@ -7,12 +7,12 @@
 # irm https://raw.githubusercontent.com/25it038-beep/julyllm/main/july_distribution/installer/start.ps1 | iex
 # ================================================================================
 
-# Initialize execution parameters (compatible with direct invocation and irm ... | iex)
-if (-not (Test-Path variable:Update)) { $Update = $false }
-if (-not (Test-Path variable:SwitchUser)) { $SwitchUser = $false }
-if (-not (Test-Path variable:Model)) { $Model = "" }
-if (-not (Test-Path variable:Voice)) { $Voice = $false }
-if (-not (Test-Path variable:Live)) { $Live = $false }
+# Initialize execution parameters fresh for each invocation (prevents dirty session variable retention in iex)
+$Update = $false
+$SwitchUser = $false
+$Model = ""
+$Voice = $false
+$Live = $false
 
 if ($args) {
     for ($i = 0; $i -lt $args.Count; $i++) {
@@ -74,7 +74,15 @@ if (Test-Path $CliFile) {
     }
 }
 
-$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or -not (Test-Path $LiveEngineFile) -or -not (Test-Path $VadFile) -or -not $HasGetInstance -or -not $HasCliThreading -or $Update)
+$HasMiniOmni = $false
+if (Test-Path $CliFile) {
+    $cliContent = Get-Content $CliFile -Raw -ErrorAction SilentlyContinue
+    if ($cliContent -and $cliContent.Contains("mini-omni")) {
+        $HasMiniOmni = $true
+    }
+}
+
+$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or -not (Test-Path $LiveEngineFile) -or -not (Test-Path $VadFile) -or -not $HasGetInstance -or -not $HasCliThreading -or -not $HasMiniOmni -or $Update)
 if ($NeedsUpdate) {
     Write-Host " [⚡] [1/4] Synchronizing latest July & Gravity live conversational voice runtime from repository..." -ForegroundColor Yellow
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -275,20 +283,17 @@ if (-not $isStrictlyAuth) {
 }
 
 if (-not $Model) {
-    if ($env:JULY_MODEL) {
-        $Model = $env:JULY_MODEL
-    } else {
-        Write-Host ""
-        Write-Host " Select Foundation Model / Interactive Mode:" -ForegroundColor White
-        Write-Host "   [1]  🌟  July LLM (General Intelligence, Coding & Agentic Reasoning)" -ForegroundColor Cyan
-        Write-Host "   [2]  🌌  Gravity LLM (Deep Mathematical Reasoning, Proofs & Physics)" -ForegroundColor Yellow
-        Write-Host "   [3]  🧠  SREE LLM (Dense Cognitive Reasoning, Multi-Step Thinking & STEM)" -ForegroundColor Cyan
-        Write-Host "   [4]  🤖  MINI-OMNI (Real-Time Multimodal Conversational Speech Intelligence)" -ForegroundColor Green
-        Write-Host "   [5]  ⚡  Auto Router (Dynamic Query Routing to July, Gravity, or Sree)" -ForegroundColor Magenta
-        Write-Host "   [6]  🎙️   MINI-OMNI LIVE (End-to-End Multimodal Voice AI Session)" -ForegroundColor Cyan
-        Write-Host "   [7]  🎙️   JULY LIVE (Continuous Conversational Voice AI Mode)" -ForegroundColor Green
-        Write-Host ""
-        $mChoice = Read-Host " Select Option [1, 2, 3, 4, 5, 6, or 7] (Default: 1 - July)"
+    Write-Host ""
+    Write-Host " Select Foundation Model / Interactive Mode:" -ForegroundColor White
+    Write-Host "   [1]  🌟  July LLM (General Intelligence, Coding & Agentic Reasoning)" -ForegroundColor Cyan
+    Write-Host "   [2]  🌌  Gravity LLM (Deep Mathematical Reasoning, Proofs & Physics)" -ForegroundColor Yellow
+    Write-Host "   [3]  🧠  SREE LLM (Dense Cognitive Reasoning, Multi-Step Thinking & STEM)" -ForegroundColor Cyan
+    Write-Host "   [4]  🤖  MINI-OMNI (Real-Time Multimodal Conversational Speech Intelligence)" -ForegroundColor Green
+    Write-Host "   [5]  ⚡  Auto Router (Dynamic Query Routing to July, Gravity, or Sree)" -ForegroundColor Magenta
+    Write-Host "   [6]  🎙️   MINI-OMNI LIVE (End-to-End Multimodal Voice AI Session)" -ForegroundColor Cyan
+    Write-Host "   [7]  🎙️   JULY LIVE (Continuous Conversational Voice AI Mode)" -ForegroundColor Green
+    Write-Host ""
+    $mChoice = Read-Host " Select Option [1, 2, 3, 4, 5, 6, or 7] (Default: 1 - July)"
         if ($mChoice -in @('2', 'gravity')) {
             $Model = "gravity"
         } elseif ($mChoice -in @('3', 'sree')) {
@@ -307,7 +312,6 @@ if (-not $Model) {
             $Model = "july"
         }
     }
-}
 
 Invoke-JulyCli config --set selected_model $Model | Out-Null
 
