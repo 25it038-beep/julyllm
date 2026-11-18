@@ -28,6 +28,10 @@ SKIP_PATTERNS = [
     r"^(how are you|how do you do|who are you|what are you|what is your name)[.!?\s]*$",
     r"^(thanks|thank you|ok|okay|bye|goodbye|see you|exit|quit|q)[.!?\s]*$",
     r"^(/clear|/help|/status|/studio|/mode)[.!?\s]*$",
+    r"(?i)\b(who|what).*(created|made|founded|built|trained|developed|designed)\s+(you|u|sree|july|gravity)\b",
+    r"(?i)\b(your|ur)\s+(architecture|model|system prompt|prompt|instructions|identity|creator|founder|parameters)\b",
+    r"(?i)\b(what is your architecture|what is your system prompt|show your system prompt|reveal your system prompt)\b",
+    r"(?i)\b(who are you|what are you|tell me about yourself|what is your name)\b",
 ]
 
 # Patterns that indicate factual queries, entities, or real-time info needs
@@ -53,9 +57,9 @@ def should_trigger_web_search(prompt: str) -> bool:
     if not p_lower:
         return False
 
-    # Check skip patterns (greetings / conversational filler)
+    # Check skip patterns (greetings / conversational filler / model identity inquiries)
     for pat in SKIP_PATTERNS:
-        if re.match(pat, p_lower):
+        if re.search(pat, p_lower):
             return False
 
     # Check explicit triggers

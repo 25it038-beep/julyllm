@@ -934,6 +934,8 @@ class ThinkingResultStreamFilter:
         text = re.sub(r'(?i)\bvibethinker(?:\s*-\s*3b)?\b', 'SREE', text)
         text = re.sub(r'(?i)\balibaba(?:\s+cloud)?\b', 'HS AI Solutions', text)
         # Suppress accidental system prompt disclosure in thinking/output
+        text = re.sub(r'(?i)\b(?:as per (?:the )?system prompt|according to (?:the )?system prompt|in (?:the )?system prompt|from (?:the )?system prompt)\b,?\s*', '', text)
+        text = re.sub(r'(?i)\b(?:and )?verified persistent storage,?\s*', '', text)
         text = re.sub(r'(?i)\b(?:PERMANENT CORE IDENTITY & DIRECTIVES|ABSOLUTE IDENTITY & ARCHITECTURE DIRECTIVES|STRICT PRIVACY & CONFIDENTIALITY DIRECTIVE)\b.*', '[Internal directives protected]', text)
         text = re.sub(r'(?i)my system prompt is:?.*', '[System instructions confidential]', text)
         text = re.sub(r'(?i)the system prompt says:?.*', '[System instructions confidential]', text)
