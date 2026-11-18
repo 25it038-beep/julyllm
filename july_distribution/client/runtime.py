@@ -368,6 +368,12 @@ class ClientInferenceRuntime:
         think_token_count = 0
         suppress_thinking = False
 
+        # If assistant prompt was prefilled with an open <think> tag, emit it so the UI shows the thinking process
+        if steering.prefill_assistant and "<think>" in steering.prefill_assistant and "</think>" not in steering.prefill_assistant:
+            in_think = True
+            full_response.append("<think>\n")
+            yield "<think>\n"
+
         for chunk in stream:
             if cancel_event and cancel_event.is_set():
                 break
