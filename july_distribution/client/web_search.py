@@ -32,6 +32,12 @@ SKIP_PATTERNS = [
     r"(?i)\b(your|ur)\s+(architecture|model|system prompt|prompt|instructions|identity|creator|founder|parameters)\b",
     r"(?i)\b(what is your architecture|what is your system prompt|show your system prompt|reveal your system prompt)\b",
     r"(?i)\b(who are you|what are you|tell me about yourself|what is your name)\b",
+    # Live personal context, time, date, location inquiries - use local RuntimeContextProvider directly
+    r"(?i)\b(what\s+time\s+is\s+it|what\s+is\s+the\s+time|current\s+time|tell\s+me\s+the\s+time|time\s+now|what'?s\s+the\s+time)\b",
+    r"(?i)\b(what\s+is\s+today'?s\s+date|today'?s\s+date|current\s+date|what\s+date\s+is\s+it|what\s+is\s+the\s+date|what'?s\s+the\s+date)\b",
+    r"(?i)\b(who\s+am\s+i|what\s+is\s+my\s+name|what'?s\s+my\s+name|my\s+name|do\s+you\s+know\s+me|who\s+is\s+speaking)\b",
+    r"(?i)\b(where\s+am\s+i|what\s+is\s+my\s+location|my\s+location|my\s+timezone|my\s+city|my\s+country|where\s+are\s+we)\b",
+    r"(?i)\b(time\s+and\s+location|time\s+and\s+date|who\s+am\s+i\s+and\s+where\s+am\s+i)\b",
     # Coding and debugging requests - use LLM reasoning directly, avoid web search
     r"(?i)\b(write\s+(a\s+)?(function|script|code|program|class|method|component|app|algorithm|test))\b",
     r"(?i)\b(fix\s+(this\s+)?(error|bug|code|issue|exception|traceback|syntax))\b",

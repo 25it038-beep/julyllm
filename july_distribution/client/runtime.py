@@ -229,6 +229,18 @@ class ClientInferenceRuntime:
             sys.stdout.write(routing_note)
             sys.stdout.flush()
 
+        # Check for dynamic user name introduction (e.g. "My name is Priya", "Call me Rahul")
+        try:
+            from .context_provider import RuntimeContextProvider
+            name_intro = re.search(r"(?i)\b(?:my name is|call me|myself|i am|i\'m)\s+([A-Z][a-zA-Z]+)\b", prompt)
+            if name_intro:
+                cand_name = name_intro.group(1).capitalize()
+                common_non_names = {"sorry", "ready", "fine", "coding", "tired", "back", "done", "happy", "here", "just", "trying", "going", "asking", "wondering", "a", "an", "the", "working", "sree", "july", "gravity"}
+                if cand_name.lower() not in common_non_names:
+                    RuntimeContextProvider.set_user_override(name=cand_name)
+        except Exception:
+            pass
+
         sys_prompt = self.customizer.get_effective_system_prompt(self.current_model_id)
         history = self.customizer.get_session_history(session_id, limit=4)
         custom_kn = self.customizer.retrieve_custom_knowledge(prompt)
@@ -260,8 +272,8 @@ class ClientInferenceRuntime:
         active_level, level_rationale = AdaptiveReasoningEngine.classify_task(prompt, user_override=user_think_override)
         steering = AdaptiveReasoningEngine.get_steering(self.current_model_id, active_level, level_rationale)
 
-        # Reasoning Orchestration Invariants Pre-pass (Skip in INSTANT mode for maximum coding speed)
-        if active_level != ThinkingLevel.INSTANT:
+        # Reasoning Orchestration Invariants Pre-pass (Skip in INSTANT and CONVERSATIONAL modes)
+        if active_level not in (ThinkingLevel.INSTANT, ThinkingLevel.CONVERSATIONAL):
             guidance = self.orchestrator.prepare_reasoning_guidance(prompt)
         else:
             guidance = None
@@ -353,8 +365,8 @@ class ClientInferenceRuntime:
 
         raw_text = "".join(full_response)
 
-        # Post-stream verification & validation check (Skip in INSTANT mode for zero-overhead speed)
-        if active_level == ThinkingLevel.INSTANT:
+        # Post-stream verification & validation check (Skip in INSTANT and CONVERSATIONAL modes for zero-overhead speed)
+        if active_level in (ThinkingLevel.INSTANT, ThinkingLevel.CONVERSATIONAL):
             logged_text = raw_text
         else:
             verified_res = self.orchestrator.validate_and_synthesize_response(prompt, raw_text)

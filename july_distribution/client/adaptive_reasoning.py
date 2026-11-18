@@ -23,9 +23,10 @@ from dataclasses import dataclass, field
 
 
 class ThinkingLevel(str, Enum):
-    INSTANT = "instant"    # Minimal/zero thinking overhead. Direct code implementation.
-    BALANCED = "balanced"  # Focused, concise reasoning (< 3 steps). Multi-file, APIs, components.
-    DEEP = "deep"          # Rigorous deep thinking. Complex algorithms, formal proofs, security.
+    INSTANT = "instant"            # Minimal/zero thinking overhead. Direct code implementation.
+    CONVERSATIONAL = "conversational"  # Conversational dialogue with time, name, location, and opposite-gender tone.
+    BALANCED = "balanced"          # Focused, concise reasoning (< 3 steps). Multi-file, APIs, components.
+    DEEP = "deep"                  # Rigorous deep thinking. Complex algorithms, formal proofs, security.
 
 
 @dataclass
@@ -77,6 +78,20 @@ class AdaptiveReasoningEngine:
         r"\b(write unit test|test case for|boilerplate for|template for)\b",
     ]
 
+    # Indicators for CONVERSATIONAL dialogue, time, location, user identity, and greetings
+    CONVERSATIONAL_TRIGGERS = [
+        r"\b(hi|hello|hey|greetings|hola|namaste|sup|yo)\b",
+        r"\b(good morning|good afternoon|good evening|good night)\b",
+        r"\b(how are you|how do you do|how'?s it going|what'?s up)\b",
+        r"\b(who am i|what is my name|what'?s my name|my name|do you know me|who is speaking)\b",
+        r"\b(who are you|what are you|tell me about yourself|what is your name)\b",
+        r"\b(what time is it|what is the time|current time|tell me the time|time now|what'?s the time)\b",
+        r"\b(what is today'?s date|today'?s date|current date|what date is it|what is the date|what'?s the date)\b",
+        r"\b(where am i|what is my location|my location|my timezone|my city|my country|where are we)\b",
+        r"\b(time and location|time and date|who am i and where am i)\b",
+        r"\b(how do you look|what do you look like|who created you|tell me a joke)\b",
+    ]
+
     @classmethod
     def classify_task(cls, prompt: str, user_override: Optional[str] = None) -> Tuple[ThinkingLevel, str]:
         """
@@ -88,6 +103,8 @@ class AdaptiveReasoningEngine:
             u_clean = user_override.lower().strip()
             if u_clean in ("instant", "fast", "speed", "quick", "1"):
                 return ThinkingLevel.INSTANT, "User explicitly selected INSTANT speed mode"
+            if u_clean in ("conversational", "chat", "talk"):
+                return ThinkingLevel.CONVERSATIONAL, "User explicitly selected CONVERSATIONAL mode"
             if u_clean in ("balanced", "medium", "normal", "standard", "2"):
                 return ThinkingLevel.BALANCED, "User explicitly selected BALANCED mode"
             if u_clean in ("deep", "thorough", "complex", "reasoning", "3"):
@@ -102,22 +119,34 @@ class AdaptiveReasoningEngine:
         if p_lower.startswith("[balanced]") or p_lower.startswith("--balanced") or p_lower.startswith("/balanced"):
             return ThinkingLevel.BALANCED, "Task tagged with [BALANCED] flag"
 
-        # 2. Check for DEEP complexity signals
+        # 2. Check for CONVERSATIONAL / TEMPORAL / IDENTITY dialogue signals
+        is_explicit_code = any(re.search(pat, p_lower) for pat in [
+            r"\b(write\s+(a\s+)?(function|script|code|program|class|method|component|app|algorithm|test))\b",
+            r"\b(fix\s+(this\s+)?(error|bug|code|issue|exception|traceback|syntax))\b",
+            r"\b(implement|refactor|debug|compile|benchmark|optimize\s+code)\b",
+            r"\b(def\s+|class\s+|import\s+|const\s+|let\s+|function\s+)\b",
+        ])
+        if not is_explicit_code:
+            for pat in cls.CONVERSATIONAL_TRIGGERS:
+                if re.search(pat, p_lower):
+                    return ThinkingLevel.CONVERSATIONAL, "Conversational / temporal / identity dialogue"
+
+        # 3. Check for DEEP complexity signals
         for pat in cls.DEEP_KEYWORDS:
             if re.search(pat, p_lower):
                 return ThinkingLevel.DEEP, f"Detected deep algorithmic / formal constraint: {pat}"
 
-        # 3. Check for BALANCED multi-component signals
+        # 4. Check for BALANCED multi-component signals
         for pat in cls.BALANCED_KEYWORDS:
             if re.search(pat, p_lower):
                 return ThinkingLevel.BALANCED, f"Detected multi-file / architectural scope: {pat}"
 
-        # 4. Check for direct code tasks
+        # 5. Check for direct code tasks
         for pat in cls.INSTANT_KEYWORDS:
             if re.search(pat, p_lower):
                 return ThinkingLevel.INSTANT, "Detected straightforward coding implementation task"
 
-        # 5. Short prompts (< 50 words without complex keywords) are INSTANT by default
+        # 6. Short prompts (< 60 words without complex keywords) are INSTANT by default
         words = p_lower.split()
         if len(words) < 60 and not any(kw in p_lower for kw in ["compare architectures", "design system", "security audit"]):
             return ThinkingLevel.INSTANT, "Concise task scope — defaulted to INSTANT for maximum speed"
@@ -131,7 +160,46 @@ class AdaptiveReasoningEngine:
         """
         is_sree = "sree" in (model_id or "").lower()
 
-        if level == ThinkingLevel.INSTANT:
+        if level == ThinkingLevel.CONVERSATIONAL:
+            try:
+                from .context_provider import RuntimeContextProvider
+                u = RuntimeContextProvider.get_user_context()
+                t = RuntimeContextProvider.get_temporal_context()
+                l = RuntimeContextProvider.get_location_context()
+                user_name = u.get("preferred_name", "Friend")
+                opp_persona = u.get("opposite_gender_persona", "female")
+                tone_summary = u.get("tone_summary", "Feminine, graceful, charming, warm, and deeply respectful")
+                time_str = t.get("time_short", t.get("time", "Now"))
+                date_str = t.get("date", "Today")
+                loc_str = f"{l.get('city')}, {l.get('region')}, {l.get('country')}"
+            except Exception:
+                user_name = "Harshan"
+                opp_persona = "female"
+                tone_summary = "Feminine, graceful, charming, warm, and deeply respectful"
+                time_str = "Now"
+                date_str = "Today"
+                loc_str = "Chennai, Tamil Nadu, India"
+
+            sys_dir = (
+                "[EXECUTION DIRECTIVE: CONVERSATIONAL OPPOSITE-GENDER ADAPTIVE MODE]\n"
+                f"- Interaction Goal: Natural spoken dialogue, identity recognition, and temporal/geographical awareness.\n"
+                f"- User Addressing: Naturally greet and address the user by name ('{user_name}').\n"
+                f"- Opposite-Gender Tone Dynamic: You MUST speak in the {opp_persona.upper()} tone ({tone_summary}) based on user's name ({user_name}).\n"
+                f"- Live Time, Date & Location: If asked or if greeting/needed in conversation, state the accurate local time ({time_str}), date ({date_str}), and location ({loc_str}).\n"
+                f"- Dialogue Style: Warm, engaging, charming, and intelligent. Do NOT output code blocks or pseudocode."
+            )
+            prefill = f"<think>\nRespond conversationally to {user_name} with time, location, and {opp_persona} tone.\n</think>\n" if is_sree else None
+            return AdaptiveSteeringConfig(
+                level=level,
+                temperature=0.7,
+                top_p=0.95,
+                max_thinking_tokens=30,
+                prefill_assistant=prefill,
+                system_directive=sys_dir,
+                rationale=rationale or "Conversational response with identity, time, location, and opposite-gender tone"
+            )
+
+        elif level == ThinkingLevel.INSTANT:
             sys_dir = (
                 "[EXECUTION DIRECTIVE: INSTANT CODE-FIRST MODE]\n"
                 "- Goal: Produce correct, functional, production-quality code with minimum reasoning overhead and maximum speed.\n"
