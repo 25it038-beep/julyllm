@@ -181,8 +181,9 @@ class AdaptiveReasoningEngine:
 
             if is_first_turn:
                 sys_dir = (
-                    "[EXECUTION DIRECTIVE: CONVERSATIONAL & GENERAL KNOWLEDGE MODE]\n"
+                    "[EXECUTION DIRECTIVE: CONVERSATIONAL MINIMAL-THINKING MODE]\n"
                     f"- First Turn Greeting: Acknowledge the user warmly by name ('{user_name}') with an appropriate time-of-day greeting (e.g. '{greeting_pref} {user_name}!').\n"
+                    f"- Minimal Thinking: Keep internal reasoning strictly under 2 brief sentences inside <think>...</think>, or jump directly into the answer.\n"
                     f"- Answer the User's Actual Question: Provide a direct, thorough, accurate, and high-quality response to the user's specific prompt.\n"
                     f"- Opposite-Gender Tone Dynamic: You MUST speak in the {opp_persona.upper()} tone ({tone_summary}) based on user's name ({user_name}).\n"
                     f"- Live Time, Date & Location: Weave in the live local time ({time_str}), date ({date_str}), and location ({loc_str}) if asked or relevant.\n"
@@ -192,6 +193,7 @@ class AdaptiveReasoningEngine:
                 sys_dir = (
                     "[EXECUTION DIRECTIVE: CONVERSATIONAL MULTI-TURN CONTINUATION MODE]\n"
                     f"- Ongoing Conversation: This is a continuation of an active session. You ALREADY greeted the user.\n"
+                    f"- Minimal Thinking: Keep internal reasoning strictly under 2 brief sentences inside <think>...</think>, or jump directly into the answer.\n"
                     f"- STRICT NO-RE-GREETING INVARIANT: NEVER start your response with '{greeting_pref}', 'Hello', 'Hi', 'Hey', or any greeting phrase! Jump directly into answering the user's specific prompt.\n"
                     f"- Opposite-Gender Tone Dynamic: Maintain the {opp_persona.upper()} tone ({tone_summary}) consistently.\n"
                     f"- Live Time, Date & Location: State time ({time_str}), date ({date_str}), or location ({loc_str}) ONLY if the user explicitly asked for them.\n"
@@ -203,7 +205,7 @@ class AdaptiveReasoningEngine:
                 level=level,
                 temperature=0.7,
                 top_p=0.95,
-                max_thinking_tokens=60,
+                max_thinking_tokens=20,
                 prefill_assistant=prefill,
                 system_directive=sys_dir,
                 rationale=rationale or ("First-turn greeting with opposite-gender tone" if is_first_turn else "Multi-turn direct response without re-greeting")
@@ -213,8 +215,7 @@ class AdaptiveReasoningEngine:
             sys_dir = (
                 "[EXECUTION DIRECTIVE: INSTANT CODE-FIRST MODE]\n"
                 "- Goal: Produce correct, functional, production-quality code with minimum reasoning overhead and maximum speed.\n"
-                "- Do not deliberate on obvious programming decisions or spend time in lengthy internal analysis.\n"
-                "- Immediately output the required code blocks, modules, or fixes.\n"
+                "- Zero Deliberation: Skip unnecessary analysis; immediately output the required code blocks, modules, or fixes.\n"
                 "- Include necessary error handling, edge cases, and typing directly in the code."
             )
             # In ChatML format for Sree: Prefilling closed think tags eliminates reasoning delay!
@@ -223,7 +224,7 @@ class AdaptiveReasoningEngine:
                 level=level,
                 temperature=0.15,
                 top_p=0.95,
-                max_thinking_tokens=15,
+                max_thinking_tokens=10,
                 prefill_assistant=prefill,
                 system_directive=sys_dir,
                 rationale=rationale or "Zero-overhead instant code delivery"
@@ -241,7 +242,7 @@ class AdaptiveReasoningEngine:
                 level=level,
                 temperature=0.25,
                 top_p=0.95,
-                max_thinking_tokens=120,
+                max_thinking_tokens=45,
                 prefill_assistant=prefill,
                 system_directive=sys_dir,
                 rationale=rationale or "Focused reasoning with fast code generation"
@@ -251,14 +252,14 @@ class AdaptiveReasoningEngine:
             sys_dir = (
                 "[EXECUTION DIRECTIVE: DEEP REASONING & ACCURACY MODE]\n"
                 "- Goal: Solve complex algorithmic, architectural, or security-sensitive challenges with verified correctness.\n"
-                "- Use rigorous step-by-step thinking inside <think> to verify invariants, bounds, and failure modes.\n"
+                "- Keep step-by-step thinking inside <think> focused and concise; avoid repetitive self-evaluation loops.\n"
                 "- Deliver complete, verified code with proofs and complexity analysis."
             )
             return AdaptiveSteeringConfig(
                 level=level,
                 temperature=0.55,
                 top_p=0.95,
-                max_thinking_tokens=None,
+                max_thinking_tokens=120,
                 prefill_assistant=None,
                 system_directive=sys_dir,
                 rationale=rationale or "Full cognitive reasoning for complex algorithmic depth"

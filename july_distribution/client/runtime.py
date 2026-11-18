@@ -363,13 +363,55 @@ class ClientInferenceRuntime:
         )
 
         full_response = []
+        max_think = getattr(steering, "max_thinking_tokens", None)
+        in_think = False
+        think_token_count = 0
+        suppress_thinking = False
+
         for chunk in stream:
             if cancel_event and cancel_event.is_set():
                 break
             choices = chunk.get("choices", [])
             if choices:
                 delta = choices[0].get("text", "")
-                if delta:
+                if not delta:
+                    continue
+
+                # Detect <think> opening tag
+                if "<think>" in delta:
+                    in_think = True
+                    think_token_count = 0
+                    suppress_thinking = False
+
+                if in_think:
+                    if "</think>" in delta:
+                        in_think = False
+                        suppress_thinking = False
+                        full_response.append(delta)
+                        yield delta
+                        continue
+
+                    if suppress_thinking:
+                        # Suppress excessive thinking tokens beyond max_think
+                        continue
+
+                    think_token_count += 1
+                    if max_think is not None and think_token_count >= max_think:
+                        # Enforce minimal thinking: immediately close think block and transition to direct output
+                        close_marker = "\n</think>\n"
+                        full_response.append(close_marker)
+                        yield close_marker
+                        in_think = False
+                        suppress_thinking = True
+                        continue
+
+                    full_response.append(delta)
+                    yield delta
+                else:
+                    if suppress_thinking:
+                        if "</think>" in delta:
+                            suppress_thinking = False
+                        continue
                     full_response.append(delta)
                     yield delta
 
