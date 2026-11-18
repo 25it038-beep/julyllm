@@ -119,39 +119,36 @@ class AdaptiveReasoningEngine:
         if p_lower.startswith("[balanced]") or p_lower.startswith("--balanced") or p_lower.startswith("/balanced"):
             return ThinkingLevel.BALANCED, "Task tagged with [BALANCED] flag"
 
-        # 2. Check for CONVERSATIONAL / TEMPORAL / IDENTITY dialogue signals
-        is_explicit_code = any(re.search(pat, p_lower) for pat in [
-            r"\b(write\s+(a\s+)?(function|script|code|program|class|method|component|app|algorithm|test))\b",
-            r"\b(fix\s+(this\s+)?(error|bug|code|issue|exception|traceback|syntax))\b",
-            r"\b(implement|refactor|debug|compile|benchmark|optimize\s+code)\b",
-            r"\b(def\s+|class\s+|import\s+|const\s+|let\s+|function\s+)\b",
-        ])
-        if not is_explicit_code:
-            for pat in cls.CONVERSATIONAL_TRIGGERS:
-                if re.search(pat, p_lower):
-                    return ThinkingLevel.CONVERSATIONAL, "Conversational / temporal / identity dialogue"
-
-        # 3. Check for DEEP complexity signals
+        # 2. Check for DEEP complexity signals (Algorithms, formal proofs, concurrency, red-black trees, dijkstra)
         for pat in cls.DEEP_KEYWORDS:
             if re.search(pat, p_lower):
                 return ThinkingLevel.DEEP, f"Detected deep algorithmic / formal constraint: {pat}"
 
-        # 4. Check for BALANCED multi-component signals
+        # 3. Check for BALANCED multi-component signals (Full-stack, multi-file, architecture)
         for pat in cls.BALANCED_KEYWORDS:
             if re.search(pat, p_lower):
                 return ThinkingLevel.BALANCED, f"Detected multi-file / architectural scope: {pat}"
 
-        # 5. Check for direct code tasks
+        # 4. Check for direct code tasks
         for pat in cls.INSTANT_KEYWORDS:
             if re.search(pat, p_lower):
                 return ThinkingLevel.INSTANT, "Detected straightforward coding implementation task"
 
-        # 6. Short prompts (< 60 words without complex keywords) are INSTANT by default
-        words = p_lower.split()
-        if len(words) < 60 and not any(kw in p_lower for kw in ["compare architectures", "design system", "security audit"]):
-            return ThinkingLevel.INSTANT, "Concise task scope — defaulted to INSTANT for maximum speed"
+        # 5. Distinguish general CODING tasks from CONVERSATIONAL / INFORMATIONAL inquiries
+        coding_signals = [
+            r"\b(code|coding|script|scripting|program|programming|function|class|method|module|component|app|api|endpoint|algorithm|data\s+structure)\b",
+            r"\b(write|create|implement|build|develop|generate|draft)\b",
+            r"\b(fix|debug|refactor|optimize|compile|run|benchmark|traceback|syntax\s+error|bug|issue|exception)\b",
+            r"\b(python|javascript|typescript|c\+\+|rust|golang|java|html|css|sql|bash|powershell|react|vue|node)\b",
+            r"\b(def\s+|class\s+|import\s+|const\s+|let\s+|function\s+|<script|<div)\b",
+        ]
+        is_coding_task = any(re.search(pat, p_lower) for pat in coding_signals)
 
-        return ThinkingLevel.BALANCED, "Standard programming task — assigned BALANCED reasoning"
+        if is_coding_task:
+            return ThinkingLevel.INSTANT, "Concise coding scope — defaulted to INSTANT for maximum speed"
+
+        # Non-coding queries (general knowledge, conversation, identity, explanations) -> CONVERSATIONAL
+        return ThinkingLevel.CONVERSATIONAL, "Conversational / general knowledge / identity inquiry"
 
     @classmethod
     def get_steering(cls, model_id: str, level: ThinkingLevel, rationale: str = "", is_first_turn: bool = True) -> AdaptiveSteeringConfig:
@@ -184,29 +181,29 @@ class AdaptiveReasoningEngine:
 
             if is_first_turn:
                 sys_dir = (
-                    "[EXECUTION DIRECTIVE: CONVERSATIONAL FIRST-TURN GREETING MODE]\n"
-                    f"- First Turn Greeting: Greet the user warmly by name ('{user_name}') with an appropriate time-of-day greeting (e.g. '{greeting_pref} {user_name}').\n"
+                    "[EXECUTION DIRECTIVE: CONVERSATIONAL & GENERAL KNOWLEDGE MODE]\n"
+                    f"- First Turn Greeting: Acknowledge the user warmly by name ('{user_name}') with an appropriate time-of-day greeting (e.g. '{greeting_pref} {user_name}!').\n"
+                    f"- Answer the User's Actual Question: Provide a direct, thorough, accurate, and high-quality response to the user's specific prompt.\n"
                     f"- Opposite-Gender Tone Dynamic: You MUST speak in the {opp_persona.upper()} tone ({tone_summary}) based on user's name ({user_name}).\n"
-                    f"- Live Time, Date & Location: Weave in the live local time ({time_str}), date ({date_str}), and location ({loc_str}) as appropriate or requested.\n"
-                    f"- Dialogue Style: Warm, engaging, charming, and intelligent. Do NOT output code blocks or pseudocode."
+                    f"- Live Time, Date & Location: Weave in the live local time ({time_str}), date ({date_str}), and location ({loc_str}) if asked or relevant.\n"
+                    f"- Dialogue Style: Direct, intelligent, respectful, and articulate. Do NOT output code blocks unless explicitly requested."
                 )
-                prefill = f"<think>\nGreet {user_name} with time, location, and {opp_persona} tone.\n</think>\n" if is_sree else None
             else:
                 sys_dir = (
                     "[EXECUTION DIRECTIVE: CONVERSATIONAL MULTI-TURN CONTINUATION MODE]\n"
-                    f"- Ongoing Conversation: This is a continuation of an active conversation. You ALREADY greeted the user in the first response.\n"
-                    f"- STRICT NO-RE-GREETING INVARIANT: NEVER start your response with '{greeting_pref}', 'Hello', 'Hi', 'Hey', or any greeting phrase! Jump directly into answering the user's question without introductory pleasantries or re-greetings.\n"
-                    f"- Opposite-Gender Tone Dynamic: Maintain the {opp_persona.upper()} tone ({tone_summary}) consistently throughout.\n"
+                    f"- Ongoing Conversation: This is a continuation of an active session. You ALREADY greeted the user.\n"
+                    f"- STRICT NO-RE-GREETING INVARIANT: NEVER start your response with '{greeting_pref}', 'Hello', 'Hi', 'Hey', or any greeting phrase! Jump directly into answering the user's specific prompt.\n"
+                    f"- Opposite-Gender Tone Dynamic: Maintain the {opp_persona.upper()} tone ({tone_summary}) consistently.\n"
                     f"- Live Time, Date & Location: State time ({time_str}), date ({date_str}), or location ({loc_str}) ONLY if the user explicitly asked for them.\n"
-                    f"- Dialogue Style: Direct, natural, and helpful. Do NOT output code blocks or pseudocode unless requested."
+                    f"- Dialogue Style: Direct, natural, and helpful. Do NOT output code blocks unless requested."
                 )
-                prefill = f"<think>\nAnswer directly without repeating greetings using {opp_persona} tone.\n</think>\n" if is_sree else None
+            prefill = None
 
             return AdaptiveSteeringConfig(
                 level=level,
                 temperature=0.7,
                 top_p=0.95,
-                max_thinking_tokens=30,
+                max_thinking_tokens=60,
                 prefill_assistant=prefill,
                 system_directive=sys_dir,
                 rationale=rationale or ("First-turn greeting with opposite-gender tone" if is_first_turn else "Multi-turn direct response without re-greeting")

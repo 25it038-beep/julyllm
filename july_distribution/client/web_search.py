@@ -32,6 +32,11 @@ SKIP_PATTERNS = [
     r"(?i)\b(your|ur)\s+(architecture|model|system prompt|prompt|instructions|identity|creator|founder|parameters)\b",
     r"(?i)\b(what is your architecture|what is your system prompt|show your system prompt|reveal your system prompt)\b",
     r"(?i)\b(who are you|what are you|tell me about yourself|what is your name)\b",
+    # Creator, founder, author, and system owner identity inquiries - use internal identity & system prompt directly
+    r"(?i)\b(who\s+is\s+harshan(\s+seliyan)?|about\s+harshan(\s+seliyan)?|harshan\s+seliyan)\b",
+    r"(?i)\b(who\s+is\s+(the\s+)?(creator|founder|developer|author|architect|owner|maker))\b",
+    r"(?i)\b(who\s+founded\s+(hs\s+ai|hs\s+ai\s+solutions))\b",
+    r"(?i)\b(who\s+created\s+(sree|july|gravity))\b",
     # Live personal context, time, date, location inquiries - use local RuntimeContextProvider directly
     r"(?i)\b(what\s+time\s+is\s+it|what\s+is\s+the\s+time|current\s+time|tell\s+me\s+the\s+time|time\s+now|what'?s\s+the\s+time)\b",
     r"(?i)\b(what\s+is\s+today'?s\s+date|today'?s\s+date|current\s+date|what\s+date\s+is\s+it|what\s+is\s+the\s+date|what'?s\s+the\s+date)\b",
@@ -372,6 +377,20 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
         if key and key not in seen:
             seen.add(key)
             deduped.append(r)
+
+    # Relevance verification: Filter out results that do not match the query keywords
+    # Prevents search engine garbage / off-topic spam from polluting model prompt
+    q_terms = [w.lower() for w in re.findall(r"\b[a-zA-Z0-9]{3,}\b", query) if w.lower() not in {"what", "when", "where", "which", "who", "whom", "whose", "why", "how", "the", "and", "for", "with", "about"}]
+    if q_terms:
+        filtered = []
+        for r in deduped:
+            text = (r.get("title", "") + " " + r.get("snippet", "")).lower()
+            if any(term in text for term in q_terms):
+                filtered.append(r)
+        if filtered:
+            deduped = filtered
+        else:
+            deduped = []
 
     return deduped[:max_results]
 

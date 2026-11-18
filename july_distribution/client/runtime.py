@@ -295,10 +295,9 @@ class ClientInferenceRuntime:
             if web_context:
                 formatted += (
                     f"\n\n{web_context}\n\n"
-                    f"CRITICAL REAL-TIME GROUNDING DIRECTIVE:\n"
-                    f"- You have access to verified real-time live internet facts above.\n"
-                    f"- You MUST prioritize and base your response on these real-time search facts to provide accurate, up-to-date answers.\n"
-                    f"- Override any older pretraining memory with the provided live web search data."
+                    f"[REAL-TIME WEB GROUNDING CONTEXT]:\n"
+                    f"- The verified live facts above were retrieved from the real-time internet.\n"
+                    f"- Use them to ground and inform your response accurately when answering questions about current events, people, prices, or live facts."
                 )
             formatted += "<|im_end|>\n"
 
@@ -310,11 +309,7 @@ class ClientInferenceRuntime:
                     m_content = re.sub(r"(?s)<think>.*?</think>", "", m_content).strip()
                 formatted += f"<|im_start|>{m_role}\n{m_content}<|im_end|>\n"
 
-            formatted += "<|im_start|>user\n"
-            if web_context:
-                formatted += f"[Real-Time Live Web Search Information:\n{web_context}]\n\nQuestion: {prompt}<|im_end|>\n"
-            else:
-                formatted += f"{prompt}<|im_end|>\n"
+            formatted += f"<|im_start|>user\n{prompt}<|im_end|>\n"
             formatted += "<|im_start|>assistant\n"
             if steering.prefill_assistant:
                 formatted += steering.prefill_assistant
@@ -328,10 +323,9 @@ class ClientInferenceRuntime:
             if web_context:
                 formatted += (
                     f"\n\n{web_context}\n\n"
-                    f"CRITICAL REAL-TIME GROUNDING DIRECTIVE:\n"
-                    f"- You have access to verified real-time live internet facts above.\n"
-                    f"- You MUST prioritize and base your response on these real-time search facts to provide accurate, up-to-date answers.\n"
-                    f"- Override any older pretraining memory with the provided live web search data."
+                    f"[REAL-TIME WEB GROUNDING CONTEXT]:\n"
+                    f"- The verified live facts above were retrieved from the real-time internet.\n"
+                    f"- Use them to ground and inform your response accurately when answering questions about current events, people, prices, or live facts."
                 )
             formatted += "<|eot_id|>"
 
@@ -342,11 +336,7 @@ class ClientInferenceRuntime:
                     m_content = re.sub(r"(?s)<think>.*?</think>", "", m_content).strip()
                 formatted += f"<|start_header_id|>{m_role}<|end_header_id|>\n\n{m_content}<|eot_id|>"
 
-            formatted += "<|start_header_id|>user<|end_header_id|>\n\n"
-            if web_context:
-                formatted += f"[Real-Time Live Web Search Information:\n{web_context}]\n\nQuestion: {prompt}<|eot_id|>"
-            else:
-                formatted += f"{prompt}<|eot_id|>"
+            formatted += f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|>"
             formatted += "<|start_header_id|>assistant<|end_header_id|>\n\n"
             model_stops = ["<|eot_id|>", "<|end_of_text|>", "<|endoftext|>"]
 
