@@ -52,7 +52,7 @@ class DualModelStateManager:
     Never confuses selectedModel (user preference) with activeModel (currently operational).
     """
 
-    SUPPORTED_MODELS = ("july", "gravity", "sree", "auto")
+    SUPPORTED_MODELS = ("july", "gravity", "sree", "mini-omni", "omni", "auto")
 
     def __init__(self, state_file: Optional[Path] = None):
         self._lock = threading.RLock()
@@ -63,11 +63,15 @@ class DualModelStateManager:
         self._active_model: str = "none"
         self._model_states: Dict[str, str] = {
             "july": ModelStatus.NOT_DOWNLOADED.value,
-            "gravity": ModelStatus.NOT_DOWNLOADED.value
+            "gravity": ModelStatus.NOT_DOWNLOADED.value,
+            "sree": ModelStatus.NOT_DOWNLOADED.value,
+            "mini-omni": ModelStatus.NOT_DOWNLOADED.value,
         }
         self._initialization_status: Dict[str, Dict[str, Any]] = {
             "july": {"stage": "IDLE", "percent": 0.0, "error": None, "timestamp": time.time()},
-            "gravity": {"stage": "IDLE", "percent": 0.0, "error": None, "timestamp": time.time()}
+            "gravity": {"stage": "IDLE", "percent": 0.0, "error": None, "timestamp": time.time()},
+            "sree": {"stage": "IDLE", "percent": 0.0, "error": None, "timestamp": time.time()},
+            "mini-omni": {"stage": "IDLE", "percent": 0.0, "error": None, "timestamp": time.time()},
         }
         self._listeners: List[Callable[[str, str, Dict[str, Any]], None]] = []
 

@@ -283,22 +283,25 @@ if (-not $Model) {
         Write-Host "   [1]  🌟  July LLM (General Intelligence, Coding & Agentic Reasoning)" -ForegroundColor Cyan
         Write-Host "   [2]  🌌  Gravity LLM (Deep Mathematical Reasoning, Proofs & Physics)" -ForegroundColor Yellow
         Write-Host "   [3]  🧠  SREE LLM (Dense Cognitive Reasoning, Multi-Step Thinking & STEM)" -ForegroundColor Cyan
-        Write-Host "   [4]  ⚡  Auto Router (Dynamic Query Routing to July, Gravity, or Sree)" -ForegroundColor Magenta
-        Write-Host "   [5]  🎙️   JULY LIVE (Continuous Conversational Voice AI Mode)" -ForegroundColor Green
-        Write-Host "   [6]  🤖  MINI-OMNI LIVE (End-to-End Multimodal Conversational Speech AI)" -ForegroundColor Cyan
+        Write-Host "   [4]  🤖  MINI-OMNI (Real-Time Multimodal Conversational Speech Intelligence)" -ForegroundColor Green
+        Write-Host "   [5]  ⚡  Auto Router (Dynamic Query Routing to July, Gravity, or Sree)" -ForegroundColor Magenta
+        Write-Host "   [6]  🎙️   MINI-OMNI LIVE (End-to-End Multimodal Voice AI Session)" -ForegroundColor Cyan
+        Write-Host "   [7]  🎙️   JULY LIVE (Continuous Conversational Voice AI Mode)" -ForegroundColor Green
         Write-Host ""
-        $mChoice = Read-Host " Select Option [1, 2, 3, 4, 5, or 6] (Default: 1 - July)"
-        if ($mChoice -eq '2') {
+        $mChoice = Read-Host " Select Option [1, 2, 3, 4, 5, 6, or 7] (Default: 1 - July)"
+        if ($mChoice -in @('2', 'gravity')) {
             $Model = "gravity"
-        } elseif ($mChoice -eq '3') {
+        } elseif ($mChoice -in @('3', 'sree')) {
             $Model = "sree"
-        } elseif ($mChoice -eq '4') {
-            $Model = "auto"
-        } elseif ($mChoice -eq '5') {
-            $Model = "july"
-            $Live = $true
-        } elseif ($mChoice -eq '6') {
+        } elseif ($mChoice -in @('4', 'mini-omni', 'omni', 'mini')) {
             $Model = "mini-omni"
+        } elseif ($mChoice -in @('5', 'auto')) {
+            $Model = "auto"
+        } elseif ($mChoice -in @('6', 'mini-live', 'omni-live')) {
+            $Model = "mini-omni"
+            $Live = $true
+        } elseif ($mChoice -in @('7', 'live', 'july-live')) {
+            $Model = "july"
             $Live = $true
         } else {
             $Model = "july"

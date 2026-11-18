@@ -110,8 +110,8 @@ class UI:
             banner_art = BANNER_GRAVITY
             sub_title = "GRAVITY LLM • Pure Mathematics & Frontier Physics"
         elif m in ("mini-omni", "omni"):
-            banner_art = BANNER
-            sub_title = "JULY LLM • Real-Time End-to-End Conversational Voice Engine"
+            banner_art = BANNER_MINI_OMNI
+            sub_title = "MINI-OMNI • Real-Time End-to-End Multimodal Voice Engine"
         else:
             banner_art = BANNER
             sub_title = subtitle
@@ -179,12 +179,12 @@ MODEL_METADATA = {
         "default_file": "model.gguf",
     },
     "mini-omni": {
-        "title": "JULY LLM (Live Voice Engine)",
-        "name": "july",
-        "family": "JULY AI Family",
-        "badge": "JULY • END-TO-END CONVERSATIONAL VOICE",
-        "description": "JULY Real-Time End-to-End Multimodal Conversational Speech Model — Simultaneous Speech Synthesis & Streaming",
-        "architecture": "JULY Omni Speech LM (Qwen2 + Continuous Audio Latents)",
+        "title": "MINI-OMNI",
+        "name": "mini-omni",
+        "family": "MINI-OMNI Voice Family",
+        "badge": "MINI-OMNI • END-TO-END CONVERSATIONAL VOICE",
+        "description": "Real-Time End-to-End Multimodal Conversational Speech Model — Simultaneous Speech Synthesis & Streaming",
+        "architecture": "Omni Speech LM (Qwen2 + Continuous Audio Latents)",
         "parameters": "2.8B Conversational Voice",
         "layers": 28,
         "quantization": "Q4_K_M (File Type 15)",
@@ -192,12 +192,12 @@ MODEL_METADATA = {
         "default_file": "model.gguf",
     },
     "omni": {
-        "title": "JULY LLM (Live Voice Engine)",
-        "name": "july",
-        "family": "JULY AI Family",
-        "badge": "JULY • END-TO-END CONVERSATIONAL VOICE",
-        "description": "JULY Real-Time End-to-End Multimodal Conversational Speech Model — Simultaneous Speech Synthesis & Streaming",
-        "architecture": "JULY Omni Speech LM (Qwen2 + Continuous Audio Latents)",
+        "title": "MINI-OMNI",
+        "name": "mini-omni",
+        "family": "MINI-OMNI Voice Family",
+        "badge": "MINI-OMNI • END-TO-END CONVERSATIONAL VOICE",
+        "description": "Real-Time End-to-End Multimodal Conversational Speech Model — Simultaneous Speech Synthesis & Streaming",
+        "architecture": "Omni Speech LM (Qwen2 + Continuous Audio Latents)",
         "parameters": "2.8B Conversational Voice",
         "layers": 28,
         "quantization": "Q4_K_M (File Type 15)",
@@ -1374,7 +1374,8 @@ def interactive_select_model(cfg: ClientConfig) -> Optional[str]:
         ("1", "july", MODEL_METADATA["july"]),
         ("2", "gravity", MODEL_METADATA["gravity"]),
         ("3", "sree", MODEL_METADATA["sree"]),
-        ("4", "auto", MODEL_METADATA["auto"]),
+        ("4", "mini-omni", MODEL_METADATA["mini-omni"]),
+        ("5", "auto", MODEL_METADATA["auto"]),
     ]
 
     for num, k, meta in items:
@@ -1397,20 +1398,27 @@ def interactive_select_model(cfg: ClientConfig) -> Optional[str]:
         print(f" {UI.GRAY}│{UI.RESET} [{UI.YELLOW}{num}{UI.RESET}] {title_col:<30} {state_label:<24} {pref_mark}")
         print(f" {UI.GRAY}│     {UI.DIM}Arch: {meta['architecture']} | {meta['parameters']}{UI.RESET}")
         print(f" {UI.GRAY}│     {UI.GRAY}{meta['description'][:68]}{UI.RESET}")
-        if num != "4":
+        if num != items[-1][0]:
             print(f" {UI.GRAY}│{UI.RESET}")
 
     print(f" {UI.MAGENTA}└───────────────────────────────────────────────────────────────────────┘{UI.RESET}")
 
     try:
-        choice = input(f"\n  {UI.BOLD}Select model [1-4, name, or Enter to cancel]{UI.RESET} › ").strip().lower()
+        choice = input(f"\n  {UI.BOLD}Select model [1-{len(items)}, name, or Enter to cancel]{UI.RESET} › ").strip().lower()
         if not choice:
             print(f"  {UI.GRAY}[*] Model selection unchanged: {current.upper()}{UI.RESET}\n")
             return None
 
         matched_key = None
         for num, k, meta in items:
-            if choice in (num, k, meta["title"].lower(), f"{k} llm", f"{k}_llm"):
+            variants = [num, k, meta["title"].lower(), f"{k} llm", f"{k}_llm"]
+            if k == "mini-omni":
+                variants.extend(["omni", "mini", "mini omni", "omni llm", "mini-omni llm", "m"])
+            elif k == "sree":
+                variants.extend(["sree llm", "s"])
+            elif k == "auto":
+                variants.extend(["router", "a"])
+            if choice in variants:
                 matched_key = k
                 break
 
@@ -1451,7 +1459,11 @@ def cmd_model(args):
 
     if is_list or (name and name.lower() in ("list", "ls", "models")):
         print(f"\n {UI.BOLD}{UI.CYAN}Registered Foundation Models:{UI.RESET}")
+        seen_titles = set()
         for k, meta in MODEL_METADATA.items():
+            if meta["title"] in seen_titles:
+                continue
+            seen_titles.add(meta["title"])
             active_str = f" {UI.GREEN}[ACTIVE]{UI.RESET}" if getattr(cfg, "selected_model", "july") == k else ""
             is_down = perm.is_model_present(k)
             down_str = f"{UI.GREEN}Downloaded{UI.RESET}" if is_down else f"{UI.YELLOW}Not Downloaded{UI.RESET}"
@@ -1471,7 +1483,7 @@ def cmd_model(args):
     if name:
         target = name.lower().strip()
 
-        # Handle "download [gravity]"
+        # Handle "download [gravity|sree|mini-omni]"
         if target in ("download", "get"):
             model_target = (target_arg or "gravity").lower().strip()
             if perm.is_model_present(model_target):
@@ -1484,7 +1496,7 @@ def cmd_model(args):
                 print(f" {UI.GREEN}[✓] Background acquisition started. July LLM remains active for inference.{UI.RESET}\n")
             return
 
-        # Handle "cancel [gravity]"
+        # Handle "cancel [gravity|sree|mini-omni]"
         if target in ("cancel", "stop"):
             model_target = (target_arg or "gravity").lower().strip()
             if coordinator.cancel_download(model_target):
@@ -1494,14 +1506,15 @@ def cmd_model(args):
             return
 
         matched = None
-        for k in ("july", "gravity", "sree", "auto"):
+        for k in ("july", "gravity", "sree", "mini-omni", "omni", "auto"):
             if target in (k, f"{k} llm", f"{k}_llm", f"mode_{k}"):
-                matched = k
+                matched = "mini-omni" if k == "omni" else k
                 break
         if target in ("1", "j"): matched = "july"
         elif target in ("2", "g"): matched = "gravity"
         elif target in ("3", "s"): matched = "sree"
-        elif target in ("4", "a"): matched = "auto"
+        elif target in ("4", "m", "mini", "omni", "mini-omni"): matched = "mini-omni"
+        elif target in ("5", "a", "auto"): matched = "auto"
 
         if matched:
             cfg.selected_model = matched
@@ -1514,13 +1527,16 @@ def cmd_model(args):
                 print(f" {UI.CYAN}[JULY ACTIVE] [GRAVITY DOWNLOADING: 0%]{UI.RESET}")
                 print(f" {UI.BOLD}{UI.CYAN}JULY LLM:{UI.RESET} I'm July. Gravity is downloading in the background. You can continue chatting with me while it prepares.\n")
                 coordinator._launch_background_download("gravity", auto_activate=True)
-            elif matched in ("july", "gravity"):
+            elif not perm.is_model_present(matched) and matched not in ("auto",):
+                print(f" {UI.CYAN}[*] Starting background download of {matched.upper()} LLM from Cloudflare R2...{UI.RESET}")
+                coordinator._launch_background_download(matched, auto_activate=True)
+            elif matched in ("july", "gravity", "sree", "mini-omni"):
                 if perm.is_model_present(matched):
                     record_active_state(perm.get_model_file(matched), matched)
                     print(f" {UI.GREEN}[✓] {matched.upper()} LLM mounted into persistent active memory.{UI.RESET}\n")
             return
         else:
-            print(f" {UI.RED}[!] Unknown model '{name}'. Available: july, gravity, auto, list, status, download, cancel{UI.RESET}\n")
+            print(f" {UI.RED}[!] Unknown model '{name}'. Available: july, gravity, sree, mini-omni, auto, list, status, download, cancel{UI.RESET}\n")
             return
 
     interactive_select_model(cfg)
@@ -2310,7 +2326,9 @@ def cmd_chat(args):
                         matched_m = None
                         if sub in ("july", "1", "j"): matched_m = "july"
                         elif sub in ("gravity", "2", "g"): matched_m = "gravity"
-                        elif sub in ("auto", "3", "a"): matched_m = "auto"
+                        elif sub in ("sree", "3", "s"): matched_m = "sree"
+                        elif sub in ("mini-omni", "omni", "mini", "4", "m"): matched_m = "mini-omni"
+                        elif sub in ("auto", "5", "a"): matched_m = "auto"
 
                         if matched_m == "july":
                             if runtime.current_model_id == "july" and runtime.is_loaded():
@@ -2352,22 +2370,48 @@ def cmd_chat(args):
                                     voice_coord.tts.speak(jul_greeting, non_blocking=True)
                             continue
 
+                        elif matched_m in ("sree", "mini-omni"):
+                            m_up = matched_m.upper()
+                            if perm_storage.is_model_present(matched_m):
+                                if runtime.current_model_id == matched_m and runtime.is_loaded():
+                                    print(f"\n  {UI.CYAN}[i] {m_up} is already active.{UI.RESET}\n")
+                                else:
+                                    print(f"\n  {UI.YELLOW}[*] Switching active inference engine to {m_up}...{UI.RESET}")
+                                    try:
+                                        coordinator._activate_local_model(matched_m)
+                                        cfg.selected_model = matched_m
+                                        cfg.save()
+                                        print(f"  {UI.GREEN}[✓] {m_up} mounted into memory and active.{UI.RESET}\n")
+                                    except Exception as e:
+                                        print(f"  {UI.RED}[!] Could not activate {m_up}: {e}{UI.RESET}\n")
+                            else:
+                                if not runtime.is_loaded() or runtime.current_model_id != "july":
+                                    coordinator._activate_local_model("july")
+                                coordinator._launch_background_download(matched_m, auto_activate=True)
+                                print(f"\n  {UI.CYAN}[JULY ACTIVE] [{m_up} DOWNLOADING: 0%]{UI.RESET}")
+                                jul_greeting = f"I'm July. {m_up} is downloading in the background. You can continue chatting with me while it prepares."
+                                print(f"  {UI.BOLD}{UI.CYAN}JULY LLM:{UI.RESET} {jul_greeting}\n")
+                                if voice_coord.tts.is_enabled:
+                                    voice_coord.tts.speak(jul_greeting, non_blocking=True)
+                            continue
+
                         elif matched_m == "auto":
                             cfg.selected_model = "auto"
                             cfg.save()
                             print(f"\n  {UI.GREEN}[✓] Selected Model Preference:[/] {UI.BOLD}AUTO DUAL ROUTER{UI.RESET}\n")
                             continue
                         else:
-                            print(f"\n  {UI.RED}[!] Unknown model name '{sub}'.{UI.RESET} Available: {UI.CYAN}/model july{UI.RESET}, {UI.CYAN}/model gravity{UI.RESET}, {UI.CYAN}/model auto{UI.RESET}, {UI.CYAN}/model list{UI.RESET}, {UI.CYAN}/model download gravity{UI.RESET}, {UI.CYAN}/model cancel gravity{UI.RESET}\n")
+                            print(f"\n  {UI.RED}[!] Unknown model name '{sub}'.{UI.RESET} Available: {UI.CYAN}/model july{UI.RESET}, {UI.CYAN}/model gravity{UI.RESET}, {UI.CYAN}/model sree{UI.RESET}, {UI.CYAN}/model mini-omni{UI.RESET}, {UI.CYAN}/model auto{UI.RESET}, {UI.CYAN}/model list{UI.RESET}\n")
                             continue
                     else:
                         new_m = interactive_select_model(cfg)
-                        if new_m and new_m in ("july", "gravity"):
+                        if new_m and new_m in ("july", "gravity", "sree", "mini-omni"):
                             if perm_storage.is_model_present(new_m):
                                 coordinator._activate_local_model(new_m)
                                 print(f"  {UI.GREEN}[✓] {new_m.upper()} LLM mounted into memory and active.{UI.RESET}\n")
                             else:
-                                print(f"\n  {UI.CYAN}[JULY ACTIVE] [GRAVITY DOWNLOADING: 0%]{UI.RESET}")
+                                print(f"\n  {UI.CYAN}[JULY ACTIVE] [{new_m.upper()} DOWNLOADING: 0%]{UI.RESET}")
+                                coordinator._launch_background_download(new_m, auto_activate=True)
                                 jul_greeting = "I'm July. Gravity is downloading in the background. You can continue chatting with me while it prepares."
                                 print(f"  {UI.BOLD}{UI.CYAN}JULY LLM:{UI.RESET} {jul_greeting}\n")
                                 coordinator._launch_background_download(new_m, auto_activate=True)
@@ -3096,13 +3140,13 @@ def main():
     voice_p.add_argument("value", nargs="?", help="Parameter value for language, model, output, or speed")
 
     load_p = subparsers.add_parser("load", help="Retrieve GGUF into ephemeral RAM-backed storage")
-    load_p.add_argument("-M", "--model", help="Specific model to load: july, gravity, or sree")
+    load_p.add_argument("-M", "--model", help="Specific model to load: july, gravity, sree, or mini-omni")
 
     chat_p = subparsers.add_parser("chat", help="Start chat session running genuine local inference")
     chat_p.add_argument("prompt", nargs="?", help="One-off prompt to execute")
     chat_p.add_argument("-f", "--file", help="Path to text file containing a bulk or multi-line prompt")
     chat_p.add_argument("-m", "--mode", "--personality", dest="personality", help="Run chat with a specific personality")
-    chat_p.add_argument("-M", "--model", help="Foundation model to use: july, gravity, sree, or auto")
+    chat_p.add_argument("-M", "--model", help="Foundation model to use: july, gravity, sree, mini-omni, or auto")
     chat_p.add_argument("-t", "--think", "--thinking", dest="think", choices=["auto", "instant", "balanced", "deep"], help="Adaptive reasoning speed level (instant = zero-overhead code execution)")
 
     pers_p = subparsers.add_parser("personality", help="Choose assistant personality profile")
@@ -3125,7 +3169,7 @@ def main():
     sbx_p.add_argument("-n", "--network", action="store_true", help="Allow network access for this execution")
 
     live_p = subparsers.add_parser("live", help="Start real-time conversational voice AI session")
-    live_p.add_argument("-M", "--model", choices=["july", "gravity", "sree"], default=None, help="Foundation model to use")
+    live_p.add_argument("-M", "--model", choices=["july", "gravity", "sree", "mini-omni", "omni"], default=None, help="Foundation model to use")
     live_p.add_argument("-S", "--style", choices=["natural", "friendly", "professional", "tutor", "companion"], default="natural", help="Voice style")
 
     # Native Linux / Tails OS & Diagnostics additions
@@ -3136,7 +3180,7 @@ def main():
     agent_p = subparsers.add_parser("agent", help="Launch JULY Autonomous Cognitive Agent with tool calling")
     agent_p.add_argument("task", nargs="?", help="Task or objective for the agent")
     agent_p.add_argument("-f", "--file", help="Path to text file containing task instructions")
-    agent_p.add_argument("-M", "--model", choices=["july", "gravity", "sree", "auto"], default="auto", help="Foundation model to use")
+    agent_p.add_argument("-M", "--model", choices=["july", "gravity", "sree", "mini-omni", "omni", "auto"], default="auto", help="Foundation model to use")
     agent_p.add_argument("-t", "--think", "--thinking", dest="think", choices=["auto", "instant", "balanced", "deep"], help="Adaptive reasoning speed level (instant = code-first fast path)")
 
     subparsers.add_parser("help", help="Display comprehensive help guide and command usage")
