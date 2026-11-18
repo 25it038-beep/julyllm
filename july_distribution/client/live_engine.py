@@ -123,7 +123,7 @@ class SpeechChunker:
         "v1.", "v2.", "v3.", "al.", "inc.", "ltd.", "fig.", "no.", "dept."
     )
 
-    def __init__(self, min_words_first_clause: int = 5):
+    def __init__(self, min_words_first_clause: int = 3):
         self.buffer: str = ""
         self.min_words_first_clause = min_words_first_clause
         self.is_first_chunk: bool = True
@@ -273,7 +273,20 @@ class LiveConversationManager:
         self.waveform_phase: float = 0.0
 
         # Sentence chunker
-        self.chunker = SpeechChunker()
+        self.chunker = SpeechChunker(min_words_first_clause=3)
+
+        # Asynchronously pre-warm Whisper model & CUDA kernels on session start (skip in test runner)
+        if not os.environ.get("PYTEST_CURRENT_TEST"):
+            threading.Thread(target=self._prewarm_stt, daemon=True, name="whisper-prewarm").start()
+
+    def _prewarm_stt(self):
+        """Primes Whisper model and CUDA execution graph for sub-100ms first turn transcription."""
+        try:
+            self.stt.get_model()
+            silence = np.zeros(1600, dtype=np.float32)
+            self.stt.transcribe_audio(silence)
+        except Exception:
+            pass
 
     def set_style(self, style: str) -> str:
         """Configures the live conversational style."""
@@ -446,16 +459,22 @@ class LiveConversationManager:
         # Check if query needs real-time live web search grounding (e.g. who/what questions or live facts)
         search_grounding = ""
         try:
-            is_who_or_what = bool(re.search(r"\b(who|what|where|when)\b", norm))
-            needs_search = should_trigger_web_search(self.last_user_prompt, self.recent_history)
-            if not needs_search and is_who_or_what:
-                if not any(re.search(p, norm) for p in SKIP_PATTERNS):
-                    needs_search = True
+            conversational_meta = bool(re.search(
+                r"(?i)\b(who are you|what are you|what is your name|who am i|what can you do|how are you|what is the time|who made you|who created you)\b",
+                norm
+            ))
+            needs_search = False
+            if not conversational_meta:
+                is_who_or_what = bool(re.search(r"\b(who|what|where|when)\b", norm))
+                needs_search = should_trigger_web_search(self.last_user_prompt, self.recent_history)
+                if not needs_search and is_who_or_what:
+                    if not any(re.search(p, norm) for p in SKIP_PATTERNS):
+                        needs_search = True
 
             if needs_search:
                 search_q = extract_search_query(self.last_user_prompt, self.recent_history)
                 logger.info(f"Live voice web search triggered for: '{search_q}'")
-                results = live_duckduckgo_search(search_q, max_results=3)
+                results = live_duckduckgo_search(search_q, max_results=2, timeout_seconds=1.5)
                 valid = [r for r in results if r.get("title") and r.get("snippet")]
                 if valid:
                     search_grounding = format_search_context(search_q, valid)
@@ -476,14 +495,30 @@ class LiveConversationManager:
         else:
             effective_prompt = f"[SYSTEM VOICE INSTRUCTION: {style_dir}]\nUser said aloud: {self.last_user_prompt}"
 
+        gen_kwargs = {
+            "prompt": effective_prompt,
+            "session_id": session_id,
+            "max_tokens": 96
+        }
+        try:
+            import inspect
+            sig = inspect.signature(self.runtime.generate_stream)
+            if "enable_web_search" in sig.parameters:
+                gen_kwargs["enable_web_search"] = False
+        except Exception:
+            pass
+
         full_response_parts: List[str] = []
 
         try:
-            stream = self.runtime.generate_stream(
-                prompt=effective_prompt,
-                session_id=session_id,
-                max_tokens=256
-            )
+            try:
+                stream = self.runtime.generate_stream(**gen_kwargs)
+            except TypeError as te:
+                if "enable_web_search" in gen_kwargs:
+                    gen_kwargs.pop("enable_web_search", None)
+                    stream = self.runtime.generate_stream(**gen_kwargs)
+                else:
+                    raise te
 
             for token in stream:
                 if self.cancel_generation_event.is_set():

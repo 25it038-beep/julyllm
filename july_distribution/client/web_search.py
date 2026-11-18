@@ -279,7 +279,7 @@ def decode_bing_u(url: str) -> str:
     return url
 
 
-def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, str]]:
+def live_duckduckgo_search(query: str, max_results: int = 4, timeout_seconds: float = 4.0) -> List[Dict[str, str]]:
     """Performs multi-tier resilient live web search without requiring third-party API keys.
     
     Tiers:
@@ -291,6 +291,7 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
     """
     results: List[Dict[str, str]] = []
     encoded_query = urllib.parse.quote(query)
+    t_out = max(1.0, float(timeout_seconds))
 
     # Strategy 1: Primary DuckDuckGo HTML Search
     try:
@@ -302,7 +303,7 @@ def live_duckduckgo_search(query: str, max_results: int = 4) -> List[Dict[str, s
             "Referer": "https://html.duckduckgo.com/",
         }
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=6) as resp:
+        with urllib.request.urlopen(req, timeout=min(t_out, 3.0)) as resp:
             content = resp.read().decode("utf-8", errors="ignore")
             snippet_matches = re.findall(r'<a[^>]+class="[^"]*result__snippet[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', content, re.DOTALL)
             title_matches = re.findall(r'<a[^>]+class="[^"]*result__a[^"]*"[^>]*>(.*?)</a>', content, re.DOTALL)

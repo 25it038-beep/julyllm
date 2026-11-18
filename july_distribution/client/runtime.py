@@ -203,7 +203,8 @@ class ClientInferenceRuntime:
         prompt: str,
         session_id: str = "default",
         max_tokens: Optional[int] = None,
-        cancel_event: Optional[threading.Event] = None
+        cancel_event: Optional[threading.Event] = None,
+        enable_web_search: Optional[bool] = None,
     ) -> Generator[str, None, None]:
         """Streams output tokens formatted with user customizations."""
         if not self._is_loaded or self.llm is None:
@@ -267,7 +268,8 @@ class ClientInferenceRuntime:
 
         # Autonomous Real-Time Web Search Grounding
         web_context = ""
-        if getattr(self.config, "enable_web_search", True) and should_trigger_web_search(prompt, history=history):
+        do_search = getattr(self.config, "enable_web_search", True) if enable_web_search is None else bool(enable_web_search)
+        if do_search and should_trigger_web_search(prompt, history=history):
             search_query = extract_search_query(prompt, history=history)
             try:
                 sys.stdout.write(f"\n \033[93m🔍 [HS AI SEARCH]\033[0m Querying live web sources for: '\033[1m{search_query}\033[0m'...\n")

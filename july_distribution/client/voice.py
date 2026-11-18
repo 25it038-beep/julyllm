@@ -549,7 +549,11 @@ class WhisperVoiceInput:
                 audio_data,
                 language=lang_param,
                 fp16=use_fp16,
-                temperature=0.0
+                temperature=0.0,
+                beam_size=1,
+                best_of=1,
+                condition_on_previous_text=False,
+                without_timestamps=True,
             )
 
             text = (result.get("text") or "").strip()
@@ -568,7 +572,7 @@ class TTSVoiceOutput:
 
     def __init__(self):
         self.is_enabled: bool = False
-        self.speed: int = 180  # words per minute
+        self.speed: int = 200  # Rapid conversational rate (approx. 200 words per minute)
         self.voice_gender: str = "Female"
         self.voice_name: Optional[str] = self._detect_female_voice()
         self.is_speaking: bool = False
