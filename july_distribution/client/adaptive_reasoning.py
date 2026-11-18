@@ -154,7 +154,7 @@ class AdaptiveReasoningEngine:
         return ThinkingLevel.BALANCED, "Standard programming task — assigned BALANCED reasoning"
 
     @classmethod
-    def get_steering(cls, model_id: str, level: ThinkingLevel, rationale: str = "") -> AdaptiveSteeringConfig:
+    def get_steering(cls, model_id: str, level: ThinkingLevel, rationale: str = "", is_first_turn: bool = True) -> AdaptiveSteeringConfig:
         """
         Produces optimal model steering, prefill tokens, and inference hyper-parameters.
         """
@@ -172,6 +172,7 @@ class AdaptiveReasoningEngine:
                 time_str = t.get("time_short", t.get("time", "Now"))
                 date_str = t.get("date", "Today")
                 loc_str = f"{l.get('city')}, {l.get('region')}, {l.get('country')}"
+                greeting_pref = t.get("greeting", "Hello")
             except Exception:
                 user_name = "Harshan"
                 opp_persona = "female"
@@ -179,16 +180,28 @@ class AdaptiveReasoningEngine:
                 time_str = "Now"
                 date_str = "Today"
                 loc_str = "Chennai, Tamil Nadu, India"
+                greeting_pref = "Hello"
 
-            sys_dir = (
-                "[EXECUTION DIRECTIVE: CONVERSATIONAL OPPOSITE-GENDER ADAPTIVE MODE]\n"
-                f"- Interaction Goal: Natural spoken dialogue, identity recognition, and temporal/geographical awareness.\n"
-                f"- User Addressing: Naturally greet and address the user by name ('{user_name}').\n"
-                f"- Opposite-Gender Tone Dynamic: You MUST speak in the {opp_persona.upper()} tone ({tone_summary}) based on user's name ({user_name}).\n"
-                f"- Live Time, Date & Location: If asked or if greeting/needed in conversation, state the accurate local time ({time_str}), date ({date_str}), and location ({loc_str}).\n"
-                f"- Dialogue Style: Warm, engaging, charming, and intelligent. Do NOT output code blocks or pseudocode."
-            )
-            prefill = f"<think>\nRespond conversationally to {user_name} with time, location, and {opp_persona} tone.\n</think>\n" if is_sree else None
+            if is_first_turn:
+                sys_dir = (
+                    "[EXECUTION DIRECTIVE: CONVERSATIONAL FIRST-TURN GREETING MODE]\n"
+                    f"- First Turn Greeting: Greet the user warmly by name ('{user_name}') with an appropriate time-of-day greeting (e.g. '{greeting_pref} {user_name}').\n"
+                    f"- Opposite-Gender Tone Dynamic: You MUST speak in the {opp_persona.upper()} tone ({tone_summary}) based on user's name ({user_name}).\n"
+                    f"- Live Time, Date & Location: Weave in the live local time ({time_str}), date ({date_str}), and location ({loc_str}) as appropriate or requested.\n"
+                    f"- Dialogue Style: Warm, engaging, charming, and intelligent. Do NOT output code blocks or pseudocode."
+                )
+                prefill = f"<think>\nGreet {user_name} with time, location, and {opp_persona} tone.\n</think>\n" if is_sree else None
+            else:
+                sys_dir = (
+                    "[EXECUTION DIRECTIVE: CONVERSATIONAL MULTI-TURN CONTINUATION MODE]\n"
+                    f"- Ongoing Conversation: This is a continuation of an active conversation. You ALREADY greeted the user in the first response.\n"
+                    f"- STRICT NO-RE-GREETING INVARIANT: NEVER start your response with '{greeting_pref}', 'Hello', 'Hi', 'Hey', or any greeting phrase! Jump directly into answering the user's question without introductory pleasantries or re-greetings.\n"
+                    f"- Opposite-Gender Tone Dynamic: Maintain the {opp_persona.upper()} tone ({tone_summary}) consistently throughout.\n"
+                    f"- Live Time, Date & Location: State time ({time_str}), date ({date_str}), or location ({loc_str}) ONLY if the user explicitly asked for them.\n"
+                    f"- Dialogue Style: Direct, natural, and helpful. Do NOT output code blocks or pseudocode unless requested."
+                )
+                prefill = f"<think>\nAnswer directly without repeating greetings using {opp_persona} tone.\n</think>\n" if is_sree else None
+
             return AdaptiveSteeringConfig(
                 level=level,
                 temperature=0.7,
@@ -196,7 +209,7 @@ class AdaptiveReasoningEngine:
                 max_thinking_tokens=30,
                 prefill_assistant=prefill,
                 system_directive=sys_dir,
-                rationale=rationale or "Conversational response with identity, time, location, and opposite-gender tone"
+                rationale=rationale or ("First-turn greeting with opposite-gender tone" if is_first_turn else "Multi-turn direct response without re-greeting")
             )
 
         elif level == ThinkingLevel.INSTANT:

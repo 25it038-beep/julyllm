@@ -133,7 +133,7 @@ class UserCustomizationManager:
         conn.commit()
         conn.close()
 
-    def get_effective_system_prompt(self, model_id: str = "july") -> str:
+    def get_effective_system_prompt(self, model_id: str = "july", is_first_turn: bool = True) -> str:
         """Combines permanent model-specific identity with user-configured personality and memories."""
         mid = model_id.lower().strip()
         if mid == "gravity":
@@ -231,7 +231,7 @@ class UserCustomizationManager:
         # Append dynamic live runtime context (User Identity, Current Date/Time, Location)
         try:
             from .context_provider import RuntimeContextProvider
-            context_block = RuntimeContextProvider.build_system_context_block()
+            context_block = RuntimeContextProvider.build_system_context_block(is_first_turn=is_first_turn)
         except Exception:
             context_block = ""
 

@@ -241,8 +241,9 @@ class ClientInferenceRuntime:
         except Exception:
             pass
 
-        sys_prompt = self.customizer.get_effective_system_prompt(self.current_model_id)
         history = self.customizer.get_session_history(session_id, limit=4)
+        is_first_turn = (len(history) == 0)
+        sys_prompt = self.customizer.get_effective_system_prompt(self.current_model_id, is_first_turn=is_first_turn)
         custom_kn = self.customizer.retrieve_custom_knowledge(prompt)
 
         # Autonomous Real-Time Web Search Grounding
@@ -270,7 +271,9 @@ class ClientInferenceRuntime:
         if user_think_override == "auto":
             user_think_override = None
         active_level, level_rationale = AdaptiveReasoningEngine.classify_task(prompt, user_override=user_think_override)
-        steering = AdaptiveReasoningEngine.get_steering(self.current_model_id, active_level, level_rationale)
+        steering = AdaptiveReasoningEngine.get_steering(
+            self.current_model_id, active_level, level_rationale, is_first_turn=is_first_turn
+        )
 
         # Reasoning Orchestration Invariants Pre-pass (Skip in INSTANT and CONVERSATIONAL modes)
         if active_level not in (ThinkingLevel.INSTANT, ThinkingLevel.CONVERSATIONAL):

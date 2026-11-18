@@ -307,7 +307,7 @@ class RuntimeContextProvider:
         return location
 
     @classmethod
-    def build_system_context_block(cls) -> str:
+    def build_system_context_block(cls, is_first_turn: bool = True) -> str:
         """Constructs the prompt directive block injected into model context."""
         user = cls.get_user_context()
         temp = cls.get_temporal_context()
@@ -374,10 +374,24 @@ class RuntimeContextProvider:
             f"   - If asked 'what time is it?', 'what is the time now?', 'tell me the time', 'what's the date?', or about time/date, ALWAYS provide the exact live local time ({temp['time_short']}) and date ({temp['date']}) given above.",
             f"   - Never claim you don't know the time or don't have access to real-time clock.",
             f"4. Geographical Location Awareness:",
-            f"   - If asked 'where am I?', 'what is my location?', 'my city', 'my country', or 'my timezone', state that they are in {loc['city']}, {loc['region']}, {loc['country']} (Timezone: {loc['timezone']}).",
-            f"5. Conversational Dialogue & Greetings ('If needed'):",
-            f"   - When greeting or in friendly conversational exchanges, naturally weave in their name ('{user['preferred_name']}'), an appropriate time-of-day greeting ('{temp['greeting']}'), and location or time context if relevant or requested.",
-            "================================================================================"
+            f"   - If asked 'where am I?', 'what is my location?', 'my city', 'my country', or 'my timezone', state that they are in {loc['city']}, {loc['region']}, {loc['country']} (Timezone: {loc['timezone']})."
         ])
+
+        if is_first_turn:
+            lines.extend([
+                f"5. Conversational Dialogue & Greeting Directive (FIRST PROMPT & RESPONSE ONLY):",
+                f"   - FIRST TURN ONLY: Greet the user warmly with an appropriate time-of-day greeting ('{temp['greeting']} {user['preferred_name']}!'), weave in location/time context if relevant, and introduce assistance.",
+                f"   - This initial greeting is performed ONCE at the start of the session.",
+                "================================================================================"
+            ])
+        else:
+            lines.extend([
+                f"5. Conversational Dialogue & Greeting Directive (MULTI-TURN CONTINUATION):",
+                f"   - STRICT NO RE-GREETING RULE: This is a continuation of an ongoing chat. You ALREADY greeted the user in the first response.",
+                f"   - NEVER start your response with '{temp['greeting']}', 'Hello', 'Hi', or any greeting phrase on this turn.",
+                f"   - Jump directly and naturally into your answer or action without introductory pleasantries or re-greetings.",
+                f"   - Maintain the {user['opposite_gender_persona'].upper()} tone and respond to time/name/location inquiries directly if specifically asked.",
+                "================================================================================"
+            ])
 
         return "\n".join(lines)
