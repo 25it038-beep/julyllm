@@ -236,11 +236,11 @@ class AdaptiveReasoningEngine:
         if level == ThinkingLevel.CONVERSATIONAL:
             if is_first_turn:
                 sys_dir = (
-                    f"[DIRECTIVE: First turn: Greet {user_name} warmly ('{greeting_pref} {user_name}!') in your {opp_persona} voice ({tone_summary}). Note: {user_name} is your male creator. State verified time/date/location if asked, then answer prompt directly. Do NOT output unrequested coding solutions.]"
+                    f"[DIRECTIVE: First turn: Greet {user_name} warmly ('{greeting_pref} {user_name}!') in your {opp_persona} voice ({tone_summary}). Note: {user_name} is your male creator. State verified time/date/location if asked, check any provided web search context and cite sources, then answer prompt directly. Do NOT output unrequested coding solutions.]"
                 )
             else:
                 sys_dir = (
-                    f"[DIRECTIVE: Multi-turn continuation: NO RE-GREETINGS. Jump directly into answering the prompt in your {opp_persona} voice. Note: {user_name} is your male creator. Switch topics cleanly. Do NOT output unrequested coding solutions.]"
+                    f"[DIRECTIVE: Multi-turn continuation: NO RE-GREETINGS. Jump directly into answering the prompt in your {opp_persona} voice. Note: {user_name} is your male creator. Switch topics cleanly. Check any provided web search context and cite sources. Do NOT output unrequested coding solutions.]"
                 )
 
             return AdaptiveSteeringConfig(
@@ -255,9 +255,10 @@ class AdaptiveReasoningEngine:
 
         elif level == ThinkingLevel.INSTANT:
             sys_dir = (
-                "[EXECUTION DIRECTIVE: INSTANT CODE-FIRST ZERO-OVERHEAD MODE]\n"
-                "- Goal: Produce correct, functional, production-quality code with maximum speed.\n"
-                "- Produce the required code blocks, modules, or fixes directly."
+                "[EXECUTION DIRECTIVE: INSTANT CODE-FIRST MODE]\n"
+                "- Goal: Exercise full freedom of reasoning inside <think>...</think>, then produce correct, functional, production-quality code.\n"
+                "- Produce the required code blocks, modules, or fixes directly.\n"
+                "- Follow all system instructions and check any provided web search context."
             )
             return AdaptiveSteeringConfig(
                 level=level,
@@ -271,9 +272,9 @@ class AdaptiveReasoningEngine:
 
         elif level == ThinkingLevel.BALANCED:
             sys_dir = (
-                "[EXECUTION DIRECTIVE: BALANCED FOCUSED IMPLEMENTATION MODE]\n"
-                "- Goal: Execute multi-component implementation cleanly and directly.\n"
-                "- Jump directly into complete, robust code implementation without repetitive explanation."
+                "[EXECUTION DIRECTIVE: BALANCED IMPLEMENTATION MODE]\n"
+                "- Goal: Deliberate freely inside <think>...</think>, then execute clean and robust implementation.\n"
+                "- Follow all system instructions and check any provided web search context."
             )
             return AdaptiveSteeringConfig(
                 level=level,
@@ -287,9 +288,10 @@ class AdaptiveReasoningEngine:
 
         else:  # DEEP
             sys_dir = (
-                "[EXECUTION DIRECTIVE: DEEP ACCURACY MODE]\n"
-                "- Goal: Solve complex algorithmic, architectural, or security-sensitive challenges with verified correctness.\n"
-                "- Deliver complete, verified code with proofs and complexity analysis."
+                "[EXECUTION DIRECTIVE: DEEP ACCURACY & COGNITIVE REASONING MODE]\n"
+                "- Goal: Exercise full freedom of deep reasoning, formal logic, and verification inside <think>...</think>.\n"
+                "- Deliver complete, verified code or answers with proofs and complexity analysis.\n"
+                "- Follow all system instructions and check any provided web search context."
             )
             return AdaptiveSteeringConfig(
                 level=level,
