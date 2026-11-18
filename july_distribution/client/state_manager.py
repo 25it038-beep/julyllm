@@ -52,7 +52,7 @@ class DualModelStateManager:
     Never confuses selectedModel (user preference) with activeModel (currently operational).
     """
 
-    SUPPORTED_MODELS = ("july", "gravity")
+    SUPPORTED_MODELS = ("july", "gravity", "sree", "auto")
 
     def __init__(self, state_file: Optional[Path] = None):
         self._lock = threading.RLock()
