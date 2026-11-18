@@ -1,4 +1,4 @@
-﻿# ================================================================================
+# ================================================================================
 # HS AI SOLUTIONS — JULY LLM WINDOWS INSTALLER
 # Organization: HS AI Solutions
 # Studio Portal: https://hs-ai-studio-4i7i-git-main-harshanseliyan28-1638s-projects.vercel.app/
