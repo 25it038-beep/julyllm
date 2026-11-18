@@ -230,24 +230,25 @@ class AdaptiveReasoningEngine:
             greeting_pref = "Hello"
 
         thought = cls.generate_dynamic_thought(prompt, level, user_name=user_name, opp_persona=opp_persona)
-        closed_prefill = f"<think>\n{thought}\n</think>\n" if is_sree else None
+        # SREE Dynamic Reasoning: Prompt with open <think> so SREE formulates real thoughts dynamically, bounded by max_thinking_tokens
+        prefill_assistant = "<think>\n" if is_sree else None
 
         if level == ThinkingLevel.CONVERSATIONAL:
             if is_first_turn:
                 sys_dir = (
-                    f"[DIRECTIVE: First turn: Greet {user_name} warmly ('{greeting_pref} {user_name}!') in {opp_persona} tone ({tone_summary}). State verified time/date/location if asked, then answer prompt directly. Do NOT output unrequested coding solutions.]"
+                    f"[DIRECTIVE: First turn: Greet {user_name} warmly ('{greeting_pref} {user_name}!') in your {opp_persona} voice ({tone_summary}). Note: {user_name} is your male creator. State verified time/date/location if asked, then answer prompt directly. Do NOT output unrequested coding solutions.]"
                 )
             else:
                 sys_dir = (
-                    f"[DIRECTIVE: Multi-turn continuation: NO RE-GREETINGS. Jump directly into answering the prompt in {opp_persona} tone. Switch topics cleanly. Do NOT output unrequested coding solutions.]"
+                    f"[DIRECTIVE: Multi-turn continuation: NO RE-GREETINGS. Jump directly into answering the prompt in your {opp_persona} voice. Note: {user_name} is your male creator. Switch topics cleanly. Do NOT output unrequested coding solutions.]"
                 )
 
             return AdaptiveSteeringConfig(
                 level=level,
                 temperature=0.7,
                 top_p=0.9,
-                max_thinking_tokens=15,
-                prefill_assistant=closed_prefill,
+                max_thinking_tokens=25,
+                prefill_assistant=prefill_assistant,
                 system_directive=sys_dir,
                 rationale=rationale or ("First-turn greeting with opposite-gender tone" if is_first_turn else "Multi-turn direct response without re-greeting")
             )
@@ -262,8 +263,8 @@ class AdaptiveReasoningEngine:
                 level=level,
                 temperature=0.15,
                 top_p=0.9,
-                max_thinking_tokens=10,
-                prefill_assistant=closed_prefill,
+                max_thinking_tokens=20,
+                prefill_assistant=prefill_assistant,
                 system_directive=sys_dir,
                 rationale=rationale or "Ultra-fast code delivery"
             )
@@ -278,8 +279,8 @@ class AdaptiveReasoningEngine:
                 level=level,
                 temperature=0.25,
                 top_p=0.9,
-                max_thinking_tokens=25,
-                prefill_assistant=closed_prefill,
+                max_thinking_tokens=40,
+                prefill_assistant=prefill_assistant,
                 system_directive=sys_dir,
                 rationale=rationale or "Focused reasoning with fast generation"
             )
@@ -294,8 +295,8 @@ class AdaptiveReasoningEngine:
                 level=level,
                 temperature=0.5,
                 top_p=0.9,
-                max_thinking_tokens=60,
-                prefill_assistant=closed_prefill,
+                max_thinking_tokens=70,
+                prefill_assistant=prefill_assistant,
                 system_directive=sys_dir,
                 rationale=rationale or "Full cognitive reasoning for complex algorithmic depth"
             )

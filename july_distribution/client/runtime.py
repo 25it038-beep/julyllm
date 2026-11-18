@@ -382,38 +382,110 @@ class ClientInferenceRuntime:
         eff_temp = steering.temperature if getattr(self.config, "adaptive_temperature", True) else self.config.temperature
         eff_top_p = steering.top_p if getattr(self.config, "adaptive_temperature", True) else self.config.top_p
 
-        stream = self.llm(
-            formatted,
-            max_tokens=tokens_to_gen,
-            temperature=eff_temp,
-            top_p=eff_top_p,
-            top_k=40,
-            min_p=0.05,
-            stop=model_stops,
-            stream=True
-        )
-
         full_response = []
-        yielded_prefill = False
 
-        for chunk in stream:
+        if is_sree:
+            # SREE Dynamic Bounded Thinking Pipeline
+            # 1. Immediately yield opening think tag so UI initiates thinking container with zero delay
+            yield "<think>\n"
+            full_response.append("<think>\n")
+
+            max_think = getattr(steering, "max_thinking_tokens", 25) or 25
+            think_tokens = []
+
+            try:
+                think_stream = self.llm(
+                    formatted,
+                    max_tokens=max_think,
+                    temperature=min(eff_temp, 0.6),
+                    top_p=eff_top_p,
+                    top_k=40,
+                    min_p=0.05,
+                    stop=["</think>"],
+                    stream=True
+                )
+                for chunk in think_stream:
+                    if cancel_event and cancel_event.is_set():
+                        break
+                    choices = chunk.get("choices", [])
+                    if choices:
+                        delta = choices[0].get("text", "")
+                        if delta:
+                            if "</think>" in delta:
+                                before = delta.split("</think>")[0]
+                                if before:
+                                    think_tokens.append(before)
+                                    yield before
+                                break
+                            think_tokens.append(delta)
+                            yield delta
+            except Exception:
+                pass
+
+            think_text = "".join(think_tokens)
+            full_response.append(think_text)
+
+            # Close thinking in stream so CLI filter transitions to STATE_RESULT and displays ✦ Result:
+            close_think = "\n</think>\n"
+            yield close_think
+            full_response.append(close_think)
+
             if cancel_event and cancel_event.is_set():
-                break
-            choices = chunk.get("choices", [])
-            if choices:
-                delta = choices[0].get("text", "")
-                if delta:
-                    if not yielded_prefill and steering.prefill_assistant:
-                        yielded_prefill = True
-                        full_response.append(steering.prefill_assistant)
-                        yield steering.prefill_assistant
-                    full_response.append(delta)
-                    yield delta
+                raw_text = "".join(full_response)
+                self.customizer.log_message(session_id, "user", prompt, model=self.current_model_id)
+                self.customizer.log_message(session_id, "assistant", raw_text, model=self.current_model_id)
+                return
 
-        # Fallback if stream was empty
-        if not yielded_prefill and steering.prefill_assistant:
-            full_response.append(steering.prefill_assistant)
-            yield steering.prefill_assistant
+            # Phase 2: High-Efficiency Result Generation
+            phase2_prompt = formatted + think_text.rstrip() + "\n</think>\n"
+            res_stream = self.llm(
+                phase2_prompt,
+                max_tokens=tokens_to_gen,
+                temperature=eff_temp,
+                top_p=eff_top_p,
+                top_k=40,
+                min_p=0.05,
+                stop=model_stops,
+                stream=True
+            )
+            for chunk in res_stream:
+                if cancel_event and cancel_event.is_set():
+                    break
+                choices = chunk.get("choices", [])
+                if choices:
+                    delta = choices[0].get("text", "")
+                    if delta:
+                        full_response.append(delta)
+                        yield delta
+        else:
+            stream = self.llm(
+                formatted,
+                max_tokens=tokens_to_gen,
+                temperature=eff_temp,
+                top_p=eff_top_p,
+                top_k=40,
+                min_p=0.05,
+                stop=model_stops,
+                stream=True
+            )
+            yielded_prefill = False
+            for chunk in stream:
+                if cancel_event and cancel_event.is_set():
+                    break
+                choices = chunk.get("choices", [])
+                if choices:
+                    delta = choices[0].get("text", "")
+                    if delta:
+                        if not yielded_prefill and steering.prefill_assistant:
+                            yielded_prefill = True
+                            full_response.append(steering.prefill_assistant)
+                            yield steering.prefill_assistant
+                        full_response.append(delta)
+                        yield delta
+
+            if not yielded_prefill and steering.prefill_assistant:
+                full_response.append(steering.prefill_assistant)
+                yield steering.prefill_assistant
 
         raw_text = "".join(full_response)
 
