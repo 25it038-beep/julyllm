@@ -1974,7 +1974,8 @@ def cmd_chat(args):
         )
         print(box + "\n")
 
-    runtime.load_model(active_path)
+    runtime.load_model(active_path, model_id=active_mid)
+    runtime.current_model_id = active_mid
 
     if prompt_to_run:
         # Rate Limit check

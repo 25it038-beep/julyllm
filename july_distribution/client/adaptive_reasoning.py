@@ -233,14 +233,24 @@ class AdaptiveReasoningEngine:
         # SREE & Gravity Dynamic Reasoning: Prompt with open <think> so models formulate real thoughts dynamically
         prefill_assistant = "<think>\n" if is_reasoning_model else None
 
+        mid_lower = (model_id or "").lower()
+        if "gravity" in mid_lower:
+            active_model_name = "GRAVITY"
+        elif "sree" in mid_lower:
+            active_model_name = "SREE"
+        elif "mini-omni" in mid_lower or "omni" in mid_lower:
+            active_model_name = "MINI-OMNI"
+        else:
+            active_model_name = "JULY"
+
         if level == ThinkingLevel.CONVERSATIONAL:
             if is_first_turn:
                 sys_dir = (
-                    f"[DIRECTIVE: First turn: You are SREE LLM. Greet {user_name} warmly ('{greeting_pref} {user_name}!') in your {opp_persona} voice ({tone_summary}). Note: Your model name is strictly SREE (never Julia or July). {user_name} is your male creator. State verified time/date/location if asked, check any provided web search context and cite sources, then answer prompt directly. Do NOT output unrequested coding solutions.]"
+                    f"[DIRECTIVE: First turn: You are {active_model_name} LLM. Greet {user_name} warmly ('{greeting_pref} {user_name}!') in your {opp_persona} voice ({tone_summary}). Note: Your model name is strictly {active_model_name}. {user_name} is your male creator. State verified time/date/location if asked, check any provided web search context and cite sources, then answer prompt directly. Do NOT output unrequested coding solutions.]"
                 )
             else:
                 sys_dir = (
-                    f"[DIRECTIVE: Multi-turn continuation: NO RE-GREETINGS. You are SREE LLM. Jump directly into answering the prompt in your {opp_persona} voice. Note: Your model name is strictly SREE (never Julia or July). {user_name} is your male creator. Switch topics cleanly. Check any provided web search context and cite sources. Do NOT output unrequested coding solutions.]"
+                    f"[DIRECTIVE: Multi-turn continuation: NO RE-GREETINGS. You are {active_model_name} LLM. Jump directly into answering the prompt in your {opp_persona} voice. Note: Your model name is strictly {active_model_name}. {user_name} is your male creator. Switch topics cleanly. Check any provided web search context and cite sources. Do NOT output unrequested coding solutions.]"
                 )
 
             return AdaptiveSteeringConfig(

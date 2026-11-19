@@ -110,8 +110,23 @@ class ClientInferenceRuntime:
         self.current_model_id = target
         self.load_model(model_path)
 
-    def load_model(self, model_path: Path):
+    def load_model(self, model_path: Path, model_id: Optional[str] = None):
         """Loads model into active memory via llama.cpp with memory-aware dynamic layer budget."""
+        # model_id_sync_v2: Strictly align active model ID, path, and architecture
+        model_path = Path(model_path)
+        if model_id:
+            self.current_model_id = model_id.lower().strip()
+        else:
+            m_str = str(model_path).lower()
+            if "gravity" in m_str:
+                self.current_model_id = "gravity"
+            elif "sree" in m_str:
+                self.current_model_id = "sree"
+            elif "mini-omni" in m_str or "omni" in m_str:
+                self.current_model_id = "mini-omni"
+            elif "july" in m_str:
+                self.current_model_id = "july"
+
         if self._is_loaded and self.llm is not None:
             return
 
@@ -127,6 +142,11 @@ class ClientInferenceRuntime:
         try:
             meta = GGUFInspector.inspect(model_path)
             total_layers = meta.block_count
+            arch = (getattr(meta, "architecture", "") or "").lower()
+            if "qwen" in arch and self.current_model_id == "july":
+                self.current_model_id = "gravity"
+            elif "llama" in arch and self.current_model_id in ("gravity", "sree"):
+                self.current_model_id = "july"
         except Exception:
             total_layers = 32
 

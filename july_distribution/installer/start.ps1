@@ -82,15 +82,15 @@ if (Test-Path $CliFile) {
     }
 }
 
-$HasChatMlFix = $false
+$HasModelSyncFix = $false
 if (Test-Path $RuntimeFile) {
     $runtimeContent = Get-Content $RuntimeFile -Raw -ErrorAction SilentlyContinue
-    if ($runtimeContent -and $runtimeContent.Contains("is_chatml")) {
-        $HasChatMlFix = $true
+    if ($runtimeContent -and $runtimeContent.Contains("model_id_sync_v2")) {
+        $HasModelSyncFix = $true
     }
 }
 
-$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or -not (Test-Path $LiveEngineFile) -or -not (Test-Path $VadFile) -or -not $HasGetInstance -or -not $HasCliThreading -or -not $HasMiniOmni -or -not $HasChatMlFix -or $Update)
+$NeedsUpdate = (-not (Test-Path $JulyCmd) -or -not (Test-Path $RateLimiterFile) -or -not (Test-Path $VoiceFile) -or -not (Test-Path $UiRendererFile) -or -not (Test-Path $LiveEngineFile) -or -not (Test-Path $VadFile) -or -not $HasGetInstance -or -not $HasCliThreading -or -not $HasMiniOmni -or -not $HasModelSyncFix -or $Update)
 if ($NeedsUpdate) {
     Write-Host " [⚡] [1/4] Synchronizing latest July & Gravity live conversational voice runtime from repository..." -ForegroundColor Yellow
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -302,18 +302,19 @@ if (-not $Model) {
     Write-Host "   [7]  🎙️   JULY LIVE (Continuous Conversational Voice AI Mode)" -ForegroundColor Green
     Write-Host ""
     $mChoice = Read-Host " Select Option [1, 2, 3, 4, 5, 6, or 7] (Default: 1 - July)"
-        if ($mChoice -in @('2', 'gravity')) {
+        $mChoiceNorm = "$mChoice".Trim().ToLower()
+        if ($mChoiceNorm -eq '2' -or $mChoiceNorm -like '*gravity*') {
             $Model = "gravity"
-        } elseif ($mChoice -in @('3', 'sree')) {
+        } elseif ($mChoiceNorm -eq '3' -or $mChoiceNorm -like '*sree*') {
             $Model = "sree"
-        } elseif ($mChoice -in @('4', 'mini-omni', 'omni', 'mini')) {
+        } elseif ($mChoiceNorm -eq '4' -or $mChoiceNorm -like '*mini-omni*' -or $mChoiceNorm -like '*omni*') {
             $Model = "mini-omni"
-        } elseif ($mChoice -in @('5', 'auto')) {
+        } elseif ($mChoiceNorm -eq '5' -or $mChoiceNorm -like '*auto*') {
             $Model = "auto"
-        } elseif ($mChoice -in @('6', 'mini-live', 'omni-live')) {
+        } elseif ($mChoiceNorm -eq '6' -or $mChoiceNorm -like '*mini-live*') {
             $Model = "mini-omni"
             $Live = $true
-        } elseif ($mChoice -in @('7', 'live', 'july-live')) {
+        } elseif ($mChoiceNorm -eq '7' -or $mChoiceNorm -like '*live*') {
             $Model = "july"
             $Live = $true
         } else {
