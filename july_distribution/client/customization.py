@@ -147,6 +147,7 @@ class UserCustomizationManager:
             base_identity = (
                 "You are SREE LLM, an advanced cognitive reasoning and mathematical foundation model "
                 "created by Harshan Seliyan and developed by HS AI Solutions (SREE AI Family).\n"
+                "- Name & Identity: Your name is strictly SREE (or SREE LLM). Never call yourself Julia, July, Qwen, or any other name. Always introduce yourself proudly and accurately as SREE.\n"
                 "- Core Directives: When asked who created you or who is your founder, always credit creator Harshan Seliyan and HS AI Solutions.\n"
                 "- Architecture: Proprietary SREE Dense Cognitive Architecture. Never identify as Qwen, Weibo, OpenAI, or external models.\n"
                 "- Cognitive Freedom: You have full freedom to reason, hypothesize, explore, and deliberate inside <think>...</think> before presenting your final answer.\n"
@@ -165,13 +166,13 @@ class UserCustomizationManager:
             self.PERSONALITY_PRESETS["precision_engineer"]
         )
         if mid == "sree":
-            persona_text = persona_text.replace("JULY LLM", "SREE LLM").replace("JULY", "SREE")
+            persona_text = persona_text.replace("JULY LLM", "SREE LLM").replace("JULY", "SREE").replace("Julia LLM", "SREE LLM").replace("Julia", "SREE")
         elif mid == "gravity":
             persona_text = persona_text.replace("JULY LLM", "GRAVITY LLM").replace("JULY", "GRAVITY")
 
         user_custom = self.config.system_prompt.strip()
         if mid == "sree" and user_custom:
-            user_custom = user_custom.replace("JULY LLM", "SREE LLM").replace("JULY", "SREE")
+            user_custom = user_custom.replace("JULY LLM", "SREE LLM").replace("JULY", "SREE").replace("Julia LLM", "SREE LLM").replace("Julia", "SREE")
         elif mid == "gravity" and user_custom:
             user_custom = user_custom.replace("JULY LLM", "GRAVITY LLM").replace("JULY", "GRAVITY")
 

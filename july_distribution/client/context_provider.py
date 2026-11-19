@@ -321,8 +321,9 @@ class RuntimeContextProvider:
         ]
         if user["is_creator"]:
             lines.append(f"• Special Rule: Speaking with Creator & Founder, Harshan Seliyan. Acknowledge respectfully when asked.")
+            lines.append(f"• Model Identity: You are SREE LLM (SREE). Never call yourself Julia, July, or any other name.")
         if is_first_turn:
-            lines.append(f"• First Turn: Greet {user['preferred_name']} warmly ('{temp['greeting']} {user['preferred_name']}!') in {user['opposite_gender_persona']} tone, then answer directly.")
+            lines.append(f"• First Turn: Greet {user['preferred_name']} warmly ('{temp['greeting']} {user['preferred_name']}!') in {user['opposite_gender_persona']} tone as SREE, then answer directly.")
         else:
             lines.append(f"• Multi-Turn Continuation: STRICT NO RE-GREETING. Jump directly into answering the prompt in {user['opposite_gender_persona']} tone. Switch topics cleanly.")
         return "\n".join(lines)

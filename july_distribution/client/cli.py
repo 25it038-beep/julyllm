@@ -969,7 +969,8 @@ class ThinkingResultStreamFilter:
     def _sanitize(text: str) -> str:
         if not text:
             return text
-        # Architecture sanitization: Never identify as Qwen or VibeThinker, always SREE
+        # Architecture & Name sanitization: Never identify as Qwen, VibeThinker, or Julia; always SREE
+        text = re.sub(r'(?i)\bjulia(?:\s+llm)?\b', 'SREE', text)
         text = re.sub(r'(?i)\bqwen(?:\s*2(?:\.5)?|\s*3(?:\.5)?)?\b', 'SREE', text)
         text = re.sub(r'(?i)\bvibethinker(?:\s*-\s*3b)?\b', 'SREE', text)
         text = re.sub(r'(?i)\balibaba(?:\s+cloud)?\b', 'HS AI Solutions', text)
@@ -1013,7 +1014,7 @@ class ThinkingResultStreamFilter:
 
                     if self.thinking_mode == "expanded":
                         header = (
-                            f"\n  \033[38;5;244m╭─ 🧠 Thinking Process ──────────────────────────────────────────\033[0m\n"
+                            f"\n  \033[38;5;244m╭─ 🧠 {self.model_name} Thinking Process ──────────────────────────────────────────\033[0m\n"
                             f"  \033[38;5;240m│\033[0m \033[38;5;245m\033[3m"
                         )
                         output.append(header)
@@ -1044,7 +1045,7 @@ class ThinkingResultStreamFilter:
                         self.buffer = self.buffer[1:]
                     if self.thinking_mode == "expanded":
                         header = (
-                            f"\n  \033[38;5;244m╭─ 🧠 Thinking Process ──────────────────────────────────────────\033[0m\n"
+                            f"\n  \033[38;5;244m╭─ 🧠 {self.model_name} Thinking Process ──────────────────────────────────────────\033[0m\n"
                             f"  \033[38;5;240m│\033[0m \033[38;5;245m\033[3m"
                         )
                         output.append(header)
@@ -1073,15 +1074,15 @@ class ThinkingResultStreamFilter:
                         footer = (
                             f"\033[0m\n  \033[38;5;244m╰───────────────────────────────────────────\033[0m "
                             f"\033[90m(thought for {dur:.1f}s)\033[0m\n\n"
-                            f"  {self.badge_color}\033[1m✦ Result:\033[0m\n  \033[0m"
+                            f"  {self.badge_color}\033[1m✦ {self.model_name} Result:\033[0m\n  \033[0m"
                         )
                     elif self.thinking_mode == "collapsed":
                         footer = (
-                            f"\n  \033[90m[🧠 Thought for {dur:.1f}s]\033[0m\n\n"
-                            f"  {self.badge_color}\033[1m✦ Result:\033[0m\n  \033[0m"
+                            f"\n  \033[90m[🧠 {self.model_name} thought for {dur:.1f}s]\033[0m\n\n"
+                            f"  {self.badge_color}\033[1m✦ {self.model_name} Result:\033[0m\n  \033[0m"
                         )
                     else:
-                        footer = f"\n  {self.badge_color}\033[1m✦ Result:\033[0m\n  \033[0m"
+                        footer = f"\n  {self.badge_color}\033[1m✦ {self.model_name} Result:\033[0m\n  \033[0m"
 
                     output.append(footer)
                     self.result_header_printed = True
@@ -1110,7 +1111,7 @@ class ThinkingResultStreamFilter:
                             footer = (
                                 f"\033[0m\n  \033[38;5;244m╰───────────────────────────────────────────\033[0m "
                                 f"\033[90m(loop auto-resolved after {dur:.1f}s)\033[0m\n\n"
-                                f"  {self.badge_color}\033[1m✦ Result:\033[0m\n  \033[0m"
+                                f"  {self.badge_color}\033[1m✦ {self.model_name} Result:\033[0m\n  \033[0m"
                             )
                             output.append(footer)
                             self.result_header_printed = True
@@ -1226,13 +1227,13 @@ class ThinkingResultStreamFilter:
                     f"\033[90m(thought for {dur:.1f}s)\033[0m\n"
                 )
             elif self.thinking_mode == "collapsed":
-                footer = f"\n  \033[90m[🧠 Thought for {dur:.1f}s]\033[0m\n"
+                footer = f"\n  \033[90m[🧠 {self.model_name} thought for {dur:.1f}s]\033[0m\n"
             else:
                 footer = ""
             output.append(footer)
             # Ensure Result header and any buffered text are emitted so output is never lost
             if not self.result_header_printed:
-                output.append(f"\n  {self.badge_color}\033[1m✦ Result:\033[0m\n  \033[0m")
+                output.append(f"\n  {self.badge_color}\033[1m✦ {self.model_name} Result:\033[0m\n  \033[0m")
                 self.result_header_printed = True
             if self.buffer and self.thinking_mode != "expanded":
                 output.append(self.buffer)

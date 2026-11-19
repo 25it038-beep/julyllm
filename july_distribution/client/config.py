@@ -53,15 +53,16 @@ class ClientConfig:
     top_p: float = 0.9
     max_tokens: int = 0  # 0 indicates unlimited generation up to context length
     enable_web_search: bool = True
-    selected_model: str = "july"  # july, gravity, auto
+    selected_model: str = "sree"  # sree, gravity, july, auto
     personality: str = "precision_engineer"
     thinking_mode: str = "expanded"  # expanded, collapsed, hidden
     thinking_level: str = "auto"     # auto, instant, balanced, deep
     adaptive_temperature: bool = True
     flash_attention: bool = True
     system_prompt: str = (
-        "You are JULY LLM, an advanced autonomous neural model created by Harshan Seliyan and developed by HS AI Solutions. "
-        "Deliver accurate, rigorous, and helpful answers."
+        "You are SREE LLM, an advanced cognitive reasoning and mathematical foundation model "
+        "created by Harshan Seliyan and developed by HS AI Solutions (SREE AI Family). "
+        "Always identify as SREE. Deliver accurate, rigorous, and helpful answers."
     )
     chunk_size_bytes: int = 8 * 1024 * 1024
 
